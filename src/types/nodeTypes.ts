@@ -1,12 +1,12 @@
 import type { NodeTypes } from "@xyflow/react";
-import { LinearLayerNode, type LayerStatic } from "../custom_nodes/BaseClass";
+import { LinearLayerNode, type LayerDefinition } from "../custom_nodes/BaseClass";
 // import LinearLayer from "../custom_nodes/LinearLayer";
 
-export const LAYER_REGISTRY: Record<string, LayerStatic<any>> = {
+export const LAYER_REGISTRY: Record<string, LayerDefinition<any>> = {
     linear_layer: LinearLayerNode,
     // cnn_layer: CNNLayerNode
 };
 export const nodeTypes: NodeTypes = Object.entries(LAYER_REGISTRY).reduce((acc, [key, Class]) => {
-    acc[key] = Class.Node;
+    acc[key] = Class.Component;
     return acc;
 }, {} as any);
