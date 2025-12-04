@@ -2,7 +2,7 @@ import type { NodeTypes } from "@xyflow/react";
 import { LinearLayerNode, type LayerStatic } from "../custom_nodes/BaseClass";
 // import LinearLayer from "../custom_nodes/LinearLayer";
 
-const LAYER_REGISTRY: Record<string, LayerStatic<any>> = {
+export const LAYER_REGISTRY: Record<string, LayerStatic<any>> = {
     linear_layer: LinearLayerNode,
     // cnn_layer: CNNLayerNode
 };
