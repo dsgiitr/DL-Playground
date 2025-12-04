@@ -23,14 +23,6 @@ import { nodeTypes } from "./types/nodeTypes";
 
 let id = 0;
 const getId = () => `node-${id++}`;
-
-const initialNodes: Node[] = [
-    { id: "1", data: { label: "Node 1" }, position: { x: 5, y: 5 } },
-    { id: "2", data: { label: "Node 2" }, position: { x: 5, y: 100 } },
-];
-
-const initialEdges: Edge[] = [{ id: "e1-2", source: "1", target: "2", type: "custom" }];
-
 const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
@@ -44,17 +36,14 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 };
 
 function FlowContent() {
-    if (!localStorage.getItem("nodes")) {
-        localStorage.setItem("nodes", JSON.stringify(initialNodes));
-    }
-    if (!localStorage.getItem("edges")) {
-        localStorage.setItem("edges", JSON.stringify(initialEdges));
-    }
-    const savedNodes = JSON.parse(localStorage.getItem("nodes") || "");
-    const savedEdges = JSON.parse(localStorage.getItem("edges") || "");
-    const [nodes, setNodes] = useState<Node[]>(savedNodes);
-    const [edges, setEdges] = useState<Edge[]>(savedEdges);
-
+    const [nodes, setNodes] = useState<Node[]>(() => {
+        const saved = localStorage.getItem("nodes");
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [edges, setEdges] = useState<Edge[]>(() => {
+        const saved = localStorage.getItem("edges");
+        return saved ? JSON.parse(saved) : [];
+    });
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
@@ -74,7 +63,9 @@ function FlowContent() {
     useEffect(() => {
         const savedNodes = localStorage.getItem("nodes");
         const savedEdges = localStorage.getItem("edges");
-
+        console.log("%c--- LOADED FLOW DATA ---", "color: #bada55; font-weight: bold;");
+        console.log("Nodes:", nodes);
+        console.log("Edges:", edges);
         if (savedNodes) setNodes(JSON.parse(savedNodes));
         if (savedEdges) setEdges(JSON.parse(savedEdges));
     }, []);
