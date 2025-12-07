@@ -2,7 +2,15 @@ import type { Edge, Node } from "@xyflow/react";
 import { LAYER_REGISTRY } from "../types/nodeTypes";
 
 export type ShapeSuccess = { ok: true; shapes: Record<string, number[]> };
-export type ShapeFailure = { ok: false; nodeId: string; error: string };
+export type ShapeFailure = {
+    ok: false;
+    nodeId: string;
+    nodeType?: string;
+    label?: string;
+    error: string;
+    inputShapes?: number[][];
+    upstream?: string[];
+};
 export type ShapeResult = ShapeSuccess | ShapeFailure;
 
 export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
@@ -44,7 +52,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
         if (!node) continue;
         const layer = node.type ? LAYER_REGISTRY[node.type] : undefined;
         if (!layer) {
-            return { ok: false, nodeId: id, error: `Unknown node type: ${node.type ?? "undefined"}` };
+            return { ok: false, nodeId: id, nodeType: node.type, error: `Unknown node type: ${node.type ?? "undefined"}` };
         }
 
         const inputIds = sources[id] || [];
@@ -52,12 +60,27 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
             .map(src => shapes[src])
             .filter((s): s is number[] => Array.isArray(s));
         if (inputShapes.length !== inputIds.length) {
-            return { ok: false, nodeId: id, error: "Missing upstream shape (disconnected edge or invalid source)" };
+            return {
+                ok: false,
+                nodeId: id,
+                nodeType: node.type,
+                label: layer.label,
+                error: "Missing upstream shape (disconnected edge or invalid source)",
+                upstream: inputIds
+            };
         }
 
         const verdict = layer.shapeVerifier(node.data as any, inputShapes);
         if (!verdict.ok) {
-            return { ok: false, nodeId: id, error: verdict.error };
+            return {
+                ok: false,
+                nodeId: id,
+                nodeType: node.type,
+                label: layer.label,
+                error: verdict.error,
+                inputShapes,
+                upstream: inputIds
+            };
         }
 
         shapes[id] = layer.shapeCompute(node.data as any, inputShapes);

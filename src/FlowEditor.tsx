@@ -16,11 +16,11 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
-import { verifyShapes, type ShapeResult } from "./generator/shape_verifier";
+import { verifyShapes, type ShapeResult, type ShapeFailure } from "./generator/shape_verifier";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -104,7 +104,7 @@ function FlowContent() {
         [screenToFlowPosition, setNodes]
     );
 
-    const onValidateShapes = useCallback(() => {
+    useEffect(() => {
         const result = verifyShapes(nodes, edges);
         setShapeResult(result);
         if (!result.ok) {
@@ -112,26 +112,53 @@ function FlowContent() {
         }
     }, [nodes, edges]);
 
+    const friendlyError = useCallback((failure: ShapeFailure) => {
+        const label = failure.label || failure.nodeType || failure.nodeId;
+        const inputs =
+            failure.inputShapes && failure.inputShapes.length
+                ? ` | inputs: ${failure.inputShapes.map(s => `[${s.join(",")}]`).join(", ")}`
+                : "";
+        const upstream = failure.upstream && failure.upstream.length ? ` | from: ${failure.upstream.join(", ")}` : "";
+        const hint = ` | fix: adjust ${label} params or ensure upstream nodes output the expected shape`;
+        return `${label}: ${failure.error}${inputs}${upstream}${hint}`;
+    }, []);
+
+    const decoratedEdges = useMemo(() => {
+        if (!shapeResult || shapeResult.ok) return edges;
+        const failing = shapeResult;
+        return edges.map(e => {
+            const isFailEdge = e.target === failing.nodeId && (!failing.upstream || failing.upstream.includes(e.source));
+            if (!isFailEdge) return e;
+            return {
+                ...e,
+                type: "custom",
+                data: {
+                    ...(e as any).data,
+                    error: friendlyError(failing),
+                },
+            };
+        });
+    }, [edges, shapeResult, friendlyError]);
+
     return (
         <div style={{ display: "flex", height: "100vh" }}>
             <Sidebar />
             <div style={{ width: "80vw", display: "flex", flexDirection: "column" }}>
-                <div style={{ padding: "8px", display: "flex", gap: "8px", alignItems: "center" }}>
-                    <button onClick={onValidateShapes} style={{ padding: "8px 12px", cursor: "pointer" }}>
-                        Validate Shapes
-                    </button>
+                <div style={{ padding: "8px", display: "flex", gap: "8px", alignItems: "center", minHeight: "32px" }}>
                     {shapeResult && shapeResult.ok && (
-                        <span style={{ color: "#64ffda" }}>Shapes valid ({Object.keys(shapeResult.shapes).length} nodes)</span>
+                        <span style={{ color: "#64ffda" }}>
+                            Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
+                        </span>
                     )}
                     {shapeResult && !shapeResult.ok && (
                         <span style={{ color: "#ff6b6b" }}>
-                            Error at {shapeResult.nodeId}: {shapeResult.error}
+                            {friendlyError(shapeResult)}
                         </span>
                     )}
                 </div>
                 <ReactFlow
                     nodes={nodes}
-                    edges={edges}
+                    edges={decoratedEdges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
