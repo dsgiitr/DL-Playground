@@ -35,7 +35,7 @@ export interface LayerDefinition<D extends LayerData> {
     // Pure functions
     computeShape(data: D, inputs?: any): number[];
     getInitCode(data: D, name: string): string;
-    getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
+    getForwardCode(name: string, inputs: string[], outputs: string[], data?: D): string;
     // UI component
     // Choose a design choice to make the Component a class reference or an instance reference
     // highly leaning towards making it an instance reference

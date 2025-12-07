@@ -38,12 +38,10 @@ export class LinearLayerNode {
         const biasStr = data.bias === false ? ', bias=False' : '';
         return `self.${name} = nn.Linear(${i}, ${o}${biasStr})`;
     }
-    static getForwardCode(data: LinearData, name: string, inputs: Array<string>, outputs: Array<string>) {
-        data = data;
-        name = name;
-        inputs = inputs;
-        outputs = outputs;
-        return ``;
+    static getForwardCode(name: string, inputs: string[], outputs: string[]) {
+        const inputVar = inputs.length > 0 ? inputs[0] : 'x';
+        const outputVar = outputs.length > 0 ? outputs[0] : 'x';
+        return `${outputVar} = self.${name}(${inputVar})`
     }
     static Component = createLayerComponent<LinearData>(
         LinearLayerNode.label,

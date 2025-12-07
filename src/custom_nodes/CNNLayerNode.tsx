@@ -76,9 +76,10 @@ export class CNNLayerNode {
     static getInitCode(data: CNNLayerData, name: string) {
         return buildInitString("nn.Conv2d", name, CNNLayerNode.paramSchema, data)
     }
-    static getForwardCode(data: CNNLayerData, name: string, inputs: string[]) {
-        data = data
-        return `x = self.${name}(${inputs[0] || 'x'})`
+    static getForwardCode(name: string, inputs: string[], outputs: string[]) {
+        const inputVar = inputs.length > 0 ? inputs[0] : 'x';
+        const outputVar = outputs.length > 0 ? outputs[0] : 'x';
+        return `${outputVar} = self.${name}(${inputVar})`
     }
     static Component = createLayerComponent<CNNLayerData>(
         CNNLayerNode.label,
