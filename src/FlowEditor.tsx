@@ -114,11 +114,12 @@ function FlowContent() {
     }, [nodes, edges]);
 
     useEffect(() => {
-        if (!shapeResult || !shapeResult.ok || !shapeResult.shapes) return;
+        if (!shapeResult || !shapeResult.shapes) return;
         setNodes(prev => {
             let changed = false;
             const next = prev.map(n => {
                 const newShape = shapeResult.shapes[n.id];
+                if (!newShape) return n;
                 const oldShape = (n.data as any).__shape as number[] | undefined;
                 const same =
                     Array.isArray(oldShape) &&
