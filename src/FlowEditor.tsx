@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
+import { generatePyTorchCode } from "./generator/dummy_generator.ts";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -73,6 +74,7 @@ function FlowContent() {
     useEffect(() => {
         localStorage.setItem("nodes", JSON.stringify(nodes));
         localStorage.setItem("edges", JSON.stringify(edges));
+        console.log("Code: ", generatePyTorchCode(nodes, edges));
     }, [nodes, edges]);
 
     const onDrop = useCallback(
