@@ -26,6 +26,10 @@ type CNNLayerData = {
     padding_mode?: string,
 
 }
+
+const getCNNValue = (value: number | undefined, fallback: number) =>
+    typeof value === "number" && !Number.isNaN(value) ? value : fallback;
+
 export class CNNLayerNode {
     static label = "Convolutional Layer"
     static paramSchema: Record<string, FieldSpec> = {
@@ -69,6 +73,39 @@ export class CNNLayerNode {
             options: ["zeros", "reflect", "replicate", "circular"],
             defaultValue: "zeros"
         }
+    }
+    static shapeVerifier(data: CNNLayerData, inputShapes: number[][]) {
+        if (inputShapes.length !== 1) return { ok: false as const, error: "Conv2d expects exactly one input" };
+        const shape = inputShapes[0];
+        if (shape.length !== 4) return { ok: false as const, error: "Conv2d input must be [batch, channels, height, width]" };
+
+        const [batch, channels, height, width] = shape;
+        if (batch <= 0) return { ok: false as const, error: "Batch dimension must be > 0" };
+        const inCh = getCNNValue(data.in_channels, this.paramSchema.in_channels.defaultValue!);
+        const outCh = getCNNValue(data.out_channels, this.paramSchema.out_channels.defaultValue!);
+        const kernel = getCNNValue(data.kernel_size, this.paramSchema.kernel_size.defaultValue!);
+        const stride = getCNNValue(data.stride, this.paramSchema.stride.defaultValue!);
+
+        if (inCh <= 0 || outCh <= 0) return { ok: false as const, error: "in_channels and out_channels must be > 0" };
+        if (channels !== inCh) return { ok: false as const, error: `Expected ${inCh} channels, got ${channels}` };
+        if (kernel <= 0) return { ok: false as const, error: "kernel_size must be > 0" };
+        if (stride <= 0) return { ok: false as const, error: "stride must be > 0" };
+        if (kernel > height || kernel > width) return { ok: false as const, error: `kernel_size=${kernel} exceeds input spatial dims (${height}x${width})` };
+
+        return { ok: true as const };
+    }
+    static shapeCompute(data: CNNLayerData, inputShapes: number[][]) {
+        const [batch, , height, width] = inputShapes[0] || [1, 1, 1, 1];
+        const outCh = getCNNValue(data.out_channels, this.paramSchema.out_channels.defaultValue!);
+        const kernel = getCNNValue(data.kernel_size, this.paramSchema.kernel_size.defaultValue!);
+        const stride = getCNNValue(data.stride, this.paramSchema.stride.defaultValue!);
+        const padding = 0;
+        const dilation = 1;
+
+        const computeDim = (dim: number) => Math.floor((dim + 2 * padding - dilation * (kernel - 1) - 1) / stride + 1);
+        const outH = computeDim(height);
+        const outW = computeDim(width);
+        return [batch, outCh, outH, outW];
     }
     static computeShape(data: CNNLayerData) {
         return [data.out_channels]

@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
+import { verifyShapes, type ShapeResult } from "./generator/shape_verifier";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -38,12 +39,16 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
         const saved = localStorage.getItem("nodes");
-        return saved ? JSON.parse(saved) : [];
+        if (!saved) return [];
+        const parsed: Node[] = JSON.parse(saved);
+        // migrate legacy types (e.g., "input" -> "input_layer") to avoid built-in styles
+        return parsed.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
         const saved = localStorage.getItem("edges");
         return saved ? JSON.parse(saved) : [];
     });
+    const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
@@ -99,10 +104,31 @@ function FlowContent() {
         [screenToFlowPosition, setNodes]
     );
 
+    const onValidateShapes = useCallback(() => {
+        const result = verifyShapes(nodes, edges);
+        setShapeResult(result);
+        if (!result.ok) {
+            console.warn(`Shape validation failed on ${result.nodeId}: ${result.error}`);
+        }
+    }, [nodes, edges]);
+
     return (
         <div style={{ display: "flex", height: "100vh" }}>
             <Sidebar />
-            <div style={{ width: "80vw" }}>
+            <div style={{ width: "80vw", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "8px", display: "flex", gap: "8px", alignItems: "center" }}>
+                    <button onClick={onValidateShapes} style={{ padding: "8px 12px", cursor: "pointer" }}>
+                        Validate Shapes
+                    </button>
+                    {shapeResult && shapeResult.ok && (
+                        <span style={{ color: "#64ffda" }}>Shapes valid ({Object.keys(shapeResult.shapes).length} nodes)</span>
+                    )}
+                    {shapeResult && !shapeResult.ok && (
+                        <span style={{ color: "#ff6b6b" }}>
+                            Error at {shapeResult.nodeId}: {shapeResult.error}
+                        </span>
+                    )}
+                </div>
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}

@@ -33,7 +33,12 @@ export interface LayerDefinition<D extends LayerData> {
     label: string;
     paramSchema: Record<string, FieldSpec>;
     // Pure functions
-    computeShape(data: D, inputs?: any): number[];
+    // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
+    shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
+    // shapeCompute: computes output shape, assumes verifier passed
+    shapeCompute(data: D, inputShapes: number[][]): number[];
+    // computeShape is kept for backward compatibility / default rendering; prefer shapeCompute
+    computeShape?(data: D, inputs?: any): number[];
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component
@@ -47,7 +52,7 @@ export interface LayerDefinition<D extends LayerData> {
 export function createLayerComponent<D extends LayerData>(
     label: string,
     paramSchema: Record<string, FieldSpec>,
-    shapeFn: (data: D) => number[]
+    shapeFn: (data: D, inputShapes?: number[][]) => number[]
 ) {
     // The core function that creates the frontend Layer node
     // needs to be refactored since it is too complicated and bulky
@@ -204,7 +209,13 @@ export function createLayerComponent<D extends LayerData>(
                 </div>
                 {/* Shape function is currently a placeholder for the actual shape computation since it is input dependant*/}
                 <div style={{ padding: "0 10px 10px", fontSize: "10px", color: "#888" }}>
-                    Shape: {JSON.stringify(shapeFn(safeData))}
+                    Shape: {(() => {
+                        try {
+                            return JSON.stringify(shapeFn(safeData, []));
+                        } catch {
+                            return "unknown";
+                        }
+                    })()}
                 </div>
                 <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
             </div>
