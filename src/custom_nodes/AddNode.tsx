@@ -18,7 +18,7 @@ export class AddNode {
     }
 
     static shapeCompute(_data: AddData, inputShapes: number[][]) {
-        return inputShapes[0];
+        return inputShapes[0] ? [...inputShapes[0]] : [];
     }
 
     static getInitCode() {

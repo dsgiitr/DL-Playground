@@ -241,12 +241,14 @@ export function createLayerComponent<D extends LayerData>(
         const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
 
         const shapePreview = (() => {
+            const liveShape = (safeData as any).__shape as number[] | undefined;
+            if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
             try {
                 const val = shapeFn(safeData, []);
                 if (Array.isArray(val) && val.length > 0) return JSON.stringify(val);
-                return "connect inputs";
+                return "";
             } catch {
-                return "connect inputs";
+                return "";
             }
         })();
 

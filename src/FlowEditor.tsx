@@ -109,9 +109,29 @@ function FlowContent() {
         const result = verifyShapes(nodes, edges);
         setShapeResult(result);
         if (!result.ok) {
-            console.warn(`Shape validation failed on ${result.nodeId}: ${result.error}`);
+            console.warn("Shape validation failures:", result.failures);
         }
     }, [nodes, edges]);
+
+    useEffect(() => {
+        if (!shapeResult || !shapeResult.ok || !shapeResult.shapes) return;
+        setNodes(prev => {
+            let changed = false;
+            const next = prev.map(n => {
+                const newShape = shapeResult.shapes[n.id];
+                const oldShape = (n.data as any).__shape as number[] | undefined;
+                const same =
+                    Array.isArray(oldShape) &&
+                    Array.isArray(newShape) &&
+                    oldShape.length === newShape.length &&
+                    oldShape.every((v, i) => v === newShape[i]);
+                if (same) return n;
+                changed = true;
+                return { ...n, data: { ...n.data, __shape: newShape } };
+            });
+            return changed ? next : prev;
+        });
+    }, [shapeResult, setNodes]);
 
     const friendlyError = useCallback((failure: ShapeFailure) => {
         const label = failure.label || failure.nodeType || failure.nodeId;
@@ -126,16 +146,25 @@ function FlowContent() {
 
     const decoratedEdges = useMemo(() => {
         if (!shapeResult || shapeResult.ok) return edges;
-        const failing = shapeResult;
+        const failMap = new Map<string, ShapeFailure[]>();
+        shapeResult.failures.forEach(f => {
+            (f.upstream || []).forEach(src => {
+                const key = `${src}->${f.nodeId}`;
+                const arr = failMap.get(key) || [];
+                arr.push(f);
+                failMap.set(key, arr);
+            });
+        });
         return edges.map(e => {
-            const isFailEdge = e.target === failing.nodeId && (!failing.upstream || failing.upstream.includes(e.source));
-            if (!isFailEdge) return e;
+            const key = `${e.source}->${e.target}`;
+            const errs = failMap.get(key);
+            if (!errs || !errs.length) return e;
             return {
                 ...e,
                 type: "custom",
                 data: {
                     ...(e as any).data,
-                    error: friendlyError(failing),
+                    error: errs.map(friendlyError).join("\n"),
                 },
             };
         });
@@ -151,9 +180,9 @@ function FlowContent() {
                             Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
                         </span>
                     )}
-                    {shapeResult && !shapeResult.ok && (
+                    {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
                         <span style={{ color: "#ff6b6b" }}>
-                            {friendlyError(shapeResult)}
+                            {shapeResult.failures.map(friendlyError).join(" | ")}
                         </span>
                     )}
                 </div>
