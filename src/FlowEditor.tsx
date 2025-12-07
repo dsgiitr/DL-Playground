@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
-import { verifyShapes, type ShapeResult, type ShapeFailure } from "./generator/shape_verifier";
+import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape_verifier";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -41,7 +41,6 @@ function FlowContent() {
         const saved = localStorage.getItem("nodes");
         if (!saved) return [];
         const parsed: Node[] = JSON.parse(saved);
-        // migrate legacy types (e.g., "input" -> "input_layer") to avoid built-in styles
         return parsed.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
@@ -68,9 +67,6 @@ function FlowContent() {
     useEffect(() => {
         const savedNodes = localStorage.getItem("nodes");
         const savedEdges = localStorage.getItem("edges");
-        console.log("%c--- LOADED FLOW DATA ---", "color: #bada55; font-weight: bold;");
-        console.log("Nodes:", nodes);
-        console.log("Edges:", edges);
         if (savedNodes) setNodes(JSON.parse(savedNodes));
         if (savedEdges) setEdges(JSON.parse(savedEdges));
     }, []);
