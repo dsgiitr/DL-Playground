@@ -3,6 +3,8 @@ import { type LayerDefinition } from "../custom_nodes/BaseClass";
 import {LinearLayerNode} from "../custom_nodes/LinearLayer";
 import { CNNLayerNode } from "../custom_nodes/CNNLayerNode";
 
+
+// This is the core Layer registory. it forms the bridge between the 
 export const LAYER_REGISTRY: Record<string, LayerDefinition<any>> = {
     linear_layer: LinearLayerNode,
     cnn_layer: CNNLayerNode
