@@ -84,10 +84,10 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]) {
                     : outEdges.map(e => e.label as string);
 
             const forward_line = ClassRef.getForwardCode(
-                node.data,
                 layerName,
                 inputNames,
-                outputNames
+                outputNames,
+                node.data
             );
 
             forwardBlock += `        ${forward_line}\n`;
