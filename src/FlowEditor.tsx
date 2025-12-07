@@ -24,6 +24,15 @@ import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape
 
 let id = 0;
 const getId = () => `node-${id++}`;
+const syncIdFromNodes = (nodes: Node[]) => {
+    const maxId = nodes.reduce((max, n) => {
+        const match = /^node-(\d+)$/.exec(n.id);
+        if (!match) return max;
+        const num = parseInt(match[1], 10);
+        return Number.isFinite(num) ? Math.max(max, num) : max;
+    }, -1);
+    id = Math.max(id, maxId + 1);
+};
 const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
@@ -40,8 +49,11 @@ function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
         const saved = localStorage.getItem("nodes");
         if (!saved) return [];
-        const parsed: Node[] = JSON.parse(saved);
-        return parsed.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
+        const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
+            n.type === "input" ? { ...n, type: "input_layer" } : n
+        );
+        syncIdFromNodes(parsed);
+        return parsed;
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
         const saved = localStorage.getItem("edges");
@@ -63,13 +75,6 @@ function FlowContent() {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
     };
-
-    useEffect(() => {
-        const savedNodes = localStorage.getItem("nodes");
-        const savedEdges = localStorage.getItem("edges");
-        if (savedNodes) setNodes(JSON.parse(savedNodes));
-        if (savedEdges) setEdges(JSON.parse(savedEdges));
-    }, []);
 
     useEffect(() => {
         localStorage.setItem("nodes", JSON.stringify(nodes));

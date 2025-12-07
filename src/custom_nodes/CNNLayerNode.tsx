@@ -1,4 +1,4 @@
-import { buildInitString, createLayerComponent, type FieldSpec } from "./BaseClass";
+import { buildInitString, createLayerComponent, getParamValue, type FieldSpec } from "./BaseClass";
 
 //class torch.nn.Conv2d(
 //     in_channels: int,
@@ -26,9 +26,6 @@ type CNNLayerData = {
     padding_mode?: string,
 
 }
-
-const getCNNValue = (value: number | undefined, fallback: number) =>
-    typeof value === "number" && !Number.isNaN(value) ? value : fallback;
 
 export class CNNLayerNode {
     static label = "Convolutional Layer"
@@ -81,10 +78,10 @@ export class CNNLayerNode {
 
         const [batch, channels, height, width] = shape;
         if (batch <= 0) return { ok: false as const, error: "Batch dimension must be > 0" };
-        const inCh = getCNNValue(data.in_channels, this.paramSchema.in_channels.defaultValue!);
-        const outCh = getCNNValue(data.out_channels, this.paramSchema.out_channels.defaultValue!);
-        const kernel = getCNNValue(data.kernel_size, this.paramSchema.kernel_size.defaultValue!);
-        const stride = getCNNValue(data.stride, this.paramSchema.stride.defaultValue!);
+        const inCh = getParamValue(CNNLayerNode.paramSchema, data, "in_channels") as number;
+        const outCh = getParamValue(CNNLayerNode.paramSchema, data, "out_channels") as number;
+        const kernel = getParamValue(CNNLayerNode.paramSchema, data, "kernel_size") as number;
+        const stride = getParamValue(CNNLayerNode.paramSchema, data, "stride") as number;
 
         if (inCh <= 0 || outCh <= 0) return { ok: false as const, error: "in_channels and out_channels must be > 0" };
         if (channels !== inCh) return { ok: false as const, error: `Expected ${inCh} channels, got ${channels}` };
@@ -96,9 +93,9 @@ export class CNNLayerNode {
     }
     static shapeCompute(data: CNNLayerData, inputShapes: number[][]) {
         const [batch, , height, width] = inputShapes[0] || [1, 1, 1, 1];
-        const outCh = getCNNValue(data.out_channels, this.paramSchema.out_channels.defaultValue!);
-        const kernel = getCNNValue(data.kernel_size, this.paramSchema.kernel_size.defaultValue!);
-        const stride = getCNNValue(data.stride, this.paramSchema.stride.defaultValue!);
+        const outCh = getParamValue(CNNLayerNode.paramSchema, data, "out_channels") as number;
+        const kernel = getParamValue(CNNLayerNode.paramSchema, data, "kernel_size") as number;
+        const stride = getParamValue(CNNLayerNode.paramSchema, data, "stride") as number;
         const padding = 0;
         const dilation = 1;
 

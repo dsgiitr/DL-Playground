@@ -1,4 +1,4 @@
-import { createLayerComponent, type FieldSpec } from "./BaseClass";
+import { createLayerComponent, getParamValue, type FieldSpec } from "./BaseClass";
 
 type InputData = {
     batch?: number;
@@ -6,9 +6,6 @@ type InputData = {
     height?: number;
     width?: number;
 };
-
-const getVal = (val: number | undefined, fallback: number) =>
-    typeof val === "number" && !Number.isNaN(val) ? val : fallback;
 
 export class InputNode {
     static label = "Input";
@@ -20,10 +17,10 @@ export class InputNode {
     };
 
     static shapeVerifier(data: InputData) {
-        const b = getVal(data.batch, this.paramSchema.batch.defaultValue!);
-        const c = getVal(data.channels, this.paramSchema.channels.defaultValue!);
-        const h = getVal(data.height, this.paramSchema.height.defaultValue!);
-        const w = getVal(data.width, this.paramSchema.width.defaultValue!);
+        const b = getParamValue(InputNode.paramSchema, data, "batch") as number;
+        const c = getParamValue(InputNode.paramSchema, data, "channels") as number;
+        const h = getParamValue(InputNode.paramSchema, data, "height") as number;
+        const w = getParamValue(InputNode.paramSchema, data, "width") as number;
         if (b <= 0 || c <= 0 || h <= 0 || w <= 0) {
             return { ok: false as const, error: "All dimensions must be > 0" };
         }
@@ -31,10 +28,10 @@ export class InputNode {
     }
 
     static shapeCompute(data: InputData) {
-        const b = getVal(data.batch, this.paramSchema.batch.defaultValue!);
-        const c = getVal(data.channels, this.paramSchema.channels.defaultValue!);
-        const h = getVal(data.height, this.paramSchema.height.defaultValue!);
-        const w = getVal(data.width, this.paramSchema.width.defaultValue!);
+        const b = getParamValue(InputNode.paramSchema, data, "batch") as number;
+        const c = getParamValue(InputNode.paramSchema, data, "channels") as number;
+        const h = getParamValue(InputNode.paramSchema, data, "height") as number;
+        const w = getParamValue(InputNode.paramSchema, data, "width") as number;
         return [b, c, h, w];
     }
 

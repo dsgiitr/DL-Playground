@@ -1,13 +1,10 @@
-import { createLayerComponent, type FieldSpec } from "./BaseClass";
+import { createLayerComponent, getParamValue, type FieldSpec } from "./BaseClass";
 
 type LinearData = {
     in_features: number;
     out_features: number;
     bias?: boolean
 };
-
-const getLinearValue = (value: number | undefined, fallback: number) =>
-    typeof value === "number" && !Number.isNaN(value) ? value : fallback;
 
 export class LinearLayerNode {
     static label = "Linear Layer";
@@ -38,8 +35,8 @@ export class LinearLayerNode {
         const shape = inputShapes[0];
         if (shape.length !== 1 && shape.length !== 2) return { ok: false as const, error: "Linear input must be [features] or [batch, features]" };
 
-        const inFeatures = getLinearValue(data.in_features, this.paramSchema.in_features.defaultValue!);
-        const outFeatures = getLinearValue(data.out_features, this.paramSchema.out_features.defaultValue!);
+        const inFeatures = getParamValue(LinearLayerNode.paramSchema, data, "in_features") as number;
+        const outFeatures = getParamValue(LinearLayerNode.paramSchema, data, "out_features") as number;
         if (inFeatures <= 0 || outFeatures <= 0) return { ok: false as const, error: "in_features and out_features must be > 0" };
 
         const featureDim = shape[shape.length - 1];
@@ -50,7 +47,7 @@ export class LinearLayerNode {
     }
     static shapeCompute(data: LinearData, inputShapes: number[][]) {
         const shape = inputShapes[0] || [];
-        const outFeatures = getLinearValue(data.out_features, this.paramSchema.out_features.defaultValue!);
+        const outFeatures = getParamValue(LinearLayerNode.paramSchema, data, "out_features") as number;
         if (shape.length === 2) return [shape[0], outFeatures];
         return [outFeatures];
     }
@@ -76,4 +73,3 @@ export class LinearLayerNode {
         LinearLayerNode.computeShape
     );
 }
-
