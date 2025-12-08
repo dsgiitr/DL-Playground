@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import { LAYER_REGISTRY } from "../types/nodeTypes";
 
-function generatePyTorchCode(nodes: Node[], edges: Edge[]) {
+export function generatePyTorchCode(nodes: Node[], edges: Edge[]) {
     if (nodes.length === 0) return "class Model(nn.Module):\n    pass";
 
     // 1. Build Adjacency List

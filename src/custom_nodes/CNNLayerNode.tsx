@@ -1,4 +1,4 @@
-import { buildInitString, createLayerComponent, type FieldSpec } from "./BaseClass";
+import { buildInitString, createLayerComponent, getParamValue, type FieldSpec } from "./BaseClass";
 
 //class torch.nn.Conv2d(
 //     in_channels: int,
@@ -26,6 +26,7 @@ type CNNLayerData = {
     padding_mode?: string,
 
 }
+
 export class CNNLayerNode {
     static label = "Convolutional Layer"
     static paramSchema: Record<string, FieldSpec> = {
@@ -70,8 +71,38 @@ export class CNNLayerNode {
             defaultValue: "zeros"
         }
     }
-    static computeShape(data: CNNLayerData) {
-        return [data.out_channels]
+    static shapeVerifier(data: CNNLayerData, inputShapes: number[][]) {
+        if (inputShapes.length !== 1) return { ok: false as const, error: "Conv2d expects exactly one input" };
+        const shape = inputShapes[0];
+        if (shape.length !== 4) return { ok: false as const, error: "Conv2d input must be [batch, channels, height, width]" };
+
+        const [batch, channels, height, width] = shape;
+        if (batch <= 0) return { ok: false as const, error: "Batch dimension must be > 0" };
+        const inCh = getParamValue(this, data, "in_channels") as number;
+        const outCh = getParamValue(this, data, "out_channels") as number;
+        const kernel = getParamValue(this, data, "kernel_size") as number;
+        const stride = getParamValue(this, data, "stride") as number;
+
+        if (inCh <= 0 || outCh <= 0) return { ok: false as const, error: "in_channels and out_channels must be > 0" };
+        if (channels !== inCh) return { ok: false as const, error: `Expected ${inCh} channels, got ${channels}` };
+        if (kernel <= 0) return { ok: false as const, error: "kernel_size must be > 0" };
+        if (stride <= 0) return { ok: false as const, error: "stride must be > 0" };
+        if (kernel > height || kernel > width) return { ok: false as const, error: `kernel_size=${kernel} exceeds input spatial dims (${height}x${width})` };
+
+        return { ok: true as const };
+    }
+    static shapeCompute(data: CNNLayerData, inputShapes: number[][]) {
+        const [batch, , height, width] = inputShapes[0] || [1, 1, 1, 1];
+        const outCh = getParamValue(this, data, "out_channels") as number;
+        const kernel = getParamValue(this, data, "kernel_size") as number;
+        const stride = getParamValue(this, data, "stride") as number;
+        const padding = 0;
+        const dilation = 1;
+
+        const computeDim = (dim: number) => Math.floor((dim + 2 * padding - dilation * (kernel - 1) - 1) / stride + 1);
+        const outH = computeDim(height);
+        const outW = computeDim(width);
+        return [batch, outCh, outH, outW];
     }
     static getInitCode(data: CNNLayerData, name: string) {
         return buildInitString("nn.Conv2d", name, CNNLayerNode.paramSchema, data)
@@ -80,9 +111,5 @@ export class CNNLayerNode {
         data = data
         return `x = self.${name}(${inputs[0] || 'x'})`
     }
-    static Component = createLayerComponent<CNNLayerData>(
-        CNNLayerNode.label,
-        CNNLayerNode.paramSchema,
-        CNNLayerNode.computeShape
-    );
+    static Component = createLayerComponent<CNNLayerData>(CNNLayerNode.label, CNNLayerNode.paramSchema);
 }

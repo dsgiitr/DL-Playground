@@ -32,8 +32,12 @@ export interface LayerDefinition<D extends LayerData> {
     // Class configurations
     label: string;
     paramSchema: Record<string, FieldSpec>;
+    handles?: HandleSpec | HandleFactory<D>;
     // Pure functions
-    computeShape(data: D, inputs?: any): number[];
+    // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
+    shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
+    // shapeCompute: computes output shape, assumes verifier passed
+    shapeCompute(data: D, inputShapes: number[][]): number[];
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component
@@ -44,34 +48,208 @@ export interface LayerDefinition<D extends LayerData> {
     Component: React.ComponentType<NodeProps<any>>;
 }
 
+type HandleSpec = {
+    targets: string[];
+    sources: string[];
+};
+type HandleFactory<D> = (data: D) => HandleSpec;
+
+// Utility: get a parameter value with default fallback from schema
+type HasParamSchema = { paramSchema: Record<string, FieldSpec> };
+
+export function getParamValue<D extends LayerData, K extends keyof D & string>(
+    schemaOrLayer: Record<string, FieldSpec> | HasParamSchema,
+    data: Partial<D> | undefined,
+    key: K
+): D[K] | FieldSpec["defaultValue"] {
+    const schema = (schemaOrLayer as HasParamSchema).paramSchema ?? (schemaOrLayer as Record<string, FieldSpec>);
+    const spec = schema[key];
+    const val = data?.[key];
+    if (spec?.type === "number") {
+        return typeof val === "number" && !Number.isNaN(val) ? val : spec?.defaultValue;
+    }
+    return val !== undefined ? val : spec?.defaultValue;
+}
+
+export function InputControl({
+    paramKey,
+    spec,
+    value,
+    onChange
+}: {
+    paramKey: string;
+    spec: FieldSpec;
+    value: any;
+    onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+}) {
+    const isOptional = !spec.required;
+    const style = (isOptional && value !== undefined)
+        ? {
+              width: "60px",
+              backgroundColor: "#111",
+              border: "1px solid #64ffda",
+              color: "white",
+              borderRadius: "4px",
+              padding: "2px 4px",
+              fondSize: "11px"
+          }
+        : {
+              width: "60px",
+              backgroundColor: "#111",
+              border: "1px solid #444",
+              color: "white",
+              borderRadius: "4px",
+              padding: "2px 4px",
+              fondSize: "11px"
+          };
+    switch (spec.type) {
+        case "boolean":
+            return (
+                <input
+                    className="nodrag"
+                    type="checkbox"
+                    checked={!!value}
+                    onChange={onChange(paramKey, "boolean")}
+                    style={{ cursor: "pointer" }}
+                />
+            );
+        case "select":
+            return (
+                <select
+                    className="nodrag"
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "select")}
+                    style={{ ...style, width: "80px" }}
+                >
+                    <option value="" disabled>...</option>
+                    {spec.options?.map(opt => (
+                        <option key={opt} value={opt}>
+                            {opt}
+                        </option>
+                    ))}
+                </select>
+            );
+        case "text":
+            return (
+                <input
+                    className="nodrag"
+                    type="text"
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "text")}
+                    style={{ ...style, width: "80px" }}
+                />
+            );
+        case "number":
+            return (
+                <input
+                    className="nodrag"
+                    type="number"
+                    step={spec.step || 1}
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "number")}
+                    placeholder={isOptional ? "" : "0"}
+                    style={style}
+                />
+            );
+    }
+}
+
+export function ParamsList<D>({
+    renderKeys,
+    optionalParams,
+    paramSchema,
+    data,
+    onChange,
+    onExpand,
+    hiddenCount
+}: {
+    renderKeys: string[];
+    optionalParams: string[];
+    paramSchema: Record<string, FieldSpec>;
+    data: D;
+    onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+    onExpand: () => void;
+    hiddenCount: number;
+}) {
+    return (
+        <div style={{ padding: "10px" }}>
+            {renderKeys.map(key => {
+                const spec = paramSchema[key];
+                if (!spec) return null;
+                return (
+                    <div
+                        key={key}
+                        style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", alignItems: "center" }}
+                    >
+                        <label style={{ fontSize: "11px", color: optionalParams.includes(key) ? "#aaa" : "#fff" }}>
+                            {spec.label || key}
+                        </label>
+                        <InputControl paramKey={key} spec={spec} value={(data as any)[key]} onChange={onChange} />
+                    </div>
+                );
+            })}
+            {hiddenCount > 0 && (
+                <div onClick={onExpand} style={{ fontSize: "9px", color: "#666", textAlign: "center", cursor: "pointer" }}>
+                    + {hiddenCount} options
+                </div>
+            )}
+        </div>
+    );
+}
+
+export function renderHandles(side: "left" | "right", ids: string[], isConnectable: boolean) {
+    return ids.map((idLabel, i, arr) => {
+        const topPct = `${((i + 1) / (arr.length + 1)) * 100}%`;
+        const isLeft = side === "left";
+        return (
+            <div
+                key={`${side}-${idLabel}`}
+                style={{
+                    position: "absolute",
+                    [isLeft ? "left" : "right"]: -24,
+                    top: topPct,
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    alignItems: "center"
+                }}
+            >
+                <Handle
+                    id={idLabel}
+                    type={isLeft ? "target" : "source"}
+                    position={isLeft ? Position.Left : Position.Right}
+                    isConnectable={isConnectable}
+                    style={{
+                        background: "#777",
+                        border: "1px solid #222"
+                    }}
+                />
+            </div>
+        );
+    });
+}
+
 export function createLayerComponent<D extends LayerData>(
     label: string,
     paramSchema: Record<string, FieldSpec>,
-    shapeFn: (data: D) => number[]
+    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
 ) {
-    // The core function that creates the frontend Layer node
-    // needs to be refactored since it is too complicated and bulky
-
-
     return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
-        const { setNodes } = useReactFlow();
+        const { setNodes, setEdges } = useReactFlow();
         const [isExpanded, setIsExpanded] = useState(false);
-        const safeData = data || {} as D;
+        const safeData = data || ({} as D);
+
         const { requiredParams, optionalParams } = useMemo(() => {
             const keys = Object.keys(paramSchema);
             const req = keys.filter(k => paramSchema[k].required);
             const opt = keys.filter(k => !paramSchema[k].required);
-            return {
-                requiredParams: req,
-                optionalParams: opt
-            }
-        }, [])
-        // This section handles the updation of node data based on user events
+            return { requiredParams: req, optionalParams: opt };
+        }, []);
+
         const onChange = (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             let newValue: any = e.target.value;
-            if (type === 'number') {
+            if (type === "number") {
                 newValue = newValue === "" ? undefined : parseFloat(newValue);
-            } else if (type === 'boolean') {
+            } else if (type === "boolean") {
                 newValue = (e.target as HTMLInputElement).checked;
             }
             setNodes(nodes =>
@@ -85,128 +263,107 @@ export function createLayerComponent<D extends LayerData>(
                     }
                     return { ...n, data: newData };
                 })
-            )
+            );
         };
-        // This function displays the input inside the input fields
-        const renderInput = (key: string, spec: FieldSpec, value: any) => {
-            const isOptional = !spec.required
-            const commonStyle = {
-                width: "60px",
-                backgroundColor: "#111",
-                border: "1px solid #444",
-                color: "white", borderRadius: "4px",
-                padding: "2px 4px", fondSize: "11px"
-            };
-            const highlightStyle = {
-                ...commonStyle,
-                border: "1px solid #64ffda"
-            };
-            const style = (isOptional && value !== undefined) ? highlightStyle : commonStyle;
-            switch (spec.type) {
-                case 'boolean':
-                    return (
-                        <input
-                            className="nodrag"
-                            type="checkbox"
-                            checked={!!value}
-                            onChange={onChange(key, 'boolean')}
-                            style={{ cursor: "pointer" }}
-                        />
-                    );
-                case 'select':
-                    return (
-                        <select
-                            className="nodrag"
-                            value={value ?? ""}
-                            onChange={onChange(key, 'select')}
-                            style={{ ...style, width: "80px" }}
-                        >
-                            <option value="" disabled>...</option>
-                            {spec.options?.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                        </select>
-                    );
-                case 'text':
-                    return (
-                        <input
-                            className="nodrag"
-                            type="text"
-                            value={value ?? ""}
-                            onChange={onChange(key, 'text')}
-                            style={{ ...style, width: "80px" }}
-                        />
-                    );
-                case 'number':
-                    return (
-                        <input
-                            className="nodrag"
-                            type="number"
-                            step={spec.step || 1}
-                            value={value ?? ""}
-                            onChange={onChange(key, 'number')}
-                            placeholder={isOptional ? "" : "0"}
-                            style={style}
-                        />
-                    );
-            }
-        }
+
         const paramsToShow = new Set(requiredParams);
         optionalParams.forEach(key => {
             if (isExpanded || safeData[key] !== undefined) {
                 paramsToShow.add(key);
             }
-        })
-        // list of params that will be rended if the paramsToShow has those optional params
-        const renderList = [
-            ...requiredParams,
-            ...optionalParams.filter(k => paramsToShow.has(k))
-        ]
+        });
+        const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
         const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
 
+        const shapePreview = (() => {
+            const liveShape = (safeData as any).__shape as number[] | undefined;
+            if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
+            return "";
+        })();
+
+        const resolvedHandles: HandleSpec = (() => {
+            const h = options?.handles;
+            if (typeof h === "function") return h(safeData);
+            if (h && h.targets && h.sources) return h as HandleSpec;
+            const targetCount = options?.targetHandles ?? 1;
+            return {
+                targets: Array.from({ length: targetCount }).map((_, i) => `in-${i}`),
+                sources: ["out-0"]
+            };
+        })();
+
+        const handleDelete = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setNodes(nodes => nodes.filter(n => n.id !== id));
+            setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
+        };
+
         return (
-            <div className="layer-node" style={{
-                backgroundColor: "#222", border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
-                borderRadius: "8px", minWidth: "170px", transition: "all 0.2s"
-            }}>
-                {/* Currently all handles are hardcoded. this needs to be dependant on the data or the param scheme */}
-                <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
+            <div
+                className="layer-node"
+                style={{
+                    backgroundColor: "#222",
+                    border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
+                    borderRadius: "8px",
+                    minWidth: "170px",
+                    transition: "all 0.2s",
+                    position: "relative"
+                }}
+            >
+                {renderHandles("left", resolvedHandles.targets, isConnectable)}
                 <div
                     onClick={() => setIsExpanded(!isExpanded)}
                     style={{
-                        fontWeight: "bold", color: "#64ffda", borderBottom: "1px solid #444",
-                        padding: "8px", cursor: "pointer", display: "flex", justifyContent: "space-between"
+                        fontWeight: "bold",
+                        color: "#64ffda",
+                        borderBottom: "1px solid #444",
+                        padding: "8px",
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
                     }}
                 >
                     <span>{label}</span>
-                    {/* <span style={{ fontSize: "10px" }}>{isExpanded ? "▼" : "▶"}</span> */}
+                    <button
+                        className="nodrag"
+                        onClick={handleDelete}
+                        style={{
+                            marginLeft: "8px",
+                            cursor: "pointer",
+                            border: "none",
+                            background: "transparent",
+                            color: "#888",
+                            fontWeight: "bold",
+                            fontSize: "18px",
+                            lineHeight: "18px",
+                            width: "24px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                        }}
+                        aria-label="Delete node"
+                        title="Delete node"
+                    >
+                        ×
+                    </button>
                 </div>
 
-                <div style={{ padding: "10px" }}>
-                    {renderList.map(key => {
-                        const spec = paramSchema[key];
-                        if (!spec) return null;
+                <ParamsList
+                    renderKeys={renderList}
+                    optionalParams={optionalParams}
+                    paramSchema={paramSchema}
+                    data={safeData}
+                    onChange={onChange}
+                    onExpand={() => setIsExpanded(true)}
+                    hiddenCount={!isExpanded ? hiddenOptionCount : 0}
+                />
 
-                        return (
-                            <div key={key} style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", alignItems: "center" }}>
-                                <label style={{ fontSize: "11px", color: optionalParams.includes(key) ? "#aaa" : "#fff" }}>
-                                    {spec.label || key}
-                                </label>
-                                {renderInput(key, spec, safeData[key])}
-                            </div>
-                        )
-                    })}
-                    {!isExpanded && hiddenOptionCount > 0 && (
-                        <div onClick={() => setIsExpanded(true)} style={{ fontSize: "9px", color: "#666", textAlign: "center", cursor: "pointer" }}>
-                            + {hiddenOptionCount} options
-                        </div>
-                    )}
-                </div>
-                {/* Shape function is currently a placeholder for the actual shape computation since it is input dependant*/}
                 <div style={{ padding: "0 10px 10px", fontSize: "10px", color: "#888" }}>
-                    Shape: {JSON.stringify(shapeFn(safeData))}
+                    Shape: {shapePreview}
                 </div>
-                <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
+                {renderHandles("right", resolvedHandles.sources, isConnectable)}
             </div>
         );
     };
