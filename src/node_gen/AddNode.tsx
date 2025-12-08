@@ -1,4 +1,5 @@
-import { createLayerComponent, type FieldSpec } from "./BaseClass";
+import { type FieldSpec } from "./BaseClass";
+import {createLayerComponent} from './CreateNodeComponent.tsx'
 
 type AddData = Record<string, never>;
 

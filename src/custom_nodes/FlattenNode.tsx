@@ -1,4 +1,6 @@
-import { createLayerComponent, type FieldSpec } from "../node_gen/BaseClass";
+import { type FieldSpec } from "../node_gen/BaseClass";
+import {createLayerComponent} from '../node_gen/CreateNodeComponent.tsx'
+
 
 type FlattenData = Record<string, never>;
 

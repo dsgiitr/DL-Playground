@@ -1,4 +1,6 @@
-import { createLayerComponent, getParamValue, type FieldSpec } from "../node_gen/BaseClass";
+import {  getParamValue, type FieldSpec } from "../node_gen/BaseClass";
+import {createLayerComponent} from '../node_gen/CreateNodeComponent.tsx'
+
 
 type PoolData = {
     kernel_size: number;
