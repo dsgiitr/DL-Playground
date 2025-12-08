@@ -1,4 +1,5 @@
-import { buildInitString, createLayerComponent, type FieldSpec } from "./BaseClass";
+import { buildInitString, type FieldSpec } from "../node_gen/BaseClass";
+import {createLayerComponent} from "../node_gen/BaseNode"
 
 //class torch.nn.Conv2d(
 //     in_channels: int,

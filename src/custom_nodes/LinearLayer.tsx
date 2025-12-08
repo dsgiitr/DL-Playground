@@ -1,4 +1,5 @@
-import { createLayerComponent, type FieldSpec } from "./BaseClass";
+import { type FieldSpec } from "../node_gen/BaseClass";
+import {createLayerComponent} from "../node_gen/BaseNode"
 
 type LinearData = {
     in_features: number;

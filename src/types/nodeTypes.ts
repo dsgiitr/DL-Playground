@@ -1,6 +1,6 @@
 import type { NodeTypes } from "@xyflow/react";
-import { type LayerDefinition } from "../custom_nodes/BaseClass";
-import {LinearLayerNode} from "../custom_nodes/LinearLayer";
+import { type LayerDefinition } from "../node_gen/BaseClass";
+import { LinearLayerNode } from "../custom_nodes/LinearLayer";
 import { CNNLayerNode } from "../custom_nodes/CNNLayerNode";
 
 

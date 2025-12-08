@@ -21,8 +21,7 @@ import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
 
-let id = 0;
-const getId = () => `node-${id++}`;
+
 const fitViewOptions: FitViewOptions = {
     padding: 0.2,
 };
@@ -36,6 +35,14 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 };
 
 function FlowContent() {
+    const [id, setId] = useState<string>("0");
+
+    const getId = () => {
+    setId(prev => String(Number(prev) + 1));
+    return id;
+    };
+
+
     const [nodes, setNodes] = useState<Node[]>(() => {
         const saved = localStorage.getItem("nodes");
         return saved ? JSON.parse(saved) : [];
