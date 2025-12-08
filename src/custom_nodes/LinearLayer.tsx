@@ -1,4 +1,6 @@
-import { createLayerComponent, getParamValue, type FieldSpec } from "./BaseClass";
+import { getParamValue, type FieldSpec } from "../node_gen/BaseClass";
+import {createLayerComponent} from '../node_gen/CreateNodeComponent.tsx'
+
 
 type LinearData = {
     in_features: number;

@@ -1,4 +1,4 @@
-import { renderHandles, type FieldSpec } from "./BaseClass";
+import { renderHandles, type FieldSpec } from "../node_gen/BaseClass";
 import { useReactFlow, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
 

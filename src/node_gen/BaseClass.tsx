@@ -1,18 +1,6 @@
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
-//TODO: refactor the createlayercomponent to be modular and seperate change handling and input handling into sections
-//TODO: make the createlayercomponent dependant on data such as number of handles
-//      (can be done by implementing functions which compute the number of handles by looking at the data and the inputs as well)
-//TODO: implement handle naming instead of edge naming or link the 2 on the frontend
-//      (unsure if this is needed inside the node or not)
-//TODO: during initial instantiation, data is not provided so use the param schema defaults to start
-//TODO: work out the base implementation for forward pass
-//TODO: add edge functionality (right now we only have node functionality)
-//TODO: add functionality on the frontend to change the name of layer by the user. this "layer_name" property should update the node data
-//      (this "layer_name" property will be used by forward and init code)
-//TODO: when a new node is instantiated, its node data should become populated with default values and default names
-//TODO: inside edge functionality we want the edges to describe which handle they originate from and which edge they go towards.
-//TODO: the shape compute function may become the property of the handles themselves for more complicated modules. 
+
 export type FieldType = 'number' | 'text' | 'boolean' | 'select' // This describes how user can input a param's value
 export interface FieldSpec {
     // This defines all the essential requirements of a parameter that a schema should follow
@@ -23,7 +11,7 @@ export interface FieldSpec {
     defaultValue?: any;
     step?: number;
 }
-type LayerData = Record<string, any>;
+export type LayerData = Record<string, any>;
 
 // These are static class level static function implementation
 // all attributes and methods MUST be static in nature to the class
@@ -48,11 +36,11 @@ export interface LayerDefinition<D extends LayerData> {
     Component: React.ComponentType<NodeProps<any>>;
 }
 
-type HandleSpec = {
+export type HandleSpec = {
     targets: string[];
     sources: string[];
 };
-type HandleFactory<D> = (data: D) => HandleSpec;
+export type HandleFactory<D> = (data: D) => HandleSpec;
 
 // Utility: get a parameter value with default fallback from schema
 type HasParamSchema = { paramSchema: Record<string, FieldSpec> };
@@ -228,146 +216,7 @@ export function renderHandles(side: "left" | "right", ids: string[], isConnectab
     });
 }
 
-export function createLayerComponent<D extends LayerData>(
-    label: string,
-    paramSchema: Record<string, FieldSpec>,
-    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
-) {
-    return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
-        const { setNodes, setEdges } = useReactFlow();
-        const [isExpanded, setIsExpanded] = useState(false);
-        const safeData = data || ({} as D);
 
-        const { requiredParams, optionalParams } = useMemo(() => {
-            const keys = Object.keys(paramSchema);
-            const req = keys.filter(k => paramSchema[k].required);
-            const opt = keys.filter(k => !paramSchema[k].required);
-            return { requiredParams: req, optionalParams: opt };
-        }, []);
-
-        const onChange = (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-            let newValue: any = e.target.value;
-            if (type === "number") {
-                newValue = newValue === "" ? undefined : parseFloat(newValue);
-            } else if (type === "boolean") {
-                newValue = (e.target as HTMLInputElement).checked;
-            }
-            setNodes(nodes =>
-                nodes.map(n => {
-                    if (n.id !== id) return n;
-                    const newData = { ...n.data };
-                    if (newValue === undefined || newValue === "") {
-                        delete newData[key];
-                    } else {
-                        newData[key] = newValue;
-                    }
-                    return { ...n, data: newData };
-                })
-            );
-        };
-
-        const paramsToShow = new Set(requiredParams);
-        optionalParams.forEach(key => {
-            if (isExpanded || safeData[key] !== undefined) {
-                paramsToShow.add(key);
-            }
-        });
-        const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
-        const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
-
-        const shapePreview = (() => {
-            const liveShape = (safeData as any).__shape as number[] | undefined;
-            if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
-            return "";
-        })();
-
-        const resolvedHandles: HandleSpec = (() => {
-            const h = options?.handles;
-            if (typeof h === "function") return h(safeData);
-            if (h && h.targets && h.sources) return h as HandleSpec;
-            const targetCount = options?.targetHandles ?? 1;
-            return {
-                targets: Array.from({ length: targetCount }).map((_, i) => `in-${i}`),
-                sources: ["out-0"]
-            };
-        })();
-
-        const handleDelete = (e: React.MouseEvent) => {
-            e.stopPropagation();
-            setNodes(nodes => nodes.filter(n => n.id !== id));
-            setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
-        };
-
-        return (
-            <div
-                className="layer-node"
-                style={{
-                    backgroundColor: "#222",
-                    border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
-                    borderRadius: "8px",
-                    minWidth: "170px",
-                    transition: "all 0.2s",
-                    position: "relative"
-                }}
-            >
-                {renderHandles("left", resolvedHandles.targets, isConnectable)}
-                <div
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    style={{
-                        fontWeight: "bold",
-                        color: "#64ffda",
-                        borderBottom: "1px solid #444",
-                        padding: "8px",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center"
-                    }}
-                >
-                    <span>{label}</span>
-                    <button
-                        className="nodrag"
-                        onClick={handleDelete}
-                        style={{
-                            marginLeft: "8px",
-                            cursor: "pointer",
-                            border: "none",
-                            background: "transparent",
-                            color: "#888",
-                            fontWeight: "bold",
-                            fontSize: "18px",
-                            lineHeight: "18px",
-                            width: "24px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                        }}
-                        aria-label="Delete node"
-                        title="Delete node"
-                    >
-                        ×
-                    </button>
-                </div>
-
-                <ParamsList
-                    renderKeys={renderList}
-                    optionalParams={optionalParams}
-                    paramSchema={paramSchema}
-                    data={safeData}
-                    onChange={onChange}
-                    onExpand={() => setIsExpanded(true)}
-                    hiddenCount={!isExpanded ? hiddenOptionCount : 0}
-                />
-
-                <div style={{ padding: "0 10px 10px", fontSize: "10px", color: "#888" }}>
-                    Shape: {shapePreview}
-                </div>
-                {renderHandles("right", resolvedHandles.sources, isConnectable)}
-            </div>
-        );
-    };
-}
 // This is a base implementation of the init code that can dynamically update
 //  depending on if the value has been changed to a non default param value
 export function buildInitString(
