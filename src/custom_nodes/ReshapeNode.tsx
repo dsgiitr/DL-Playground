@@ -61,13 +61,5 @@ export class ReshapeNode {
         const dims = data.target_shape || "-1";
         return `${out} = ${inputVar}.view(${dims})`;
     }
-
-    static computeShape(_data: ReshapeData) {
-        return [];
-    }
-
-    static Component = createLayerComponent<ReshapeData>(ReshapeNode.label, ReshapeNode.paramSchema, (data, inputs = []) => {
-        if (!inputs.length) return [];
-        return ReshapeNode.shapeCompute(data, inputs);
-    });
+    static Component = createLayerComponent<ReshapeData>(ReshapeNode.label, ReshapeNode.paramSchema);
 }

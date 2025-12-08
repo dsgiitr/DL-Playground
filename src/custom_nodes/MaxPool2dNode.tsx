@@ -17,8 +17,8 @@ export class MaxPool2dNode {
         const shape = inputShapes[0];
         if (shape.length !== 4) return { ok: false as const, error: "MaxPool2d input must be [batch, channels, height, width]" };
         const [, , h, w] = shape;
-        const k = getParamValue(MaxPool2dNode.paramSchema, data, "kernel_size") as number;
-        const s = getParamValue(MaxPool2dNode.paramSchema, data, "stride") as number;
+        const k = getParamValue(this, data, "kernel_size") as number;
+        const s = getParamValue(this, data, "stride") as number;
         if (k <= 0) return { ok: false as const, error: "kernel_size must be > 0" };
         if (s <= 0) return { ok: false as const, error: "stride must be > 0" };
         if (k > h || k > w) return { ok: false as const, error: `kernel_size=${k} exceeds input spatial dims (${h}x${w})` };
@@ -27,8 +27,8 @@ export class MaxPool2dNode {
 
     static shapeCompute(data: PoolData, inputShapes: number[][]) {
         const [n, c, h, w] = inputShapes[0];
-        const k = getParamValue(MaxPool2dNode.paramSchema, data, "kernel_size") as number;
-        const s = getParamValue(MaxPool2dNode.paramSchema, data, "stride") as number;
+        const k = getParamValue(this, data, "kernel_size") as number;
+        const s = getParamValue(this, data, "stride") as number;
         const padding = 0;
         const dilation = 1;
         const computeDim = (dim: number) => Math.floor((dim + 2 * padding - dilation * (k - 1) - 1) / s + 1);
@@ -51,8 +51,5 @@ export class MaxPool2dNode {
         return [];
     }
 
-    static Component = createLayerComponent<PoolData>(MaxPool2dNode.label, MaxPool2dNode.paramSchema, (data, inputs = []) => {
-        if (!inputs.length) return [];
-        return MaxPool2dNode.shapeCompute(data, inputs);
-    });
+    static Component = createLayerComponent<PoolData>(MaxPool2dNode.label, MaxPool2dNode.paramSchema);
 }

@@ -78,10 +78,10 @@ export class CNNLayerNode {
 
         const [batch, channels, height, width] = shape;
         if (batch <= 0) return { ok: false as const, error: "Batch dimension must be > 0" };
-        const inCh = getParamValue(CNNLayerNode.paramSchema, data, "in_channels") as number;
-        const outCh = getParamValue(CNNLayerNode.paramSchema, data, "out_channels") as number;
-        const kernel = getParamValue(CNNLayerNode.paramSchema, data, "kernel_size") as number;
-        const stride = getParamValue(CNNLayerNode.paramSchema, data, "stride") as number;
+        const inCh = getParamValue(this, data, "in_channels") as number;
+        const outCh = getParamValue(this, data, "out_channels") as number;
+        const kernel = getParamValue(this, data, "kernel_size") as number;
+        const stride = getParamValue(this, data, "stride") as number;
 
         if (inCh <= 0 || outCh <= 0) return { ok: false as const, error: "in_channels and out_channels must be > 0" };
         if (channels !== inCh) return { ok: false as const, error: `Expected ${inCh} channels, got ${channels}` };
@@ -93,9 +93,9 @@ export class CNNLayerNode {
     }
     static shapeCompute(data: CNNLayerData, inputShapes: number[][]) {
         const [batch, , height, width] = inputShapes[0] || [1, 1, 1, 1];
-        const outCh = getParamValue(CNNLayerNode.paramSchema, data, "out_channels") as number;
-        const kernel = getParamValue(CNNLayerNode.paramSchema, data, "kernel_size") as number;
-        const stride = getParamValue(CNNLayerNode.paramSchema, data, "stride") as number;
+        const outCh = getParamValue(this, data, "out_channels") as number;
+        const kernel = getParamValue(this, data, "kernel_size") as number;
+        const stride = getParamValue(this, data, "stride") as number;
         const padding = 0;
         const dilation = 1;
 
@@ -104,9 +104,6 @@ export class CNNLayerNode {
         const outW = computeDim(width);
         return [batch, outCh, outH, outW];
     }
-    static computeShape(data: CNNLayerData) {
-        return [data.out_channels]
-    }
     static getInitCode(data: CNNLayerData, name: string) {
         return buildInitString("nn.Conv2d", name, CNNLayerNode.paramSchema, data)
     }
@@ -114,9 +111,5 @@ export class CNNLayerNode {
         data = data
         return `x = self.${name}(${inputs[0] || 'x'})`
     }
-    static Component = createLayerComponent<CNNLayerData>(
-        CNNLayerNode.label,
-        CNNLayerNode.paramSchema,
-        CNNLayerNode.computeShape
-    );
+    static Component = createLayerComponent<CNNLayerData>(CNNLayerNode.label, CNNLayerNode.paramSchema);
 }

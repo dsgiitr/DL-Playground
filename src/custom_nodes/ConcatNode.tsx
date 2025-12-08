@@ -52,8 +52,5 @@ export class ConcatNode {
         return [];
     }
 
-    static Component = createLayerComponent<ConcatData>(ConcatNode.label, ConcatNode.paramSchema, (data, inputs = []) => {
-        if (!inputs.length) return [];
-        return ConcatNode.shapeCompute(data, inputs);
-    }, { targetHandles: 2 });
+    static Component = createLayerComponent<ConcatData>(ConcatNode.label, ConcatNode.paramSchema, { targetHandles: 2 });
 }

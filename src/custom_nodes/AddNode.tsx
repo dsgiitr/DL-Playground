@@ -37,8 +37,5 @@ export class AddNode {
         return [];
     }
 
-    static Component = createLayerComponent<AddData>(AddNode.label, AddNode.paramSchema, (data, inputs = []) => {
-        if (!inputs.length) return [];
-        return AddNode.shapeCompute(data, inputs);
-    }, { targetHandles: 2 });
+    static Component = createLayerComponent<AddData>(AddNode.label, AddNode.paramSchema, { targetHandles: 2 });
 }

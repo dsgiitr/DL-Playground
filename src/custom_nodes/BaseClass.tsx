@@ -32,13 +32,12 @@ export interface LayerDefinition<D extends LayerData> {
     // Class configurations
     label: string;
     paramSchema: Record<string, FieldSpec>;
+    handles?: HandleSpec | HandleFactory<D>;
     // Pure functions
     // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
     // shapeCompute: computes output shape, assumes verifier passed
     shapeCompute(data: D, inputShapes: number[][]): number[];
-    // computeShape is kept for backward compatibility / default rendering; prefer shapeCompute
-    computeShape?(data: D, inputs?: any): number[];
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component
@@ -49,12 +48,21 @@ export interface LayerDefinition<D extends LayerData> {
     Component: React.ComponentType<NodeProps<any>>;
 }
 
+type HandleSpec = {
+    targets: string[];
+    sources: string[];
+};
+type HandleFactory<D> = (data: D) => HandleSpec;
+
 // Utility: get a parameter value with default fallback from schema
+type HasParamSchema = { paramSchema: Record<string, FieldSpec> };
+
 export function getParamValue<D extends LayerData, K extends keyof D & string>(
-    schema: Record<string, FieldSpec>,
+    schemaOrLayer: Record<string, FieldSpec> | HasParamSchema,
     data: Partial<D> | undefined,
     key: K
 ): D[K] | FieldSpec["defaultValue"] {
+    const schema = (schemaOrLayer as HasParamSchema).paramSchema ?? (schemaOrLayer as Record<string, FieldSpec>);
     const spec = schema[key];
     const val = data?.[key];
     if (spec?.type === "number") {
@@ -63,117 +71,107 @@ export function getParamValue<D extends LayerData, K extends keyof D & string>(
     return val !== undefined ? val : spec?.defaultValue;
 }
 
-export function createLayerComponent<D extends LayerData>(
-    label: string,
-    paramSchema: Record<string, FieldSpec>,
-    shapeFn: (data: D, inputShapes?: number[][]) => number[],
-    options?: { targetHandles?: number }
-) {
-    // UI factory for a layer node. Decomposed into small helpers for reuse/extension.
+export function InputControl({
+    paramKey,
+    spec,
+    value,
+    onChange
+}: {
+    paramKey: string;
+    spec: FieldSpec;
+    value: any;
+    onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+}) {
+    const isOptional = !spec.required;
+    const style = (isOptional && value !== undefined)
+        ? {
+              width: "60px",
+              backgroundColor: "#111",
+              border: "1px solid #64ffda",
+              color: "white",
+              borderRadius: "4px",
+              padding: "2px 4px",
+              fondSize: "11px"
+          }
+        : {
+              width: "60px",
+              backgroundColor: "#111",
+              border: "1px solid #444",
+              color: "white",
+              borderRadius: "4px",
+              padding: "2px 4px",
+              fondSize: "11px"
+          };
+    switch (spec.type) {
+        case "boolean":
+            return (
+                <input
+                    className="nodrag"
+                    type="checkbox"
+                    checked={!!value}
+                    onChange={onChange(paramKey, "boolean")}
+                    style={{ cursor: "pointer" }}
+                />
+            );
+        case "select":
+            return (
+                <select
+                    className="nodrag"
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "select")}
+                    style={{ ...style, width: "80px" }}
+                >
+                    <option value="" disabled>...</option>
+                    {spec.options?.map(opt => (
+                        <option key={opt} value={opt}>
+                            {opt}
+                        </option>
+                    ))}
+                </select>
+            );
+        case "text":
+            return (
+                <input
+                    className="nodrag"
+                    type="text"
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "text")}
+                    style={{ ...style, width: "80px" }}
+                />
+            );
+        case "number":
+            return (
+                <input
+                    className="nodrag"
+                    type="number"
+                    step={spec.step || 1}
+                    value={value ?? ""}
+                    onChange={onChange(paramKey, "number")}
+                    placeholder={isOptional ? "" : "0"}
+                    style={style}
+                />
+            );
+    }
+}
 
-    const inputStyles = {
-        base: {
-            width: "60px",
-            backgroundColor: "#111",
-            border: "1px solid #444",
-            color: "white",
-            borderRadius: "4px",
-            padding: "2px 4px",
-            fondSize: "11px"
-        },
-        highlight: {
-            width: "60px",
-            backgroundColor: "#111",
-            border: "1px solid #64ffda",
-            color: "white",
-            borderRadius: "4px",
-            padding: "2px 4px",
-            fondSize: "11px"
-        }
-    };
-
-    const InputControl = ({
-        paramKey,
-        spec,
-        value,
-        onChange
-    }: {
-        paramKey: string;
-        spec: FieldSpec;
-        value: any;
-        onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-    }) => {
-        const isOptional = !spec.required;
-        const style = (isOptional && value !== undefined) ? inputStyles.highlight : inputStyles.base;
-        switch (spec.type) {
-            case "boolean":
-                return (
-                    <input
-                        className="nodrag"
-                        type="checkbox"
-                        checked={!!value}
-                        onChange={onChange(paramKey, "boolean")}
-                        style={{ cursor: "pointer" }}
-                    />
-                );
-            case "select":
-                return (
-                    <select
-                        className="nodrag"
-                        value={value ?? ""}
-                        onChange={onChange(paramKey, "select")}
-                        style={{ ...style, width: "80px" }}
-                    >
-                        <option value="" disabled>...</option>
-                        {spec.options?.map(opt => (
-                            <option key={opt} value={opt}>
-                                {opt}
-                            </option>
-                        ))}
-                    </select>
-                );
-            case "text":
-                return (
-                    <input
-                        className="nodrag"
-                        type="text"
-                        value={value ?? ""}
-                        onChange={onChange(paramKey, "text")}
-                        style={{ ...style, width: "80px" }}
-                    />
-                );
-            case "number":
-                return (
-                    <input
-                        className="nodrag"
-                        type="number"
-                        step={spec.step || 1}
-                        value={value ?? ""}
-                        onChange={onChange(paramKey, "number")}
-                        placeholder={isOptional ? "" : "0"}
-                        style={style}
-                    />
-                );
-        }
-    };
-
-    const ParamsList = ({
-        renderKeys,
-        optionalParams,
-        paramSchema,
-        data,
-        onChange,
-        onExpand,
-        hiddenCount
-    }: {
-        renderKeys: string[];
-        optionalParams: string[];
-        paramSchema: Record<string, FieldSpec>;
-        data: D;
-        onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-        onExpand: () => void;
-        hiddenCount: number;
-    }) => (
+export function ParamsList<D>({
+    renderKeys,
+    optionalParams,
+    paramSchema,
+    data,
+    onChange,
+    onExpand,
+    hiddenCount
+}: {
+    renderKeys: string[];
+    optionalParams: string[];
+    paramSchema: Record<string, FieldSpec>;
+    data: D;
+    onChange: (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+    onExpand: () => void;
+    hiddenCount: number;
+}) {
+    return (
         <div style={{ padding: "10px" }}>
             {renderKeys.map(key => {
                 const spec = paramSchema[key];
@@ -197,7 +195,44 @@ export function createLayerComponent<D extends LayerData>(
             )}
         </div>
     );
+}
 
+export function renderHandles(side: "left" | "right", ids: string[], isConnectable: boolean) {
+    return ids.map((idLabel, i, arr) => {
+        const topPct = `${((i + 1) / (arr.length + 1)) * 100}%`;
+        const isLeft = side === "left";
+        return (
+            <div
+                key={`${side}-${idLabel}`}
+                style={{
+                    position: "absolute",
+                    [isLeft ? "left" : "right"]: -24,
+                    top: topPct,
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    alignItems: "center"
+                }}
+            >
+                <Handle
+                    id={idLabel}
+                    type={isLeft ? "target" : "source"}
+                    position={isLeft ? Position.Left : Position.Right}
+                    isConnectable={isConnectable}
+                    style={{
+                        background: "#777",
+                        border: "1px solid #222"
+                    }}
+                />
+            </div>
+        );
+    });
+}
+
+export function createLayerComponent<D extends LayerData>(
+    label: string,
+    paramSchema: Record<string, FieldSpec>,
+    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
+) {
     return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
         const { setNodes, setEdges } = useReactFlow();
         const [isExpanded, setIsExpanded] = useState(false);
@@ -243,13 +278,18 @@ export function createLayerComponent<D extends LayerData>(
         const shapePreview = (() => {
             const liveShape = (safeData as any).__shape as number[] | undefined;
             if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
-            try {
-                const val = shapeFn(safeData, []);
-                if (Array.isArray(val) && val.length > 0) return JSON.stringify(val);
-                return "";
-            } catch {
-                return "";
-            }
+            return "";
+        })();
+
+        const resolvedHandles: HandleSpec = (() => {
+            const h = options?.handles;
+            if (typeof h === "function") return h(safeData);
+            if (h && h.targets && h.sources) return h as HandleSpec;
+            const targetCount = options?.targetHandles ?? 1;
+            return {
+                targets: Array.from({ length: targetCount }).map((_, i) => `in-${i}`),
+                sources: ["out-0"]
+            };
         })();
 
         const handleDelete = (e: React.MouseEvent) => {
@@ -266,25 +306,11 @@ export function createLayerComponent<D extends LayerData>(
                     border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
                     borderRadius: "8px",
                     minWidth: "170px",
-                    transition: "all 0.2s"
+                    transition: "all 0.2s",
+                    position: "relative"
                 }}
             >
-                {Array.from({ length: options?.targetHandles ?? 1 }).map((_, i, arr) => (
-                    <Handle
-                        key={`t-${i}`}
-                        id={`in-${i}`}
-                        type="target"
-                        position={Position.Left}
-                        isConnectable={isConnectable}
-                        style={{
-                            top: `${((i + 1) / (arr.length + 1)) * 100}%`,
-                            transform: "translateY(-50%)",
-                            left: -6,
-                            background: "#777",
-                            border: "1px solid #222"
-                        }}
-                    />
-                ))}
+                {renderHandles("left", resolvedHandles.targets, isConnectable)}
                 <div
                     onClick={() => setIsExpanded(!isExpanded)}
                     style={{
@@ -309,8 +335,13 @@ export function createLayerComponent<D extends LayerData>(
                             background: "transparent",
                             color: "#888",
                             fontWeight: "bold",
-                            fontSize: "14px",
-                            lineHeight: "14px"
+                            fontSize: "18px",
+                            lineHeight: "18px",
+                            width: "24px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
                         }}
                         aria-label="Delete node"
                         title="Delete node"
@@ -332,7 +363,7 @@ export function createLayerComponent<D extends LayerData>(
                 <div style={{ padding: "0 10px 10px", fontSize: "10px", color: "#888" }}>
                     Shape: {shapePreview}
                 </div>
-                <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
+                {renderHandles("right", resolvedHandles.sources, isConnectable)}
             </div>
         );
     };

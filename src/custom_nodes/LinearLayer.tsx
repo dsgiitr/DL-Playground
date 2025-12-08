@@ -35,8 +35,8 @@ export class LinearLayerNode {
         const shape = inputShapes[0];
         if (shape.length !== 1 && shape.length !== 2) return { ok: false as const, error: "Linear input must be [features] or [batch, features]" };
 
-        const inFeatures = getParamValue(LinearLayerNode.paramSchema, data, "in_features") as number;
-        const outFeatures = getParamValue(LinearLayerNode.paramSchema, data, "out_features") as number;
+        const inFeatures = getParamValue(this, data, "in_features") as number;
+        const outFeatures = getParamValue(this, data, "out_features") as number;
         if (inFeatures <= 0 || outFeatures <= 0) return { ok: false as const, error: "in_features and out_features must be > 0" };
 
         const featureDim = shape[shape.length - 1];
@@ -47,12 +47,9 @@ export class LinearLayerNode {
     }
     static shapeCompute(data: LinearData, inputShapes: number[][]) {
         const shape = inputShapes[0] || [];
-        const outFeatures = getParamValue(LinearLayerNode.paramSchema, data, "out_features") as number;
+        const outFeatures = getParamValue(this, data, "out_features") as number;
         if (shape.length === 2) return [shape[0], outFeatures];
         return [outFeatures];
-    }
-    static computeShape(data: LinearData) {
-        return [data.out_features];
     }
     static getInitCode(data: LinearData, name: string) {
         const i = data.in_features || this.paramSchema.in_features.defaultValue;
@@ -67,9 +64,5 @@ export class LinearLayerNode {
         outputs = outputs;
         return ``;
     }
-    static Component = createLayerComponent<LinearData>(
-        LinearLayerNode.label,
-        LinearLayerNode.paramSchema,
-        LinearLayerNode.computeShape
-    );
+    static Component = createLayerComponent<LinearData>(LinearLayerNode.label, LinearLayerNode.paramSchema);
 }

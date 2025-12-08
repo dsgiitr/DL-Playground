@@ -16,7 +16,7 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
@@ -60,6 +60,7 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
+    const [edgeAction, setEdgeAction] = useState<{ id: string; x: number; y: number } | null>(null);
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
@@ -171,6 +172,24 @@ function FlowContent() {
         });
     }, [edges, shapeResult, friendlyError]);
 
+    const onEdgeClick = useCallback(
+        (event: MouseEvent, edge: Edge) => {
+            event.stopPropagation();
+            setEdgeAction({ id: edge.id, x: event.clientX, y: event.clientY });
+        },
+        []
+    );
+
+    const deleteEdge = useCallback(() => {
+        if (!edgeAction) return;
+        setEdges(eds => eds.filter(e => e.id !== edgeAction.id));
+        setEdgeAction(null);
+    }, [edgeAction, setEdges]);
+
+    const dismissEdgeAction = useCallback(() => {
+        if (edgeAction) setEdgeAction(null);
+    }, [edgeAction]);
+
     return (
         <div style={{ display: "flex", height: "100vh" }}>
             <Sidebar />
@@ -187,13 +206,47 @@ function FlowContent() {
                         </span>
                     )}
                 </div>
+                {edgeAction && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            top: edgeAction.y,
+                            left: edgeAction.x,
+                            transform: "translate(-50%, -50%)",
+                            background: "#222",
+                            color: "#fff",
+                            border: "1px solid #444",
+                            borderRadius: "6px",
+                            padding: "6px 10px",
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                            zIndex: 20
+                        }}
+                    >
+                        <button
+                            onClick={deleteEdge}
+                            style={{
+                                background: "#d9534f",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "4px",
+                                padding: "4px 8px",
+                                cursor: "pointer"
+                            }}
+                        >
+                            Delete edge
+                        </button>
+                    </div>
+                )}
                 <ReactFlow
                     nodes={nodes}
                     edges={decoratedEdges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
+                    onEdgeClick={onEdgeClick}
                     onNodeDrag={onNodeDrag}
+                    onPaneClick={dismissEdgeAction}
+                    onPaneContextMenu={dismissEdgeAction}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     fitView

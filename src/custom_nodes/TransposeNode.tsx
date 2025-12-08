@@ -56,8 +56,5 @@ export class TransposeNode {
         return [];
     }
 
-    static Component = createLayerComponent<TransposeData>(TransposeNode.label, TransposeNode.paramSchema, (data, inputs = []) => {
-        if (!inputs.length) return [];
-        return TransposeNode.shapeCompute(data, inputs);
-    });
+    static Component = createLayerComponent<TransposeData>(TransposeNode.label, TransposeNode.paramSchema);
 }

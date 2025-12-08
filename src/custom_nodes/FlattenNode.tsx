@@ -34,10 +34,5 @@ export class FlattenNode {
         const outputVar = outputs[0] || "x";
         return `${outputVar} = self.${name}(${inputVar})`;
     }
-
-    static computeShape(_data: FlattenData) {
-        return [];
-    }
-
-    static Component = createLayerComponent<FlattenData>(FlattenNode.label, FlattenNode.paramSchema, FlattenNode.computeShape);
+    static Component = createLayerComponent<FlattenData>(FlattenNode.label, FlattenNode.paramSchema);
 }
