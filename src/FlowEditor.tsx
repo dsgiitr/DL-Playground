@@ -16,7 +16,7 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
@@ -35,12 +35,19 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 };
 
 function FlowContent() {
-    const [id, setId] = useState<string>("0");
+    
+    const useIdGenerator = () => {
+    const idRef = useRef(0);
 
     const getId = () => {
-    setId(prev => String(Number(prev) + 1));
-    return id;
+        idRef.current += 1;
+        return String(idRef.current);
     };
+
+    return getId;
+    };
+
+    const getId = useIdGenerator();
 
 
     const [nodes, setNodes] = useState<Node[]>(() => {
