@@ -1,4 +1,4 @@
-import { createLayerComponent, type FieldSpec } from "./BaseClass";
+import { createLayerComponent, type FieldSpec } from "../node_gen/BaseClass";
 
 type ReshapeData = {
     target_shape: string;

@@ -16,7 +16,7 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState} from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";

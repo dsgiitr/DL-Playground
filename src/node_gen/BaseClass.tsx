@@ -1,18 +1,6 @@
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
-//TODO: refactor the createlayercomponent to be modular and seperate change handling and input handling into sections
-//TODO: make the createlayercomponent dependant on data such as number of handles
-//      (can be done by implementing functions which compute the number of handles by looking at the data and the inputs as well)
-//TODO: implement handle naming instead of edge naming or link the 2 on the frontend
-//      (unsure if this is needed inside the node or not)
-//TODO: during initial instantiation, data is not provided so use the param schema defaults to start
-//TODO: work out the base implementation for forward pass
-//TODO: add edge functionality (right now we only have node functionality)
-//TODO: add functionality on the frontend to change the name of layer by the user. this "layer_name" property should update the node data
-//      (this "layer_name" property will be used by forward and init code)
-//TODO: when a new node is instantiated, its node data should become populated with default values and default names
-//TODO: inside edge functionality we want the edges to describe which handle they originate from and which edge they go towards.
-//TODO: the shape compute function may become the property of the handles themselves for more complicated modules. 
+
 export type FieldType = 'number' | 'text' | 'boolean' | 'select' // This describes how user can input a param's value
 export interface FieldSpec {
     // This defines all the essential requirements of a parameter that a schema should follow
