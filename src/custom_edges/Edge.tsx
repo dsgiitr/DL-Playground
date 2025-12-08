@@ -1,7 +1,12 @@
-import { getBezierPath, BaseEdge, type EdgeProps, type Edge, EdgeLabelRenderer } from '@xyflow/react';
+import { getBezierPath, BaseEdge, type EdgeProps, type Edge, EdgeLabelRenderer, useReactFlow } from '@xyflow/react';
 import {useState} from 'react'
  
-type CustomEdge = Edge<{ value: number }, 'custom'>;
+type CustomEdgeData = {
+  label: string;
+  shape: number[]
+};
+
+type CustomEdge = Edge<CustomEdgeData, 'custom'>;
  
 export default function CustomEdge({
   id,
@@ -11,12 +16,26 @@ export default function CustomEdge({
   targetY,
   data
 }: EdgeProps<CustomEdge>) {
+  const { setEdges } = useReactFlow();
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY });
   const edgeParams = data;
-  const [label, setLabel] = useState(id);
+
+  const label = data?.label ?? id;
 
   const onLabelChange = (newLabel: string) => {
-    setLabel(newLabel);
+    setEdges(edges =>
+      edges.map(e =>
+        e.id === id
+          ? {
+              ...e,
+              data: {
+                ...e.data,
+                label: newLabel
+              }
+            }
+          : e
+      )
+    );
   };
   
  
