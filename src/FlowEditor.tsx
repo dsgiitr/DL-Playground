@@ -54,7 +54,7 @@ function FlowContent() {
         changes => setEdges(eds => applyEdgeChanges(changes, eds)),
         [setEdges]
     );
-    const onConnect: OnConnect = useCallback(connection => setEdges(eds => addEdge(connection, eds)), [setEdges]);
+    const onConnect: OnConnect = useCallback(connection => setEdges(eds => addEdge({...connection, type: "custom"}, eds)), [setEdges]);
     const onDragOver = (event: React.DragEvent) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
