@@ -21,6 +21,7 @@ import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
 import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape_verifier";
+import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -60,6 +61,10 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
+
+    const [showCode, setShowCode] = useState(false);
+    const [generatedCode, setGeneratedCode] = useState("");
+
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
@@ -71,6 +76,13 @@ function FlowContent() {
         [setEdges]
     );
     const onConnect: OnConnect = useCallback(connection => setEdges(eds => addEdge({...connection, type: "custom"}, eds)), [setEdges]);
+
+    const onGenerateCode = useCallback(() => {
+        const code = generatePyTorchCode(nodes, edges);
+        setGeneratedCode(code);
+        setShowCode(true);
+    }, [nodes, edges]);
+
     const onDragOver = (event: React.DragEvent) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
@@ -174,7 +186,7 @@ function FlowContent() {
 
     return (
         <div style={{ display: "flex", height: "100vh" }}>
-            <Sidebar />
+            <Sidebar onGenerateCode={onGenerateCode}/>
             <div style={{ width: "80vw", display: "flex", flexDirection: "column" }}>
                 <div style={{ padding: "8px", display: "flex", gap: "8px", alignItems: "center", minHeight: "32px" }}>
                     {shapeResult && shapeResult.ok && (
@@ -207,6 +219,98 @@ function FlowContent() {
                     <Background />
                 </ReactFlow>
             </div>
+
+            {showCode && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0, 0, 0, 0.65)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 1000,
+                    }}
+                    onClick={() => setShowCode(false)}
+                >
+                    <div
+                        style={{
+                            width: "70vw",
+                            maxWidth: "900px",
+                            height: "70vh",
+                            background: "#1e1e1e",
+                            borderRadius: 10,
+                            display: "flex",
+                            flexDirection: "column",
+                            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div
+                            style={{
+                                padding: "12px 16px",
+                                borderBottom: "1px solid #333",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                            }}
+                        >
+                            <span
+                                style={{
+                                    fontWeight: 600,
+                                    color: "#e6edf3",
+                                    letterSpacing: "0.3px",
+                                }}
+                            >
+                                Generated PyTorch Code
+                            </span>
+
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    onClick={() => navigator.clipboard.writeText(generatedCode)}
+                                    style={{
+                                        padding: "4px 8px",
+                                        fontSize: 12,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    Copy
+                                </button>
+
+                                <button
+                                    onClick={() => setShowCode(false)}
+                                    style={{
+                                        padding: "4px 8px",
+                                        fontSize: 12,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+
+                        <pre
+                            style={{
+                                flex: 1,
+                                margin: 0,
+                                padding: 16,
+                                overflow: "auto",
+                                background: "#111",
+                                color: "#d4d4d4",
+                                fontSize: 13,
+                                fontFamily:
+                                    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                lineHeight: 1.5,
+                                borderBottomLeftRadius: 10,
+                                borderBottomRightRadius: 10,
+                            }}
+                        >
+                            {generatedCode}
+                        </pre>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

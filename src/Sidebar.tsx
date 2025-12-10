@@ -1,6 +1,6 @@
 import { nodeTypes } from "./types/nodeTypes";
 
-export default function Sidebar() {
+export default function Sidebar({ onGenerateCode }: { onGenerateCode: () => void }) {
     const onDragStart = (event: React.DragEvent<HTMLDivElement>, nodeType: string) => {
         event.dataTransfer.setData("application/reactflow", nodeType);
         event.dataTransfer.effectAllowed = "move";
@@ -48,6 +48,23 @@ export default function Sidebar() {
             >
                 {" "}
                 Reset & Reload{" "}
+            </button>
+
+            <button
+                onClick={onGenerateCode}
+                style={{
+                    marginTop: 8,
+                    padding: "12px",
+                    backgroundColor: "#d9534f",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    fontSize: "14px",
+                }}
+            >
+                Generate Code
             </button>
         </aside>
     );
