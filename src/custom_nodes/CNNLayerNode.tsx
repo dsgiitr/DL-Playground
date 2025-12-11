@@ -1,5 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../node_gen/BaseClass";
-import {createLayerComponent} from '../node_gen/CreateNodeComponent.tsx'
+import { createLayerComponent } from '../node_gen/CreateNodeComponent.tsx'
 
 //class torch.nn.Conv2d(
 //     in_channels: int,
@@ -108,9 +108,10 @@ export class CNNLayerNode {
     static getInitCode(data: CNNLayerData, name: string) {
         return buildInitString("nn.Conv2d", name, CNNLayerNode.paramSchema, data)
     }
-    static getForwardCode(data: CNNLayerData, name: string, inputs: string[]) {
-        data = data
-        return `x = self.${name}(${inputs[0] || 'x'})`
+    static getForwardCode(_data: CNNLayerData, name: string, inputs: Array<string>, outputs: Array<string>) {
+        const inputVar = inputs.length > 0 ? inputs[0] : "x";
+        const outputVar = outputs.length > 0 ? outputs[0] : "x";
+        return `${outputVar} = self.${name}(${inputVar})`
     }
     static Component = createLayerComponent<CNNLayerData>(CNNLayerNode.label, CNNLayerNode.paramSchema);
 }
