@@ -1,5 +1,5 @@
 import { type FieldSpec } from "../node_gen/BaseClass";
-import {createLayerComponent} from '../node_gen/CreateNodeComponent.tsx'
+import { createLayerComponent } from '../node_gen/CreateNodeComponent.tsx'
 
 
 type FlattenData = Record<string, never>;
@@ -32,8 +32,8 @@ export class FlattenNode {
     }
 
     static getForwardCode(_data: FlattenData, name: string, inputs: Array<string>, outputs: Array<string>) {
-        const inputVar = inputs[0] || "x";
-        const outputVar = outputs[0] || "x";
+        const inputVar = inputs[0] || "default";
+        const outputVar = outputs[0] || "default";
         return `${outputVar} = self.${name}(${inputVar})`;
     }
     static Component = createLayerComponent<FlattenData>(FlattenNode.label, FlattenNode.paramSchema);

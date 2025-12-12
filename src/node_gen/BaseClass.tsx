@@ -29,10 +29,6 @@ export interface LayerDefinition<D extends LayerData> {
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component
-    // Choose a design choice to make the Component a class reference or an instance reference
-    // highly leaning towards making it an instance reference
-    // abstract away the component updation process into its own function and keep the default component here
-    // the component updation process will be dependant on the specific data while first creation should be component specific
     Component: React.ComponentType<NodeProps<any>>;
 }
 
@@ -73,23 +69,23 @@ export function InputControl({
     const isOptional = !spec.required;
     const style = (isOptional && value !== undefined)
         ? {
-              width: "60px",
-              backgroundColor: "#111",
-              border: "1px solid #64ffda",
-              color: "white",
-              borderRadius: "4px",
-              padding: "2px 4px",
-              fondSize: "11px"
-          }
+            width: "60px",
+            backgroundColor: "#111",
+            border: "1px solid #64ffda",
+            color: "white",
+            borderRadius: "4px",
+            padding: "2px 4px",
+            fondSize: "11px"
+        }
         : {
-              width: "60px",
-              backgroundColor: "#111",
-              border: "1px solid #444",
-              color: "white",
-              borderRadius: "4px",
-              padding: "2px 4px",
-              fondSize: "11px"
-          };
+            width: "60px",
+            backgroundColor: "#111",
+            border: "1px solid #444",
+            color: "white",
+            borderRadius: "4px",
+            padding: "2px 4px",
+            fondSize: "11px"
+        };
     switch (spec.type) {
         case "boolean":
             return (
@@ -247,5 +243,3 @@ export function buildInitString(
     })
     return `self.${name} = ${className}(${args.join(', ')})`
 }
-
-// A base implementation of forward pass code is also required here since most layers will behave almost exactly the same way

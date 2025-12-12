@@ -29,7 +29,7 @@ export class LinearLayerNode {
             required: false,
             type: 'boolean',
             label: 'Bias',
-            defaultValue: true
+            defaultValue: false
         }
     }
     static shapeVerifier(data: LinearData, inputShapes: number[][]) {
