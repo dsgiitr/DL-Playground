@@ -9,9 +9,14 @@ export type ShapeFailure = {
     inputShapes?: number[][];
     upstream?: string[];
 };
+type NodeShapes = {
+    defaultShape: number[];
+    byHandle?: Record<string, number[]>;
+};
+
 export type ShapeResult = {
     ok: boolean;
-    shapes: Record<string, number[]>;
+    shapes: Record<string, NodeShapes>;
     failures: ShapeFailure[];
 };
 
@@ -24,7 +29,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
         }
     });
 
-    const shapes: Record<string, number[]> = {};
+    const shapes: Record<string, NodeShapes> = {};
     const failures: ShapeFailure[] = [];
     const pending = new Set(nodes.map(n => n.id));
 
@@ -60,7 +65,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
             const ready = inputIds.every(src => shapes[src]);
             if (!ready) continue;
 
-            const inputShapes = inputIds.map(src => shapes[src]!);
+            const inputShapes = inputIds.map(src => shapes[src]?.defaultShape || []);
             const verdict = layer.shapeVerifier(node.data as any, inputShapes);
             if (!verdict.ok) {
                 failures.push({
@@ -75,7 +80,16 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
                 progressed = true;
                 continue;
             }
-            shapes[id] = layer.shapeCompute(node.data as any, inputShapes);
+            const computed = layer.shapeCompute(node.data as any, inputShapes) as any;
+            if (Array.isArray(computed)) {
+                shapes[id] = { defaultShape: computed };
+            } else if (computed && typeof computed === "object") {
+                const entries = Object.entries(computed as Record<string, number[]>);
+                const first = entries[0]?.[1] || [];
+                shapes[id] = { defaultShape: first, byHandle: computed };
+            } else {
+                shapes[id] = { defaultShape: [] };
+            }
             pending.delete(id);
             progressed = true;
         }

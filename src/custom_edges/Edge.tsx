@@ -18,7 +18,8 @@ export default function CustomEdge({
     data,
 }: EdgeProps<CustomEdge>) {
     const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-    const stroke = data?.error ? "#ff6b6b" : undefined;
+    const stroke = data?.highlight ? "#f1c40f" : data?.error ? "#ff6b6b" : undefined;
+    const strokeWidth = data?.highlight ? 3.5 : 2;
     const { setEdges } = useReactFlow();
     const label = data?.label ?? id;
 
@@ -38,6 +39,11 @@ export default function CustomEdge({
         );
     };
 
+    const onDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setEdges(edges => edges.filter(edge => edge.id !== id));
+    };
+
     return (
         <g>
             <path
@@ -49,26 +55,68 @@ export default function CustomEdge({
             >
                 {data?.error && <title>{data.error}</title>}
             </path>
-            <BaseEdge id={id} path={edgePath} style={stroke ? { stroke, strokeWidth: 2 } : undefined} />
+            {data?.highlight && (
+                <path
+                    d={edgePath}
+                    stroke="#f1c40f55"
+                    strokeWidth={10}
+                    fill="none"
+                    pointerEvents="none"
+                />
+            )}
+            <BaseEdge id={id} path={edgePath} style={stroke ? { stroke, strokeWidth } : undefined} />
             {data?.error && <title>{data.error}</title>}
             <EdgeLabelRenderer>
-                <input
-                style={{
-                    position: 'absolute',
-                    transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-                    background: '#0099ff60',
-                    padding: 2,
-                    borderRadius: 5,
-                    fontSize: 8,
-                    fontWeight: 600,
-                    pointerEvents: "all"
-                }}
-                className="nodrag nopan"
-                onChange={(e) => onLabelChange(e.target.value)}
-                value={label}/
+                <div
+                    style={{
+                        position: "absolute",
+                        transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        pointerEvents: "all",
+                        background: "#0d1b2a",
+                        padding: "2px 4px",
+                        borderRadius: 6,
+                        border: "1px solid #223"
+                    }}
+                    className="nodrag nopan"
                 >
+                    <input
+                        style={{
+                            background: "#0099ff60",
+                            padding: "2px 4px",
+                            borderRadius: 5,
+                            fontSize: 8,
+                            fontWeight: 600,
+                            border: "none",
+                            color: "#fff",
+                            width: 70
+                        }}
+                        className="nodrag nopan"
+                        onChange={(e) => onLabelChange(e.target.value)}
+                        value={label}
+                    />
+                    <button
+                        onClick={onDelete}
+                        style={{
+                            cursor: "pointer",
+                            border: "none",
+                            background: "#d9534f",
+                            color: "#fff",
+                            borderRadius: 4,
+                            padding: "0 6px",
+                            fontSize: 10,
+                            lineHeight: "16px"
+                        }}
+                        title="Delete edge"
+                        aria-label="Delete edge"
+                        className="nodrag nopan"
+                    >
+                        ✕
+                    </button>
+                </div>
             </EdgeLabelRenderer>
         </g>
     );
 }
-

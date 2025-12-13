@@ -22,6 +22,8 @@ const parseSize = (val?: string) => {
     return Number.isFinite(n) ? n : NaN;
 };
 
+type InputNodeData = InputData & { __shape?: number[]; __highlight?: boolean };
+
 export class InputNode {
     static label = "Input";
     static paramSchema: Record<string, FieldSpec> = {};
@@ -54,10 +56,11 @@ export class InputNode {
         return `${outputVar} = ${inputVar}  # input passthrough`;
     }
 
-    static Component = function InputComponent({ id, data, isConnectable }: NodeProps) {
-        const { setNodes } = useReactFlow();
-        const safeData: InputData = data || {};
+    static Component = function InputComponent({ id, data, isConnectable }: NodeProps<InputNodeData>) {
+        const { setNodes, setEdges } = useReactFlow();
+        const safeData = useMemo<InputNodeData>(() => data || {}, [data]);
         const [isExpanded, setIsExpanded] = useState(true);
+        const isHighlighted = !!safeData.__highlight;
 
         const applyPreset = (modality: string) => {
             const preset = MODALITY_PRESETS[modality];
@@ -91,22 +94,26 @@ export class InputNode {
         };
 
         const shapePreview = useMemo(() => {
-            const live = (safeData as any).__shape as number[] | undefined;
+            const live = safeData.__shape;
             if (Array.isArray(live) && live.length > 0) return JSON.stringify(live);
             if (safeData.dims && safeData.dims.length) return safeData.dims.map(d => d.size || "?").join("×");
             return "define dims";
-        }, [safeData]);
+        }, [safeData.__shape, safeData.dims]);
 
         return (
             <div
                 className="layer-node"
                 style={{
-                    backgroundColor: "#222",
-                    border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
+                    backgroundColor: isHighlighted ? "#27210d" : "#222",
+                    border: isHighlighted ? "1px solid #f1c40f" : isExpanded ? "1px solid #64ffda" : "1px solid #555",
                     borderRadius: "8px",
                     minWidth: "200px",
                     transition: "all 0.2s",
-                    position: "relative"
+                    position: "relative",
+                    boxShadow: isHighlighted
+                        ? "0 0 0 2px #f1c40f, 0 0 20px #f1c40f66"
+                        : undefined,
+                    transform: isHighlighted ? "translateY(-2px) scale(1.01)" : undefined
                 }}
             >
                 {/* Input nodes have no targets */}
@@ -124,6 +131,33 @@ export class InputNode {
                     }}
                 >
                     <span>{InputNode.label}</span>
+                    <button
+                        className="nodrag"
+                        onClick={e => {
+                            e.stopPropagation();
+                            setNodes(nodes => nodes.filter(n => n.id !== id));
+                            setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
+                        }}
+                        style={{
+                            marginLeft: "8px",
+                            cursor: "pointer",
+                            border: "none",
+                            background: "transparent",
+                            color: "#888",
+                            fontWeight: "bold",
+                            fontSize: "18px",
+                            lineHeight: "18px",
+                            width: "24px",
+                            height: "24px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                        }}
+                        aria-label="Delete node"
+                        title="Delete node"
+                    >
+                        ×
+                    </button>
                 </div>
 
                 {isExpanded && (
