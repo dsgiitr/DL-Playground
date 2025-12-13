@@ -1,6 +1,10 @@
 import { nodeTypes } from "./types/nodeTypes";
 
-export default function Sidebar({ onGenerateCode }: { onGenerateCode: () => void }) {
+export default function Sidebar({
+    onGenerateCode,
+    codePanelOpen,
+    onCollapse
+}: { onGenerateCode: () => void; codePanelOpen: boolean; onCollapse: () => void }) {
     const onDragStart = (event: React.DragEvent<HTMLDivElement>, nodeType: string) => {
         event.dataTransfer.setData("application/reactflow", nodeType);
         event.dataTransfer.effectAllowed = "move";
@@ -14,7 +18,7 @@ export default function Sidebar({ onGenerateCode }: { onGenerateCode: () => void
     };
 
     return (
-        <aside style={{ background: "#484444", padding: "2vw", textTransform: "capitalize" }}>
+        <aside style={{ background: "#484444", padding: "2vw", textTransform: "capitalize", height: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
             {Object.keys(nodeTypes).map(type => (
                 <div
                     key={type}
@@ -55,7 +59,7 @@ export default function Sidebar({ onGenerateCode }: { onGenerateCode: () => void
                 style={{
                     marginTop: 8,
                     padding: "12px",
-                    backgroundColor: "#d9534f",
+                    backgroundColor: "#1f8ecd",
                     color: "white",
                     border: "none",
                     borderRadius: "6px",
@@ -64,7 +68,24 @@ export default function Sidebar({ onGenerateCode }: { onGenerateCode: () => void
                     fontSize: "14px",
                 }}
             >
-                Generate Code
+                {codePanelOpen ? "Hide Live Code" : "Show Live Code"}
+            </button>
+
+            <button
+                onClick={onCollapse}
+                style={{
+                    marginTop: 8,
+                    padding: "10px",
+                    backgroundColor: "#444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    fontSize: "12px",
+                }}
+            >
+                Collapse Sidebar
             </button>
         </aside>
     );

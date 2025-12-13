@@ -1,6 +1,6 @@
 import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
-import {type FieldSpec, type LayerData, type FieldType, type HandleSpec, type HandleFactory, renderHandles, ParamsList } from './BaseClass.tsx'
+import { type FieldSpec, type LayerData, type FieldType, type HandleSpec, type HandleFactory, renderHandles, ParamsList } from "./BaseClass";
 
 export function createLayerComponent<D extends LayerData>(
     label: string,
@@ -11,6 +11,7 @@ export function createLayerComponent<D extends LayerData>(
         const { setNodes, setEdges } = useReactFlow();
         const [isExpanded, setIsExpanded] = useState(false);
         const safeData = data || ({} as D);
+        const isHighlighted = !!(safeData as any).__highlight;
 
         const { requiredParams, optionalParams } = useMemo(() => {
             const keys = Object.keys(paramSchema);
@@ -76,12 +77,16 @@ export function createLayerComponent<D extends LayerData>(
             <div
                 className="layer-node"
                 style={{
-                    backgroundColor: "#222",
-                    border: isExpanded ? "1px solid #64ffda" : "1px solid #555",
+                    backgroundColor: isHighlighted ? "#27210d" : "#222",
+                    border: isHighlighted ? "1px solid #f1c40f" : isExpanded ? "1px solid #64ffda" : "1px solid #555",
                     borderRadius: "8px",
                     minWidth: "170px",
                     transition: "all 0.2s",
-                    position: "relative"
+                    position: "relative",
+                    boxShadow: isHighlighted
+                        ? "0 0 0 2px #f1c40f, 0 0 20px #f1c40f66"
+                        : undefined,
+                    transform: isHighlighted ? "translateY(-2px) scale(1.01)" : undefined
                 }}
             >
                 {renderHandles("left", resolvedHandles.targets, isConnectable)}

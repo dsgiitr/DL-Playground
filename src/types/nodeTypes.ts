@@ -9,6 +9,7 @@ import { ConcatNode } from "../custom_nodes/ConcatNode";
 import { AddNode } from "../node_gen/AddNode";
 import { ReshapeNode } from "../custom_nodes/ReshapeNode";
 import { TransposeNode } from "../custom_nodes/TransposeNode";
+import { ResidualBlockNode } from "../custom_nodes/ResidualBlock";
 
 
 // This is the core Layer registory. it forms the bridge between the 
@@ -21,7 +22,8 @@ export const LAYER_REGISTRY: Record<string, LayerDefinition<any>> = {
     concat_layer: ConcatNode,
     add_layer: AddNode,
     reshape_layer: ReshapeNode,
-    transpose_layer: TransposeNode
+    transpose_layer: TransposeNode,
+    residual_block: ResidualBlockNode
 };
 export const nodeTypes: NodeTypes = Object.entries(LAYER_REGISTRY).reduce((acc, [key, Class]) => {
     acc[key] = Class.Component;
