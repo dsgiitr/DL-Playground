@@ -16,7 +16,7 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useRef, useState} from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
@@ -262,36 +262,69 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes]
     );
-
     useEffect(() => {
         const result = verifyShapes(nodes, edges);
-        setShapeResult(result);
+        setShapeResult(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(result)) return prev;
+            return result;
+        })
         if (!result.ok) {
             console.warn("Shape validation failures:", result.failures);
         }
-    }, [nodes, edges]);
-
-    useEffect(() => {
         if (!shapeResult || !shapeResult.shapes) return;
         skipHistory.current = true;
-        setNodes(prev => {
-            let changed = false;
-            const next = prev.map(n => {
-                const newShape = shapeResult.shapes[n.id];
-                if (!newShape) return n;
-                const oldShape = (n.data as any).__shape as number[] | undefined;
-                const same =
-                    Array.isArray(oldShape) &&
-                    Array.isArray(newShape) &&
-                    oldShape.length === newShape.length &&
-                    oldShape.every((v, i) => v === newShape[i]);
-                if (same) return n;
-                changed = true;
-                return { ...n, data: { ...n.data, __shape: newShape } };
-            });
-            return changed ? next : prev;
-        });
-    }, [shapeResult, setNodes]);
+        setNodes(currentNodes => {
+            let hasChanges = false;
+            const nextNodes = currentNodes.map(n => {
+                const shapeEntry = result.shapes[n.id];
+                const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
+                const currentShapeArray = (n.data as any).__shape as number[] | undefined;
+                const isSame = (() => {
+                    if (currentShapeArray === newShapeArray) return true;
+                    if (!currentShapeArray || !newShapeArray) return false;
+                    if (currentShapeArray.length !== newShapeArray.length) return false;
+                    return currentShapeArray.every((val, index) => val === newShapeArray[index]);
+                })();
+                if (isSame) return n;
+                hasChanges = true;
+                return {
+                    ...n,
+                    data: { ...n.data, __shape: newShapeArray }
+                };
+
+            })
+            return hasChanges ? nextNodes : currentNodes;
+        })
+    }, [nodes, edges, setNodes]);
+    // useEffect(() => {
+    //     const result = verifyShapes(nodes, edges);
+    //     setShapeResult(result);
+    //     if (!result.ok) {
+    //         console.warn("Shape validation failures:", result.failures);
+    //     }
+    // }, [nodes, edges]);
+
+    // useEffect(() => {
+    //     if (!shapeResult || !shapeResult.shapes) return;
+    //     skipHistory.current = true;
+    //     setNodes(prev => {
+    //         let changed = false;
+    //         const next = prev.map(n => {
+    //             const newShape = shapeResult.shapes[n.id];
+    //             if (!newShape) return n;
+    //             const oldShape = (n.data as any).__shape as number[] | undefined;
+    //             const same =
+    //                 Array.isArray(oldShape) &&
+    //                 Array.isArray(newShape) &&
+    //                 oldShape.length === newShape.length &&
+    //                 oldShape.every((v, i) => v === newShape[i]);
+    //             if (same) return n;
+    //             changed = true;
+    //             return { ...n, data: { ...n.data, __shape: newShape } };
+    //         });
+    //         return changed ? next : prev;
+    //     });
+    // }, [shapeResult, setNodes]);
 
     const friendlyError = useCallback((failure: ShapeFailure) => {
         const label = failure.label || failure.nodeType || failure.nodeId;
@@ -473,7 +506,7 @@ function FlowContent() {
                         )}
                     </div>
                 </div>
-            
+
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: "72px 0 0 0" }}>
                         <ReactFlow
@@ -508,68 +541,68 @@ function FlowContent() {
                         }}
                         title="Drag to resize code panel"
                     />
-                <div
-                    style={{
-                        width: codePanelWidth,
-                        height: "100vh",
-                        background: "#0f1115",
-                        borderLeft: "1px solid #222",
-                        display: "flex",
-                        flexDirection: "column",
-                        boxShadow: "0 0 20px rgba(0,0,0,0.35)",
-                        position: "relative",
-                        zIndex: 5
-                    }}
-                >
                     <div
                         style={{
-                            padding: "12px 14px",
-                            borderBottom: "1px solid #222",
+                            width: codePanelWidth,
+                            height: "100vh",
+                            background: "#0f1115",
+                            borderLeft: "1px solid #222",
                             display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            background: "#12141a"
+                            flexDirection: "column",
+                            boxShadow: "0 0 20px rgba(0,0,0,0.35)",
+                            position: "relative",
+                            zIndex: 5
                         }}
                     >
-                        <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <button
-                                onClick={() => navigator.clipboard.writeText(generatedCode)}
-                                style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
-                            >
-                                Copy
-                            </button>
-                            <button
-                                onClick={onDownloadCode}
-                                style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
-                            >
-                                Download
-                            </button>
-                            <button
-                                onClick={() => setShowLiveCode(false)}
-                                style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
-                            >
-                                Collapse
-                            </button>
+                        <div
+                            style={{
+                                padding: "12px 14px",
+                                borderBottom: "1px solid #222",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                background: "#12141a"
+                            }}
+                        >
+                            <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    onClick={() => navigator.clipboard.writeText(generatedCode)}
+                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                >
+                                    Copy
+                                </button>
+                                <button
+                                    onClick={onDownloadCode}
+                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                >
+                                    Download
+                                </button>
+                                <button
+                                    onClick={() => setShowLiveCode(false)}
+                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                >
+                                    Collapse
+                                </button>
+                            </div>
                         </div>
+                        <CodeViewer
+                            code={generatedCode}
+                            spans={generated.spans}
+                            onSelectionChange={handleSelectionTargets}
+                            style={{
+                                flex: 1,
+                                margin: 0,
+                                padding: 16,
+                                overflow: "auto",
+                                background: "#0b0d10",
+                                color: "#d4d4d4",
+                                fontSize: 13,
+                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                lineHeight: 1.5
+                            }}
+                        />
                     </div>
-                    <CodeViewer
-                        code={generatedCode}
-                        spans={generated.spans}
-                        onSelectionChange={handleSelectionTargets}
-                        style={{
-                            flex: 1,
-                            margin: 0,
-                            padding: 16,
-                            overflow: "auto",
-                            background: "#0b0d10",
-                            color: "#d4d4d4",
-                            fontSize: 13,
-                            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                            lineHeight: 1.5
-                        }}
-                    />
-                </div>
                 </>
             )}
         </div>

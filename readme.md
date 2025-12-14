@@ -1,9 +1,28 @@
-#Todo
- ```refactor the createlayercomponent to be modular and seperate change handling and input handling into sections```
- ```make the createlayercomponent dependant on data such as number of handles (can be done by implementing functions which compute the number of handles by looking at the data and the inputs as well)```
- ```implement handle naming instead of edge naming or link the 2 on the frontend (unsure if this is needed inside the node or not)```
- ```work out the base implementation for forward pass```
- ```add functionality on the frontend to change the name of layer by the user. this "layer_name" property should update the node data (this "layer_name" property will be used by forward and init code)```
- ```when a new node is instantiated, its node data should become populated with default values and default names```
- ```inside edge functionality we want the edges to describe which handle they originate from and which edge they go towards.```
- ```the shape compute function may become the property of the handles themselves for more complicated modules.```
+# DL-Playground: Visual Neural Network Editor 
+A React-based visual editor for designing and prototyping Pytorch neural network architectures. This tool allows users to drag-and-drop layers, configure parameters via a dynamic UI, and instantly generate the corresponding Python code. 
+
+## Features
+- **Visual Graph Editor**: Build on top of React Flow, enabling intuitive drag-and-drop construction of architectures.
+- **Instant Code Generation**: Compiles the visual graph into a valid, copy-pasteable PyTorch `nn.Module` class, including `__init__` and `forward` methods.
+- **Shape Inference**: Calculates and displays tensor shapes in real-time as you configure layers
+
+## Future Additions
+- **Custom Modules**: User defined modules that can be arbitrarily placed to create more modular and expressive architectures
+- **Advanced Branching Logic**: Repeated Layers, If conditions and more. 
+- **Improved Pytorch Support**: A massive library of standard PyTorch functionality. 
+
+## Installation
+1. Clone the repository.
+2. Install dependencies:
+```
+npm install
+# or 
+yarn install
+```
+
+3. Start the development server
+```
+npm run dev 
+```
+
+This project is a combined effort from DSG club and SDSLabs at IITRoorkee. 
