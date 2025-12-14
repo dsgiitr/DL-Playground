@@ -1,10 +1,11 @@
 import { getBezierPath, BaseEdge, type EdgeProps, type Edge, EdgeLabelRenderer, useReactFlow } from "@xyflow/react";
 
 type CustomEdgeData = {
-    label: string,
-    shape: number[],
-    error?: string
-}
+    label: string;
+    shape: number[];
+    error?: string;
+    highlight?: boolean;
+};
 type CustomEdge = Edge<CustomEdgeData, "custom">;
 
 export default function CustomEdge({

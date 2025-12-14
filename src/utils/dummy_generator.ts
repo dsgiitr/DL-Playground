@@ -109,7 +109,7 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult
 
             const outEdges = outgoingEdges[node.id];
             const handlesSpec = typeof ClassRef.handles === "function" ? ClassRef.handles(node.data as any) : ClassRef.handles;
-            const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : undefined;
+            const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
             const outputNames = (sourceHandles || []).length
                 ? sourceHandles.map((handleId, idx) => {
                     const matching = outEdges.find(e => e.sourceHandle === handleId);

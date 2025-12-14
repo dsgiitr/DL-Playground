@@ -9,6 +9,7 @@ type Props = {
 };
 
 export default function CodeViewer({ code, spans, onSelectionChange, style }: Props) {
+    // Pre-split code for cheap rendering and span lookup.
     const lines = useMemo(() => code.split("\n"), [code]);
     const spanByLine = useMemo(() => {
         const map = new Map<number, { nodeIds: Set<string>; edgeIds: Set<string> }>();
@@ -72,10 +73,97 @@ export default function CodeViewer({ code, spans, onSelectionChange, style }: Pr
             onMouseUp={handleMouseUp}
         >
             {lineMap.map(({ text, line }) => (
-                <div key={line} data-line={line} style={{ fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}>
-                    {text}
+                <div
+                    key={line}
+                    data-line={line}
+                    style={{
+                        fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+                        fontSize: "inherit",
+                        lineHeight: "inherit",
+                        color: "#e6edf3"
+                    }}
+                >
+                    {highlightPython(text)}
                 </div>
             ))}
         </div>
     );
+}
+
+// Lightweight syntax highlighter for Pythonic code without extra deps.
+const KEYWORDS = new Set([
+    "import", "from", "class", "def", "return", "for", "while", "if", "elif", "else", "with", "as", "try", "except", "finally",
+    "in", "is", "not", "and", "or", "pass", "None", "True", "False"
+]);
+const BUILTINS = new Set(["self", "torch", "nn", "range", "len"]);
+
+// Palette tuned for dark background.
+const COLORS = {
+    text: "#e6edf3",
+    keyword: "#c586c0",
+    builtin: "#4fc1ff",
+    string: "#ce9178",
+    number: "#b5cea8",
+    comment: "#6a9955"
+};
+
+function highlightPython(line: string) {
+    const parts: Array<{ text: string; color?: string }> = [];
+    let i = 0;
+    const push = (text: string, color?: string) => parts.push({ text, color });
+
+    const readWhile = (predicate: (c: string) => boolean) => {
+        let start = i;
+        while (i < line.length && predicate(line[i])) i++;
+        return line.slice(start, i);
+    };
+
+    while (i < line.length) {
+        const ch = line[i];
+        // comments
+        if (ch === "#") {
+            push(line.slice(i), COLORS.comment);
+            break;
+        }
+        // strings
+        if (ch === '"' || ch === "'") {
+            const quote = ch;
+            let j = i + 1;
+            while (j < line.length) {
+                if (line[j] === "\\" && j + 1 < line.length) {
+                    j += 2;
+                    continue;
+                }
+                if (line[j] === quote) {
+                    j++;
+                    break;
+                }
+                j++;
+            }
+            push(line.slice(i, j), COLORS.string);
+            i = j;
+            continue;
+        }
+        // numbers
+        if (/[0-9]/.test(ch)) {
+            const num = readWhile(c => /[0-9._]/.test(c));
+            push(num, COLORS.number);
+            continue;
+        }
+        // identifiers / keywords
+        if (/[A-Za-z_]/.test(ch)) {
+            const ident = readWhile(c => /[A-Za-z0-9_]/.test(c));
+            if (KEYWORDS.has(ident)) push(ident, COLORS.keyword);
+            else if (BUILTINS.has(ident)) push(ident, COLORS.builtin);
+            else push(ident, COLORS.text);
+            continue;
+        }
+        // whitespace or symbols
+        push(ch, COLORS.text);
+        i++;
+    }
+
+    return parts.map((p, idx) => (
+        <span key={idx} style={{ color: p.color }}>{p.text}</span>
+    ));
 }

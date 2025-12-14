@@ -1,5 +1,5 @@
-import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import { useMemo, useState } from "react";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { type ComponentType } from "react";
 
 export type FieldType = 'number' | 'text' | 'boolean' | 'select' // This describes how user can input a param's value
 export interface FieldSpec {
@@ -33,7 +33,7 @@ export interface LayerDefinition<D extends LayerData> {
     // highly leaning towards making it an instance reference
     // abstract away the component updation process into its own function and keep the default component here
     // the component updation process will be dependant on the specific data while first creation should be component specific
-    Component: React.ComponentType<NodeProps<any>>;
+    Component: ComponentType<NodeProps<any>>;
 }
 
 export type HandleSpec = {

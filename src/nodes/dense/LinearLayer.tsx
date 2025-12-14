@@ -1,5 +1,5 @@
-import { getParamValue, type FieldSpec } from "../node_gen/BaseClass";
-import { createLayerComponent } from '../node_gen/CreateNodeComponent.tsx'
+import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 
 type LinearData = {

@@ -16,7 +16,7 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
@@ -508,7 +508,7 @@ function FlowContent() {
                 </div>
 
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", inset: "72px 0 0 0" }}>
+                    <div style={{ position: "absolute", inset: "0 0 0 0" }}>
                         <ReactFlow
                             nodes={nodesForFlow}
                             edges={highlightedEdges}

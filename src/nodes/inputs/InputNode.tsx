@@ -1,4 +1,4 @@
-import { renderHandles, type FieldSpec } from "../node_gen/BaseClass";
+import { renderHandles, type FieldSpec } from "../../node_gen/BaseClass";
 import { useReactFlow, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
 
@@ -56,7 +56,7 @@ export class InputNode {
         return `${outputVar} = ${inputVar}  # input passthrough`;
     }
 
-    static Component = function InputComponent({ id, data, isConnectable }: NodeProps<InputNodeData>) {
+    static Component = function InputComponent({ id, data, isConnectable }: NodeProps<any>) {
         const { setNodes, setEdges } = useReactFlow();
         const safeData = useMemo<InputNodeData>(() => data || {}, [data]);
         const [isExpanded, setIsExpanded] = useState(true);
