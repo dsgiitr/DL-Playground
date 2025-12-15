@@ -14,15 +14,30 @@ A React-based visual editor for designing and prototyping Pytorch neural network
 ## Installation
 1. Clone the repository.
 2. Install dependencies:
-```
+
+```bash 
 npm install
 # or 
 yarn install
 ```
 
-3. Start the development server
+backend dependencies: 
+
+```bash 
+python3 -m venv venv
+source venv/bin/activate 
+pip install -r backend/requirements.txt
+```
+
+3. Start the frontend development server
 ```
 npm run dev 
+```
+
+4. Start the backend server (for torchlens)
+
+```bash 
+uvicorn backend.torchlens_server:app --host 0.0.0.0 --port 8000
 ```
 
 This project is a combined effort from DSG club and SDSLabs at IITRoorkee. 
