@@ -243,12 +243,27 @@ def run_trace(req: TraceRequest):
         except Exception:
             pass
         if isinstance(val, (list, tuple)):
-            if val and hasattr(val[0], "shape"):
+            # If this is a list/tuple of tensors or shapes, return a list of shapes; otherwise string-coerce.
+            shapes: List[str] = []
+            for item in val:
                 try:
-                    return str(tuple(val[0].shape))
+                    import torch  # type: ignore
+                    if isinstance(item, torch.Tensor):
+                        shapes.append(str(tuple(item.shape)))
+                        continue
                 except Exception:
-                    return None
-            return str(val)
+                    pass
+                if hasattr(item, "shape"):
+                    try:
+                        shapes.append(str(tuple(item.shape)))  # type: ignore[arg-type]
+                        continue
+                    except Exception:
+                        shapes.append(str(item))
+                        continue
+                shapes.append(str(item))
+            if shapes:
+                return shapes[0] if len(shapes) == 1 else "[" + ", ".join(shapes) + "]"
+            return None
         try:
             return str(val)
         except Exception:
@@ -262,7 +277,10 @@ def run_trace(req: TraceRequest):
         except Exception:
             pass
         if isinstance(val, (list, tuple)) and val:
-            return tensor_dtype_to_str(val[0])
+            for item in val:
+                dt = tensor_dtype_to_str(item)
+                if dt:
+                    return dt
         return None
 
     if labels:
@@ -270,27 +288,28 @@ def run_trace(req: TraceRequest):
             layer = history[lbl]
             scope = getattr(layer, "layer_label", getattr(layer, "layer_name", lbl))
             op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
-            input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
-            output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
             tensor_contents = getattr(layer, "tensor_contents", None)
             input_tensors = getattr(layer, "input_tensors", None)
-            if output_dims is None:
-                output_dims = tensor_contents
-            if input_dims is None:
-                input_dims = input_tensors
+            input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
+            output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
+
+            # Prefer actual tensors for shapes; fall back to dimension metadata (avoid tensor truthiness)
+            preferred_input = input_tensors if input_tensors is not None else input_dims
+            preferred_output = tensor_contents if tensor_contents is not None else output_dims
+
             dtype_val = (
                 getattr(layer, "input_dtype", None)
                 or getattr(layer, "dtype", None)
                 or tensor_dtype_to_str(tensor_contents)
-                or (tensor_dtype_to_str(input_tensors[0]) if isinstance(input_tensors, (list, tuple)) and input_tensors else None)
+                or tensor_dtype_to_str(input_tensors)
             )
             entries.append(
                 TraceEntry(
                     id=str(scope),
                     scope=str(scope),
                     op=str(op),
-                    inputShape=tensor_shape_to_str(input_dims),
-                    outputShape=tensor_shape_to_str(output_dims),
+                    inputShape=tensor_shape_to_str(preferred_input),
+                    outputShape=tensor_shape_to_str(preferred_output),
                     dtype=str(dtype_val) if dtype_val is not None else None,
                     nodeIds=[],  # populate with your GraphIR node ids by mapping scope→nodeId
                 )
@@ -301,27 +320,27 @@ def run_trace(req: TraceRequest):
             for layer in layer_dict.values():
                 scope = getattr(layer, "layer_label", getattr(layer, "layer_name", ""))
                 op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
-                input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
-                output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
                 tensor_contents = getattr(layer, "tensor_contents", None)
                 input_tensors = getattr(layer, "input_tensors", None)
-                if output_dims is None:
-                    output_dims = tensor_contents
-                if input_dims is None:
-                    input_dims = input_tensors
+                input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
+                output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
+
+                preferred_input = input_tensors if input_tensors is not None else input_dims
+                preferred_output = tensor_contents if tensor_contents is not None else output_dims
+
                 dtype_val = (
                     getattr(layer, "input_dtype", None)
                     or getattr(layer, "dtype", None)
                     or tensor_dtype_to_str(tensor_contents)
-                    or (tensor_dtype_to_str(input_tensors[0]) if isinstance(input_tensors, (list, tuple)) and input_tensors else None)
+                    or tensor_dtype_to_str(input_tensors)
                 )
                 entries.append(
                     TraceEntry(
                         id=str(scope),
                         scope=str(scope),
                         op=str(op),
-                        inputShape=tensor_shape_to_str(input_dims),
-                        outputShape=tensor_shape_to_str(output_dims),
+                        inputShape=tensor_shape_to_str(preferred_input),
+                        outputShape=tensor_shape_to_str(preferred_output),
                         dtype=str(dtype_val) if dtype_val is not None else None,
                         nodeIds=[],  # populate with your GraphIR node ids by mapping scope→nodeId
                     )
