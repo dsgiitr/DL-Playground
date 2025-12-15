@@ -113,7 +113,7 @@ function highlightPython(line: string) {
     const push = (text: string, color?: string) => parts.push({ text, color });
 
     const readWhile = (predicate: (c: string) => boolean) => {
-        let start = i;
+        const start = i;
         while (i < line.length && predicate(line[i])) i++;
         return line.slice(start, i);
     };

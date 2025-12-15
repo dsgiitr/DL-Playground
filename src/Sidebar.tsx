@@ -6,7 +6,12 @@ export default function Sidebar({
     codePanelOpen,
     onCollapse
 }: { onGenerateCode: () => void; codePanelOpen: boolean; onCollapse: () => void }) {
-    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+        Object.keys(NODE_GROUPS).reduce<Record<string, boolean>>((acc, key) => {
+            acc[key] = false; // start collapsed
+            return acc;
+        }, {})
+    );
     const onDragStart = (event: React.DragEvent<HTMLDivElement>, nodeType: string) => {
         event.dataTransfer.setData("application/reactflow", nodeType);
         event.dataTransfer.effectAllowed = "move";
@@ -30,14 +35,14 @@ export default function Sidebar({
     );
 
     const toggleGroup = (key: string) => {
-        setOpenGroups(prev => ({ ...prev, [key]: prev[key] === false }));
+        setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
     return (
         <aside style={{ background: "#484444", padding: "2vw", textTransform: "capitalize", height: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
                 {groups.map(({ key, label, nodes }) => {
-                    const open = openGroups[key] !== false;
+                    const open = !!openGroups[key];
                     return (
                         <div key={key} style={{ marginBottom: 12, border: "1px solid #666", borderRadius: 8, background: "#3d3a3a" }}>
                             <button
