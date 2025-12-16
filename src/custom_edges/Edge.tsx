@@ -1,10 +1,13 @@
 import { getBezierPath, BaseEdge, type EdgeProps, type Edge, EdgeLabelRenderer, useReactFlow } from "@xyflow/react";
 
 type CustomEdgeData = {
-    label: string,
-    shape: number[],
-    error?: string
-}
+    label: string;
+    shape: number[];
+    error?: string;
+    highlight?: boolean;
+    // Optional callback to remove this edge from parent state (preferred over internal store updates).
+    onDelete?: (id: string) => void;
+};
 type CustomEdge = Edge<CustomEdgeData, "custom">;
 
 export default function CustomEdge({
@@ -41,6 +44,11 @@ export default function CustomEdge({
 
     const onDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (typeof data?.onDelete === "function") {
+            data.onDelete(id);
+            return;
+        }
+        // Fallback for environments that rely on the internal store.
         setEdges(edges => edges.filter(edge => edge.id !== id));
     };
 

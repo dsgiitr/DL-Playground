@@ -16,13 +16,20 @@ import {
     type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import { nodeTypes } from "./types/nodeTypes";
 import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape_verifier";
 import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import CodeViewer from "./components/CodeViewer.tsx";
+import DiagramView from "./components/DiagramView";
+import { exportDiagramDataUrl } from "./utils/diagramExport";
+import { buildGraphIR, applyGraphIR } from "./utils/graphIR";
+import type { GraphIR } from "./types/graph";
+import TraceView from "./components/TraceView";
+import { runTorchLensTrace } from "./utils/traceService";
+import type { TraceResponse } from "./types/trace";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -49,6 +56,17 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
+        const savedGraph = localStorage.getItem("graphIR");
+        if (savedGraph) {
+            try {
+                const parsed: GraphIR = JSON.parse(savedGraph);
+                const restored = applyGraphIR(parsed);
+                syncIdFromNodes(restored.nodes);
+                return restored.nodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
+            } catch (err) {
+                console.warn("Failed to load GraphIR, falling back to nodes/edges", err);
+            }
+        }
         const saved = localStorage.getItem("nodes");
         if (!saved) return [];
         const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
@@ -58,6 +76,16 @@ function FlowContent() {
         return parsed;
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
+        const savedGraph = localStorage.getItem("graphIR");
+        if (savedGraph) {
+            try {
+                const parsed: GraphIR = JSON.parse(savedGraph);
+                const restored = applyGraphIR(parsed);
+                return restored.edges;
+            } catch (err) {
+                console.warn("Failed to load GraphIR edges, falling back to edges", err);
+            }
+        }
         const saved = localStorage.getItem("edges");
         return saved ? JSON.parse(saved) : [];
     });
@@ -71,18 +99,31 @@ function FlowContent() {
     const [dragCodePanel, setDragCodePanel] = useState(false);
     const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
     const [highlightEdges, setHighlightEdges] = useState<Set<string>>(new Set());
+    const [exporting, setExporting] = useState<"png" | "svg" | null>(null);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [showDiagram, setShowDiagram] = useState(false);
+    const [showTrace, setShowTrace] = useState(false);
+    const [traceData, setTraceData] = useState<TraceResponse | null>(null);
+    const [traceLoading, setTraceLoading] = useState(false);
+    const [traceError, setTraceError] = useState<string | null>(null);
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const historyIndexRef = useRef(0);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
-        changes => setNodes(nds => applyNodeChanges(changes, nds)),
-        [setNodes]
+        changes => {
+            // Drop only edges attached to nodes being removed so unrelated wiring stays intact.
+            const removedIds = changes.filter(c => c.type === "remove").map(c => c.id);
+            if (removedIds.length) {
+                setEdges(eds => eds.filter(e => !removedIds.includes(e.source) && !removedIds.includes(e.target)));
+            }
+            setNodes(nds => applyNodeChanges(changes, nds));
+        },
+        [setNodes, setEdges]
     );
     const onEdgesChange: OnEdgesChange = useCallback(
         changes => setEdges(eds => applyEdgeChanges(changes, eds)),
@@ -129,6 +170,43 @@ function FlowContent() {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
     };
+
+    const handleTrace = useCallback(async () => {
+        setTraceLoading(true);
+        setTraceError(null);
+        try {
+            const graph = buildGraphIR(nodes, edges);
+            const resp = await runTorchLensTrace({
+                graph,
+                inputShapes: [[1, 3, 224, 224]],
+                code: generatedCode,
+            });
+            setTraceData(resp);
+            setShowTrace(true);
+        } catch (err) {
+            setTraceError("Trace failed. Backend unavailable or returned error.");
+            console.error("Trace failed", err);
+        } finally {
+            setTraceLoading(false);
+        }
+    }, [nodes, edges, generatedCode]);
+
+    const deleteEdgeById = useCallback((edgeId: string) => {
+        setEdges(eds => eds.filter(e => e.id !== edgeId));
+    }, [setEdges]);
+
+    // Attach helper callbacks to edges so custom edge UI can remove them cleanly.
+    const edgesWithHandlers = useMemo(
+        () =>
+            edges.map(e => ({
+                ...e,
+                data: {
+                    ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
+                    onDelete: deleteEdgeById,
+                },
+            })),
+        [edges, deleteEdgeById]
+    );
 
     const cloneSnapshot = useCallback((n: Node[], e: Edge[]) => {
         const copyNodes = n.map(node => ({
@@ -210,6 +288,8 @@ function FlowContent() {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
+        const graph = buildGraphIR(nodes, edges);
+        localStorage.setItem("graphIR", JSON.stringify(graph));
         localStorage.setItem("nodes", JSON.stringify(nodes));
         localStorage.setItem("edges", JSON.stringify(edges));
         const restoring = isRestoring.current;
@@ -230,6 +310,12 @@ function FlowContent() {
         setCanRedo(canRedoNow);
         syncIdFromNodes(nodes);
     }, [nodes, edges, cloneSnapshot]);
+
+    // Drop orphaned edges that reference nodes no longer in the graph.
+    useEffect(() => {
+        const nodeIds = new Set(nodes.map(n => n.id));
+        setEdges(eds => eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)));
+    }, [nodes]);
 
     const handleSelectionTargets = useCallback(
         (targets: { nodeIds: string[]; edgeIds: string[] }) => {
@@ -262,6 +348,66 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes]
     );
+
+    const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
+
+    const exportDiagram = useCallback(
+        async (format: "png" | "svg") => {
+            try {
+                setExporting(format);
+                const { dataUrl } = await exportDiagramDataUrl(graphSnapshot, format);
+                const link = document.createElement("a");
+                link.href = dataUrl;
+                link.download = `model-diagram-${Date.now()}.${format}`;
+                link.click();
+            } catch (err) {
+                console.error("Export failed", err);
+                alert("Failed to export diagram. Check console for details.");
+            } finally {
+                setExporting(null);
+                setExportMenuOpen(false);
+            }
+        },
+        [graphSnapshot]
+    );
+
+    const downloadGraphJson = useCallback(() => {
+        const blob = new Blob([JSON.stringify(graphSnapshot, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `graph-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [graphSnapshot]);
+
+    const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+    const triggerUpload = useCallback(() => {
+        if (uploadInputRef.current) uploadInputRef.current.click();
+    }, []);
+
+    const onUploadGraph = useCallback(
+        (event: React.ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    const parsed = JSON.parse(String(ev.target?.result)) as GraphIR;
+                    const { nodes: newNodes, edges: newEdges } = applyGraphIR(parsed);
+                    setNodes(newNodes);
+                    setEdges(newEdges);
+                } catch (err) {
+                    console.error("Failed to import graph", err);
+                    alert("Failed to import graph JSON.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = "";
+        },
+        [setNodes, setEdges]
+    );
     useEffect(() => {
         const result = verifyShapes(nodes, edges);
         setShapeResult(prev => {
@@ -278,7 +424,8 @@ function FlowContent() {
             const nextNodes = currentNodes.map(n => {
                 const shapeEntry = result.shapes[n.id];
                 const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
-                const currentShapeArray = (n.data as any).__shape as number[] | undefined;
+                const currentShapeArray =
+                    n.data && typeof n.data === "object" ? (n.data as { __shape?: number[] }).__shape : undefined;
                 const isSame = (() => {
                     if (currentShapeArray === newShapeArray) return true;
                     if (!currentShapeArray || !newShapeArray) return false;
@@ -295,7 +442,7 @@ function FlowContent() {
             })
             return hasChanges ? nextNodes : currentNodes;
         })
-    }, [nodes, edges, setNodes]);
+    }, [nodes, edges, setNodes, shapeResult]);
     // useEffect(() => {
     //     const result = verifyShapes(nodes, edges);
     //     setShapeResult(result);
@@ -338,7 +485,7 @@ function FlowContent() {
     }, []);
 
     const decoratedEdges = useMemo(() => {
-        if (!shapeResult || shapeResult.ok) return edges;
+        if (!shapeResult || shapeResult.ok) return edgesWithHandlers;
         const failMap = new Map<string, ShapeFailure[]>();
         shapeResult.failures.forEach(f => {
             (f.upstream || []).forEach(src => {
@@ -348,29 +495,31 @@ function FlowContent() {
                 failMap.set(key, arr);
             });
         });
-        return edges.map(e => {
+        return edgesWithHandlers.map(e => {
             const key = `${e.source}->${e.target}`;
             const errs = failMap.get(key);
             if (!errs || !errs.length) return e;
+            const existingData = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
             return {
                 ...e,
                 type: "custom",
                 data: {
-                    ...(e as any).data,
+                    ...existingData,
                     error: errs.map(friendlyError).join("\n"),
                 },
             };
         });
-    }, [edges, shapeResult, friendlyError]);
+    }, [edgesWithHandlers, shapeResult, friendlyError]);
 
     const highlightedEdges = useMemo(() => {
         if (!highlightEdges.size) return decoratedEdges;
         return decoratedEdges.map(e => {
             if (!highlightEdges.has(e.id)) return e;
+            const existingData = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
             return {
                 ...e,
                 data: {
-                    ...(e as any).data,
+                    ...existingData,
                     highlight: true
                 }
             };
@@ -379,12 +528,19 @@ function FlowContent() {
 
     const nodesForFlow = useMemo(() => {
         if (!highlightNodes.size) return nodes;
-        return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...n.data, __highlight: true } } : n));
+        return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
 
 
     return (
         <div style={{ display: "flex", height: "100vh" }}>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                onChange={onUploadGraph}
+            />
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
@@ -477,6 +633,135 @@ function FlowContent() {
                         >
                             Redo
                         </button>
+                        <button
+                            className="nodrag"
+                            onClick={handleTrace}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Run forward trace (TorchLens backend required)"
+                        >
+                            {traceLoading ? "Tracing…" : "TorchLens Trace"}
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={triggerUpload}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Import GraphIR JSON"
+                        >
+                            Import JSON
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={() => setShowDiagram(true)}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Open paper-style diagram view"
+                        >
+                            Diagram View
+                        </button>
+                        <div style={{ position: "relative" }}>
+                            <button
+                                className="nodrag"
+                                onClick={() => setExportMenuOpen(open => !open)}
+                                style={{
+                                    padding: "6px 10px",
+                                    background: "#333",
+                                    color: "#fff",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    minWidth: 110,
+                                    textAlign: "left"
+                                }}
+                                title="Export diagram"
+                            >
+                                Export ▾
+                            </button>
+                            {exportMenuOpen && (
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: "110%",
+                                        left: 0,
+                                        background: "#1a1a1a",
+                                        border: "1px solid #444",
+                                        borderRadius: 6,
+                                        boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
+                                        zIndex: 10,
+                                        minWidth: 150,
+                                        overflow: "hidden"
+                                    }}
+                                >
+                                    <button
+                                        onClick={() => exportDiagram("svg")}
+                                        disabled={!!exporting}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: exporting ? "#777" : "#e6edf3",
+                                            cursor: exporting ? "not-allowed" : "pointer",
+                                            textAlign: "left"
+                                    }}
+                                >
+                                    Export as SVG
+                                </button>
+                                <button
+                                    onClick={() => exportDiagram("png")}
+                                        disabled={!!exporting}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: exporting ? "#777" : "#e6edf3",
+                                            cursor: exporting ? "not-allowed" : "pointer",
+                                        textAlign: "left"
+                                    }}
+                                >
+                                    Export as PNG
+                                </button>
+                                    <button
+                                        onClick={() => {
+                                            downloadGraphJson();
+                                            setExportMenuOpen(false);
+                                        }}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: "#e6edf3",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                            borderTop: "1px solid #333"
+                                        }}
+                                    >
+                                        Export JSON
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div
                         style={{
@@ -508,7 +793,7 @@ function FlowContent() {
                 </div>
 
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", inset: "72px 0 0 0" }}>
+                    <div style={{ position: "absolute", inset: "0 0 0 0" }}>
                         <ReactFlow
                             nodes={nodesForFlow}
                             edges={highlightedEdges}
@@ -604,6 +889,26 @@ function FlowContent() {
                         />
                     </div>
                 </>
+            )}
+            {showDiagram && (
+                <DiagramView
+                    nodes={nodes}
+                    edges={edges}
+                    graph={graphSnapshot}
+                    onClose={() => setShowDiagram(false)}
+                />
+            )}
+            {showTrace && (
+                <TraceView
+                    trace={traceData}
+                    loading={traceLoading}
+                    error={traceError}
+                    onClose={() => setShowTrace(false)}
+                    onSelect={ids => {
+                        setHighlightNodes(new Set(ids));
+                        setHighlightEdges(new Set());
+                    }}
+                />
             )}
         </div>
     );

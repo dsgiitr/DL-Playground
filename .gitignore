@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.venv/
+venv
+.venv_pyc/
+backend/__pycache__/
+
+#graphs genenrated
+
+graph.gv
+graph.gv.svg
+graph.gv.pdf
