@@ -1,22 +1,13 @@
 """
-Minimal TorchLens backend to serve forward traces for the frontend TraceView.
-
-Requirements (CPU is fine):
-    pip install torch torchlens fastapi uvicorn pydantic graphviz
-
-Run:
-    uvicorn backend.torchlens_server:app --host 0.0.0.0 --port 8000
+TorchLens backend to serve forward traces for the frontend TraceView.
 
 Endpoint:
     POST /api/torchlens
     Body: {"graph": <GraphIR dict>, "inputShapes": [[1,3,224,224]], "code": "<optional generated code>"}
-    Returns: {"entries": [...], "warnings": [...]}
-
-NOTE: You must implement `build_model_from_graph(graph_ir: dict) -> nn.Module`
-to turn your GraphIR into a deterministic nn.Module with stable submodule names.
+    Returns: {"entries": [...], "warnings": [...], "summary":str}
 """
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import torch
 import torch.nn as nn
@@ -31,9 +22,18 @@ import os
 from pathlib import Path
 
 
+class MultiInputIdentity(torch.nn.Module):
+    """Pass inputs through unchanged while allowing 1+ args (helps multi-input edges)."""
+
+    def forward(self, *inputs: Any) -> Any: 
+        if len(inputs) == 1:
+            return inputs[0]
+        return inputs
+
+
 class GraphModel(torch.nn.Module):
     """
-    Minimal GraphIR -> torch.nn.Module that preserves node scopes for TorchLens.
+    GraphIR -> torch.nn.Module that preserves node scopes for TorchLens.
 
     For now, each node becomes an Identity to guarantee shape compatibility.
     This yields stable, traceable scopes without needing full codegen.
@@ -46,8 +46,8 @@ class GraphModel(torch.nn.Module):
         self.layers = torch.nn.ModuleDict()
         for node in nodes:
             node_id = node["id"]
-            # Keep predictable scopes: layers keyed by node id.
-            self.layers[node_id] = torch.nn.Identity()
+            #handles multi inputs
+            self.layers[node_id] = MultiInputIdentity()
 
         self.topo = self._topological_order(nodes, edges)
         self.incoming: Dict[str, List[str]] = {}
@@ -75,42 +75,71 @@ class GraphModel(torch.nn.Module):
             order = [n["id"] for n in nodes]
         return order
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        outputs: Dict[str, torch.Tensor] = {}
+    def forward(self, *inputs: Any) -> Any:
+        if not inputs:
+            raise ValueError("GraphModel.forward requires at least one input tensor")
+
+        outputs: Dict[str, Any] = {}
+        remaining_inputs: List[Any] = list(inputs)
+        fallback_input = inputs[0]
+
         for node_id in self.topo:
             incoming_sources = self.incoming.get(node_id, [])
             if not incoming_sources:
-                inp = x
+                node_input = remaining_inputs.pop(0) if remaining_inputs else fallback_input
             else:
                 tensors = [outputs[src] for src in incoming_sources if src in outputs]
-                inp = tensors[0] if tensors else x
-            outputs[node_id] = self.layers[node_id](inp)
+                if not tensors:
+                    node_input = fallback_input
+                elif len(tensors) == 1:
+                    node_input = tensors[0]
+                else:
+                    node_input = tuple(tensors)
+
+            layer = self.layers[node_id]
+            if isinstance(node_input, (list, tuple)):
+                outputs[node_id] = layer(*node_input)
+            else:
+                outputs[node_id] = layer(node_input)
         last_node = self.topo[-1] if self.topo else None
-        return outputs.get(last_node, x)
+        return outputs.get(last_node, fallback_input)
 
 
 def compile_model_from_code(code: str) -> nn.Module:
     """
-    Exec the generated PyTorch code and return an instance of the first nn.Module subclass.
+    Executes the generated PyTorch code and return an instance of the first nn.Module subclass.
     Raises a ValueError with a short snippet on failure to help debug malformed codegen.
+    Guards added to check the code 
+    1. empty code 
+    2. if there are multiple nn module subclass 
     """
+    if not code or not code.strip():
+        raise ValueError("No code provided to compile.")
     scope: Dict[str, object] = {"torch": torch, "nn": nn}
     try:
-        exec(code, scope)  # noqa: S102 - trusted local generation
-    except Exception as exc:  # noqa: BLE001
+        exec(code, scope)  
+    except Exception as exc: 
         snippet = "\n".join(code.splitlines()[:20])
         raise ValueError(f"Code compilation failed: {exc}. Snippet:\n{snippet}") from exc
-    # Prefer a class named GeneratedModel; otherwise pick any nn.Module subclass we just created.
-    candidates = []
-    for val in scope.values():
-        if isinstance(val, type) and issubclass(val, nn.Module):
-            candidates.append(val)
-    ModelClass = scope.get("GeneratedModel") if isinstance(scope.get("GeneratedModel"), type) else None
-    if ModelClass is None and candidates:
-        ModelClass = candidates[-1]
-    if ModelClass is None:
-        raise ValueError("No nn.Module class found in generated code")
-    return ModelClass()
+    # Prefer a class named GeneratedModel; otherwise require exactly one nn.Module subclass to avoid ambiguity.
+    def is_model_class(val: object) -> bool:
+        return isinstance(val, type) and issubclass(val, nn.Module) and val not in {nn.Module, torch.nn.Module}
+
+    candidates = [(name, val) for name, val in scope.items() if is_model_class(val)]
+    model_class = scope.get("GeneratedModel")
+    if not is_model_class(model_class):
+        if len(candidates) == 1:
+            model_class = candidates[0][1]
+        elif len(candidates) > 1:
+            names = ", ".join(name for name, _ in candidates)
+            raise ValueError(f"Multiple nn.Module classes found ({names}); expose one as GeneratedModel.")
+        else:
+            raise ValueError("No nn.Module class found in generated code")
+
+    try:
+        return model_class()
+    except TypeError as exc:
+        raise ValueError(f"Failed to instantiate model '{model_class.__name__}': {exc}") from exc
 
 
 def build_model_from_graph(graph_ir: dict, code: Optional[str] = None) -> torch.nn.Module:
