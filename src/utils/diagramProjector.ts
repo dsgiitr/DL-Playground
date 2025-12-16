@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { GraphIR, GraphNode } from "../types/graph";
+import { LAYER_REGISTRY } from "../nodes/registry";
 
 type DiagramFamily = "input" | "output" | "merge" | "activation" | "block" | "other";
 
@@ -14,35 +15,14 @@ const COMPACT_MAX_WIDTH = 360;
 const COMPACT_BASE_HEIGHT = 50;
 const COMPACT_LINE_HEIGHT = 18;
 
-const DISPLAY_NAME_MAP: Record<string, string> = {
-    input_layer: "Input",
-    output_layer: "Output",
-    conv_layer: "Conv2D",
-    conv2d_layer: "Conv2D",
-    maxpool2d_layer: "MaxPool2D",
-    flatten_layer: "Flatten",
-    linear_layer: "Linear",
-    concat_layer: "Concat",
-    add_layer: "Add",
-    residual_block: "Residual Block",
-    cnn_layer: "CNN",
-};
-
-function inferFamily(node: GraphNode): DiagramFamily {
-    const label = (node.label || node.type).toLowerCase();
-    if (label.includes("input")) return "input";
-    if (label.includes("output")) return "output";
-    if (label.includes("add") || label.includes("merge") || label.includes("concat")) return "merge";
-    if (label.includes("relu") || label.includes("gelu") || label.includes("sigmoid") || label.includes("tanh")) return "activation";
-    if (label.includes("conv") || label.includes("linear") || label.includes("dense") || label.includes("attention") || label.includes("lstm") || label.includes("gru")) return "block";
-    return "other";
+function resolveDefinition(node: GraphNode) {
+    return LAYER_REGISTRY[node.type];
 }
 
 function displayName(node: GraphNode): string {
-    const raw = node.display?.title || node.type || node.id;
+    const def = resolveDefinition(node);
+    const raw = def?.diagramLabel || def?.label || node.display?.title || node.type || node.id;
     if (!raw) return "Layer";
-    const mapped = DISPLAY_NAME_MAP[raw];
-    if (mapped) return mapped;
     const clean = raw.replace(/_layer$/i, "");
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
@@ -115,7 +95,8 @@ export function projectGraphToDiagram(
     graph.nodes.forEach(n => {
         const label = buildLabel(n);
         const { width, height } = measureSize(label, sizingMode);
-        const family = inferFamily(n);
+        const def = resolveDefinition(n);
+        const family = (def?.diagramFamily as DiagramFamily | undefined) ?? "block";
         // Ensure merge/activation nodes have ample square space for text inside the diamond/circle.
         const adjustedWidth =
             family === "merge" || family === "activation" ? Math.max(width, height, 140) : width;

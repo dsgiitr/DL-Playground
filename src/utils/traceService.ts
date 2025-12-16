@@ -2,7 +2,7 @@ import type { TraceRequest, TraceResponse } from "../types/trace";
 
 /**
  * Call backend TorchLens endpoint (POST /api/torchlens returning TraceResponse).
- * Falls back to a mock payload when the request fails (so UI stays usable without backend).
+ * On failure, surface the backend error so the user can fix shapes/code and retry.
  */
 const BASE_URL = (import.meta as any).env?.VITE_BACKEND_URL || "http://localhost:8000";
 
@@ -13,32 +13,23 @@ export async function runTorchLensTrace(body: TraceRequest): Promise<TraceRespon
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error(`Trace request failed: ${res.statusText}`);
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Trace request failed: ${res.status} ${res.statusText}`);
+        }
         return (await res.json()) as TraceResponse;
     } catch (err) {
-        console.warn("Trace request failed, using mock response", err);
+        console.warn("Trace request failed", err);
+        const message =
+            err instanceof Error && err.message
+                ? err.message
+                : "TorchLens trace failed: check backend logs and model shapes.";
         return {
-            entries: [
-                {
-                    id: "mock-1",
-                    scope: "model.conv1",
-                    op: "Conv2d",
-                    inputShape: "[1,3,224,224]",
-                    outputShape: "[1,64,112,112]",
-                    dtype: "float32",
-                    nodeIds: [],
-                },
-                {
-                    id: "mock-2",
-                    scope: "model.relu1",
-                    op: "ReLU",
-                    inputShape: "[1,64,112,112]",
-                    outputShape: "[1,64,112,112]",
-                    dtype: "float32",
-                    nodeIds: [],
-                },
+            entries: [],
+            warnings: [
+                message,
+                "Fix model params / shapes and retry TorchLens trace. See backend logs for the stack trace.",
             ],
-            warnings: ["Mock trace shown (backend unavailable)"],
         };
     }
 }

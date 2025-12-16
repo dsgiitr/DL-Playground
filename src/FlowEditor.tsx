@@ -115,8 +115,15 @@ function FlowContent() {
     const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
-        changes => setNodes(nds => applyNodeChanges(changes, nds)),
-        [setNodes]
+        changes => {
+            // Drop only edges attached to nodes being removed so unrelated wiring stays intact.
+            const removedIds = changes.filter(c => c.type === "remove").map(c => c.id);
+            if (removedIds.length) {
+                setEdges(eds => eds.filter(e => !removedIds.includes(e.source) && !removedIds.includes(e.target)));
+            }
+            setNodes(nds => applyNodeChanges(changes, nds));
+        },
+        [setNodes, setEdges]
     );
     const onEdgesChange: OnEdgesChange = useCallback(
         changes => setEdges(eds => applyEdgeChanges(changes, eds)),
@@ -183,6 +190,23 @@ function FlowContent() {
             setTraceLoading(false);
         }
     }, [nodes, edges, generatedCode]);
+
+    const deleteEdgeById = useCallback((edgeId: string) => {
+        setEdges(eds => eds.filter(e => e.id !== edgeId));
+    }, [setEdges]);
+
+    // Attach helper callbacks to edges so custom edge UI can remove them cleanly.
+    const edgesWithHandlers = useMemo(
+        () =>
+            edges.map(e => ({
+                ...e,
+                data: {
+                    ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
+                    onDelete: deleteEdgeById,
+                },
+            })),
+        [edges, deleteEdgeById]
+    );
 
     const cloneSnapshot = useCallback((n: Node[], e: Edge[]) => {
         const copyNodes = n.map(node => ({
@@ -286,6 +310,12 @@ function FlowContent() {
         setCanRedo(canRedoNow);
         syncIdFromNodes(nodes);
     }, [nodes, edges, cloneSnapshot]);
+
+    // Drop orphaned edges that reference nodes no longer in the graph.
+    useEffect(() => {
+        const nodeIds = new Set(nodes.map(n => n.id));
+        setEdges(eds => eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)));
+    }, [nodes]);
 
     const handleSelectionTargets = useCallback(
         (targets: { nodeIds: string[]; edgeIds: string[] }) => {
@@ -455,7 +485,7 @@ function FlowContent() {
     }, []);
 
     const decoratedEdges = useMemo(() => {
-        if (!shapeResult || shapeResult.ok) return edges;
+        if (!shapeResult || shapeResult.ok) return edgesWithHandlers;
         const failMap = new Map<string, ShapeFailure[]>();
         shapeResult.failures.forEach(f => {
             (f.upstream || []).forEach(src => {
@@ -465,7 +495,7 @@ function FlowContent() {
                 failMap.set(key, arr);
             });
         });
-        return edges.map(e => {
+        return edgesWithHandlers.map(e => {
             const key = `${e.source}->${e.target}`;
             const errs = failMap.get(key);
             if (!errs || !errs.length) return e;
@@ -479,7 +509,7 @@ function FlowContent() {
                 },
             };
         });
-    }, [edges, shapeResult, friendlyError]);
+    }, [edgesWithHandlers, shapeResult, friendlyError]);
 
     const highlightedEdges = useMemo(() => {
         if (!highlightEdges.size) return decoratedEdges;

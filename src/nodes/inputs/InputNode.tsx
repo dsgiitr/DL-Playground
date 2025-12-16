@@ -26,6 +26,7 @@ type InputNodeData = InputData & { __shape?: number[]; __highlight?: boolean };
 
 export class InputNode {
     static label = "Input";
+    static diagramFamily = "input";
     static paramSchema: Record<string, FieldSpec> = {};
     static handles = { targets: [], sources: ["out-0"] };
 

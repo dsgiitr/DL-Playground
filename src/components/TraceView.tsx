@@ -76,18 +76,19 @@ type Props = {
 
 export default function TraceView({ trace, loading, error, onClose, onSelect }: Props) {
     const entries = trace?.entries ?? [];
-    const warnings = trace?.warnings ?? [];
     const svg = trace?.svgBase64;
     const summary = trace?.summaryText;
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
     const [tableCollapsed, setTableCollapsed] = useState(false);
+    const warnings = trace?.warnings ?? [];
+    const hasError = !!error || !!warnings.length;
 
     useEffect(() => {
-        if (!svg && trace) {
+        if (!svg && trace && !warnings.length) {
             // Developer-facing log to help debug missing graphs
             console.warn("TorchLens trace: svgBase64 missing on response", trace);
         }
-    }, [svg, trace]);
+    }, [svg, trace, warnings.length]);
 
     const parsedSummary = useMemo(() => {
         if (!summary) return [];
@@ -143,6 +144,7 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
     );
 
     const rows = useMemo(() => entries, [entries]);
+    const warningText = warnings.join(" · ");
 
     return (
         <div
@@ -182,11 +184,27 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <span style={{ color: "#e6edf3", fontWeight: 700 }}>TorchLens Trace</span>
                         {loading && <span style={{ color: "#9ca3af" }}>running…</span>}
-                        {warnings.map((w, idx) => (
-                            <span key={idx} style={{ color: "#facc15", fontSize: 12 }}>{w}</span>
-                        ))}
-                        {error && <span style={{ color: "#f87171", fontSize: 12 }}>{error}</span>}
                     </div>
+                    {hasError && (
+                        <div
+                            style={{
+                                flex: 1,
+                                marginLeft: 12,
+                                marginRight: 12,
+                                background: "#1f2937",
+                                border: "1px solid #374151",
+                                borderRadius: 6,
+                                padding: "6px 8px",
+                                color: "#fbbf24",
+                                fontSize: 12,
+                                maxHeight: 60,
+                                overflow: "auto",
+                            }}
+                        >
+                            {error && <div style={{ color: "#f87171" }}>{error}</div>}
+                            {warningText && <div>{warningText}</div>}
+                        </div>
+                    )}
                     <button
                         onClick={onClose}
                         style={{

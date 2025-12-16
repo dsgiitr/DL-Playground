@@ -20,6 +20,9 @@ export interface LayerDefinition<D extends LayerData> {
     // Class configurations
     label: string;
     paramSchema: Record<string, FieldSpec>;
+    // Optional diagram metadata to avoid ad-hoc maps in renderers.
+    diagramLabel?: string;
+    diagramFamily?: "input" | "output" | "merge" | "activation" | "block" | "other";
     handles?: HandleSpec | HandleFactory<D>;
     // Pure functions
     // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
