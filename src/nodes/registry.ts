@@ -6,7 +6,6 @@ import { ReshapeNode } from "./pytorch_core/ReshapeNode";
 import { TransposeNode } from "./pytorch_core/TransposeNode";
 import { LinearLayerNode } from "./dense/LinearLayer";
 import { InputNode } from "./inputs/InputNode";
-import { CNNLayerNode } from "./vision/conv/CNNLayerNode";
 import { Conv1dNode } from "./vision/conv/Conv1dNode";
 import { Conv2dNode } from "./vision/conv/Conv2dNode";
 import { Conv3dNode } from "./vision/conv/Conv3dNode";
@@ -148,7 +147,6 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
     vision_conv: {
         label: "Vision - Convolution",
         nodes: {
-            cnn_layer: CNNLayerNode,
             conv1d_layer: Conv1dNode,
             conv2d_layer: Conv2dNode,
             conv3d_layer: Conv3dNode,
