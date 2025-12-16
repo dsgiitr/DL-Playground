@@ -25,3 +25,10 @@ dist-ssr
 
 .venv/
 venv
+backend/__pycache__
+
+#graphs genenrated
+
+graph.gv
+graph.gv.svg
+graph.gv.pdf
