@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import type { GraphDisplay, GraphEdge, GraphIR, GraphNode, GraphPort, GraphPortKind } from "../types/graph";
+import type { GraphDisplay, GraphEdge, GraphIR, GraphNode, GraphHandle, GraphHandleKind } from "../types/graph";
 
 const GRAPH_VERSION = 1;
 
@@ -7,7 +7,8 @@ function dedupe<T>(arr: T[]): T[] {
     return Array.from(new Set(arr));
 }
 
-function toPortKind(sourceCount: number, targetCount: number): GraphPortKind {
+// Map handle usage counts to a GraphHandleKind.
+function toHandleKind(sourceCount: number, targetCount: number): GraphHandleKind {
     if (sourceCount > 0 && targetCount === 0) return "output";
     if (targetCount > 0 && sourceCount === 0) return "input";
     if (sourceCount > 0 && targetCount > 0) return "other";
@@ -28,30 +29,30 @@ function formatDisplay(n: Node): GraphDisplay {
 
 /**
  * Convert the current React Flow nodes/edges into a versioned GraphIR snapshot.
- * This captures stable node IDs, port IDs (from handles), minimal data, and edge wiring.
+ * This captures stable node IDs, handle IDs, minimal data, and edge wiring.
  */
 export function buildGraphIR(nodes: Node[], edges: Edge[]): GraphIR {
-    const portUsage = new Map<string, { source: string[]; target: string[] }>();
+    const handleUsage = new Map<string, { source: string[]; target: string[] }>();
 
     edges.forEach(e => {
-        const sourcePort = e.sourceHandle || "out";
-        const targetPort = e.targetHandle || "in";
-        const sourceEntry = portUsage.get(e.source) || { source: [], target: [] };
-        sourceEntry.source.push(sourcePort);
-        portUsage.set(e.source, sourceEntry);
-        const targetEntry = portUsage.get(e.target) || { source: [], target: [] };
-        targetEntry.target.push(targetPort);
-        portUsage.set(e.target, targetEntry);
+        const sourceHandle = e.sourceHandle || "out";
+        const targetHandle = e.targetHandle || "in";
+        const sourceEntry = handleUsage.get(e.source) || { source: [], target: [] };
+        sourceEntry.source.push(sourceHandle);
+        handleUsage.set(e.source, sourceEntry);
+        const targetEntry = handleUsage.get(e.target) || { source: [], target: [] };
+        targetEntry.target.push(targetHandle);
+        handleUsage.set(e.target, targetEntry);
     });
 
     const graphNodes: GraphNode[] = nodes.map(n => {
-        const usage = portUsage.get(n.id) || { source: [], target: [] };
-        const portIds = dedupe([...usage.source.map(p => p), ...usage.target.map(p => p)]);
-        const ports: GraphPort[] = portIds
+        const usage = handleUsage.get(n.id) || { source: [], target: [] };
+        const handleIds = dedupe([...usage.source.map(p => p), ...usage.target.map(p => p)]);
+        const handles: GraphHandle[] = handleIds
             .sort()
             .map((pid, idx) => ({
                 id: pid,
-                kind: toPortKind(usage.source.filter(p => p === pid).length, usage.target.filter(p => p === pid).length),
+                kind: toHandleKind(usage.source.filter(p => p === pid).length, usage.target.filter(p => p === pid).length),
                 order: idx,
             }));
         const data = (n.data || {}) as Record<string, unknown>;
@@ -61,7 +62,7 @@ export function buildGraphIR(nodes: Node[], edges: Edge[]): GraphIR {
             type: n.type || "custom",
             label: typeof data.label === "string" ? data.label : n.type ?? n.id,
             display,
-            ports,
+            handles,
             position: n.position,
             data,
         };
@@ -71,8 +72,8 @@ export function buildGraphIR(nodes: Node[], edges: Edge[]): GraphIR {
         id: e.id,
         source: e.source,
         target: e.target,
-        sourcePort: e.sourceHandle || "out",
-        targetPort: e.targetHandle || "in",
+        sourceHandle: e.sourceHandle || "out",
+        targetHandle: e.targetHandle || "in",
         kind: "data",
         data: (e.data || {}) as Record<string, unknown>,
     }));
@@ -100,8 +101,8 @@ export function applyGraphIR(graph: GraphIR): { nodes: Node[]; edges: Edge[] } {
         id: e.id,
         source: e.source,
         target: e.target,
-        sourceHandle: e.sourcePort,
-        targetHandle: e.targetPort,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
         data: e.data,
         type: "custom",
     }));

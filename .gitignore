@@ -25,8 +25,8 @@ dist-ssr
 
 .venv/
 venv
-.venv_pycache/
-backend/__pycache__
+.venv_pyc/
+backend/__pycache__/
 
 #graphs genenrated
 

@@ -28,8 +28,8 @@ function getNodeSize(n: Node & SizeLike) {
     return { width: toNumber(w, 220), height: toNumber(h, 110) };
 }
 
-function portSideFromId(portId: string, isLR: boolean, isSource: boolean) {
-    const lower = portId.toLowerCase();
+function handleSideFromId(handleId: string, isLR: boolean, isSource: boolean) {
+    const lower = handleId.toLowerCase();
     if (lower.includes("left")) return "WEST";
     if (lower.includes("right")) return "EAST";
     if (lower.includes("top") || lower.includes("up")) return "NORTH";
@@ -86,19 +86,19 @@ function orderNodesByFlow(nodes: Node[], edges: Edge[]) {
 function buildElkGraph(nodes: Node[], edges: Edge[], direction: LayoutDirection = "LR") {
     const isLR = direction === "LR";
 
-    // Collect ports per node from edges (handle-aware); fallback to one in/one out.
-    const nodePorts = new Map<string, Set<string>>();
+    // Collect handles per node from edges; fallback to one in/one out.
+    const nodeHandles = new Map<string, Set<string>>();
     edges.forEach(e => {
-        const sourcePort = `${e.source}__${e.sourceHandle || "out"}`;
-        const targetPort = `${e.target}__${e.targetHandle || "in"}`;
-        nodePorts.set(e.source, (nodePorts.get(e.source) || new Set()).add(sourcePort));
-        nodePorts.set(e.target, (nodePorts.get(e.target) || new Set()).add(targetPort));
+        const sourceHandle = `${e.source}__${e.sourceHandle || "out"}`;
+        const targetHandle = `${e.target}__${e.targetHandle || "in"}`;
+        nodeHandles.set(e.source, (nodeHandles.get(e.source) || new Set()).add(sourceHandle));
+        nodeHandles.set(e.target, (nodeHandles.get(e.target) || new Set()).add(targetHandle));
     });
 
     nodes.forEach(n => {
-        if (!nodePorts.has(n.id)) {
+        if (!nodeHandles.has(n.id)) {
             // ensure at least one input/output so ELK can anchor edges.
-            nodePorts.set(n.id, new Set([`${n.id}__in`, `${n.id}__out`]));
+            nodeHandles.set(n.id, new Set([`${n.id}__in`, `${n.id}__out`]));
         }
     });
 
@@ -124,10 +124,10 @@ function buildElkGraph(nodes: Node[], edges: Edge[], direction: LayoutDirection 
             },
             children: orderedNodes.map((n, idx) => {
                 const { width, height } = getNodeSize(n);
-                const ports = Array.from(nodePorts.get(n.id) || []).map(portId => ({
-                    id: portId,
+                const handles = Array.from(nodeHandles.get(n.id) || []).map(handleId => ({
+                    id: handleId,
                     properties: {
-                        "elk.port.side": portSideFromId(portId, isLR, portId.includes("__out")),
+                        "elk.port.side": handleSideFromId(handleId, isLR, handleId.includes("__out")),
                     },
                 }));
                 return {
@@ -138,16 +138,16 @@ function buildElkGraph(nodes: Node[], edges: Edge[], direction: LayoutDirection 
                         // Respect the topological / input order when laying out layers.
                         "elk.layered.priority": idx.toString(),
                     },
-                    ports,
+                    ports: handles,
                 };
             }),
             edges: edges.map(e => {
-                const sourcePort = `${e.source}__${e.sourceHandle || "out"}`;
-                const targetPort = `${e.target}__${e.targetHandle || "in"}`;
+                const sourceHandle = `${e.source}__${e.sourceHandle || "out"}`;
+                const targetHandle = `${e.target}__${e.targetHandle || "in"}`;
                 return {
                     id: e.id,
-                    sources: [sourcePort],
-                    targets: [targetPort],
+                    sources: [sourceHandle],
+                    targets: [targetHandle],
                 };
             }),
         }

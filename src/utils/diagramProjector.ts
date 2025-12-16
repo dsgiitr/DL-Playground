@@ -138,8 +138,8 @@ export function projectGraphToDiagram(
             id: e.id,
             source: e.source,
             target: e.target,
-            sourceHandle: e.sourcePort,
-            targetHandle: e.targetPort,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
             data: e.data,
             type: "custom",
         });
