@@ -42,6 +42,7 @@ import { MatMulNode } from "./pytorch_core/MatMulNode";
 import { PowNode } from "./pytorch_core/PowNode";
 import { ClipNode } from "./pytorch_core/ClipNode";
 import { makeReduction } from "./pytorch_core/ReductionNode";
+import { RepeatLayerNode } from "./control_flow/RepeatLayer";
 import { ReLUNode, LeakyReLUNode, GELUNode, ELUNode, SELUNode, TanhNode, SigmoidNode, SoftplusNode, SoftsignNode, HardSwishNode, HardSigmoidNode } from "./pytorch_core/activations";
 import { SoftmaxNode, LogSoftmaxNode } from "./pytorch_core/SoftmaxNode";
 import { ProdNode, MaxNode, MinNode, ArgMaxNode, ArgMinNode } from "./pytorch_core/ArgExtremaNodes";
@@ -195,6 +196,12 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
         label: "Metrics",
         nodes: {
             accuracy_metric: AccuracyNode
+        }
+    },
+    control: {
+        label: "Control Flow",
+        nodes: {
+            repeat_layer: RepeatLayerNode
         }
     }
 };
