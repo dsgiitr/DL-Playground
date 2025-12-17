@@ -89,27 +89,72 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult
     lines.push("        super().__init__()");
     spans.push({ line: lines.length, kind: "header" });
 
-    const edgeLabel = (edge: Edge, fallback: string) => {
-        const lbl = (edge.data as any)?.label;
-        if (typeof lbl === "string" && lbl.trim().length > 0) return sanitizeIdent(lbl.trim());
-        // fall back to a deterministic name based on the source node and handle
-        const suffix = edge.sourceHandle ? edge.sourceHandle.replace(/[^a-zA-Z0-9_]/g, "_") : "out";
-        return sanitizeIdent(`${fallback}_${suffix}`);
+    // Track output variable names for each node's handles
+    const outputVars: Record<string, Record<string, string>> = {}; // nodeId -> handleId -> varName
+    const varCounter: Record<string, number> = {}; // Track variable name usage for uniqueness
+    
+    // Helper: get or create output variable name for a node's handle
+    const getOutputVar = (nodeId: string, handleId: string, node: Node | undefined): string => {
+        if (!outputVars[nodeId]) outputVars[nodeId] = {};
+        if (outputVars[nodeId][handleId]) return outputVars[nodeId][handleId];
+        
+        // Generate variable name from handle label
+        const handleLabels = (node?.data?.__handleLabels as Record<string, string> | undefined) || {};
+        const customLabel = handleLabels[handleId];
+        
+        if (customLabel && customLabel.trim()) {
+            let varName = sanitizeIdent(customLabel.trim());
+            // Ensure uniqueness
+            let finalName = varName;
+            let counter = 1;
+            while (Object.values(outputVars).some(handles => Object.values(handles).includes(finalName))) {
+                finalName = `${varName}_${counter}`;
+                counter++;
+            }
+            outputVars[nodeId][handleId] = finalName;
+            return finalName;
+        }
+        
+        // Fallback: use 'x' as base name for generic outputs
+        // Strip common patterns like 'out', 'out-0', 'out_0' to just use 'x'
+        const baseName = 'x';
+        
+        // Make it unique by appending counter
+        if (!varCounter[baseName]) varCounter[baseName] = 0;
+        const varName = varCounter[baseName] === 0 ? baseName : `${baseName}_${varCounter[baseName]}`;
+        varCounter[baseName]++;
+        
+        outputVars[nodeId][handleId] = varName;
+        return varName;
     };
 
-    // Seed variables for all source-only (zero in-degree) nodes so downstream layers see defined tensors.
+    // Seed variables for input nodes (no incoming edges)
     const seedLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
+    const inputNodeIds = new Set<string>();
+    
     nodes
         .filter(n => (incomingEdges[n.id] ?? []).length === 0)
         .forEach(n => {
+            inputNodeIds.add(n.id);
             const outs = outgoingEdges[n.id] ?? [];
-            outs.forEach((e, idx) => {
-                const name = edgeLabel(e, `in_${n.id}_${idx}`);
+            if (outs.length === 0) {
+                // No outputs, still assign a variable
+                const varName = getOutputVar(n.id, 'out', n);
                 seedLines.push({
-                    text: `        ${name} = x  # input passthrough`,
-                    span: { kind: "forward", nodeId: n.id, edgeIds: [e.id] }
+                    text: `        ${varName} = x  # input passthrough`,
+                    span: { kind: "forward", nodeId: n.id }
                 });
-            });
+            } else {
+                // For each output handle, create a variable
+                const handles = new Set(outs.map(e => e.sourceHandle || 'out'));
+                handles.forEach(handleId => {
+                    const varName = getOutputVar(n.id, handleId, n);
+                    seedLines.push({
+                        text: `        ${varName} = x  # input passthrough`,
+                        span: { kind: "forward", nodeId: n.id, edgeIds: outs.filter(e => (e.sourceHandle || 'out') === handleId).map(e => e.id) }
+                    });
+                });
+            }
         });
 
     sortedNodes.forEach((node, index) => {
@@ -122,25 +167,52 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult
 
             initLines.push({ text: `        ${line}`, span: { kind: "init", nodeId: node.id } });
 
-            const inEdges = incomingEdges[node.id];
-            const inputNames =
-                inEdges.length === 0
-                    ? ["x"]
-                    : inEdges.map((e, idx) => edgeLabel(e, `in_${e.source || idx}`));
+            // Skip forward pass for input nodes - already handled in seed section
+            if (inputNodeIds.has(node.id)) {
+                return;
+            }
 
+            // Get input variable names from incoming edges
+            const inEdges = incomingEdges[node.id];
+            const inputNames = inEdges.length === 0
+                ? ["x"]
+                : inEdges.map(e => {
+                    const srcNode = nodes.find(n => n.id === e.source);
+                    const srcHandle = e.sourceHandle || 'out';
+                    return getOutputVar(e.source, srcHandle, srcNode);
+                });
 
             const outEdges = outgoingEdges[node.id];
-            const handlesSpec = typeof ClassRef.handles === "function" ? ClassRef.handles(node.data as any) : ClassRef.handles;
-            const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
-            const outputNames = (sourceHandles || []).length
-                ? sourceHandles.map((handleId, idx) => {
-                    const matching = outEdges.find(e => e.sourceHandle === handleId);
-                    const base = matching ? edgeLabel(matching, `out_${node.id}_${handleId}`) : `out_${node.id}_${idx}`;
-                    return sanitizeIdent(base);
-                })
-                : outEdges.length === 0
-                    ? [sanitizeIdent(`out_${node.id}`)]
-                    : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
+            
+            // Determine output variable names
+            const handleSchema = typeof ClassRef.handleSchema === "function" 
+                ? ClassRef.handleSchema(node.data as any) 
+                : ClassRef.handleSchema;
+            
+            let outputNames: string[];
+            
+            if (handleSchema) {
+                // Use HandleSchema: sort outputs by position
+                const sortedOutputs = handleSchema.outputs.sort((a, b) => a.position - b.position);
+                outputNames = sortedOutputs.map(handle => getOutputVar(node.id, handle.id, node));
+            } else {
+                // Legacy: use handles.sources or default
+                const handlesSpec = typeof ClassRef.handles === "function" 
+                    ? ClassRef.handles(node.data as any) 
+                    : ClassRef.handles;
+                const sourceHandles = handlesSpec?.sources || [];
+                
+                if (sourceHandles.length > 0) {
+                    outputNames = sourceHandles.map(handleId => getOutputVar(node.id, handleId, node));
+                } else if (outEdges.length > 0) {
+                    // Use actual output handles from edges
+                    const handles = Array.from(new Set(outEdges.map(e => e.sourceHandle || 'out')));
+                    outputNames = handles.map(handleId => getOutputVar(node.id, handleId, node));
+                } else {
+                    // No outputs defined, use default
+                    outputNames = [getOutputVar(node.id, 'out', node)];
+                }
+            }
 
             const forward_line = ClassRef.getForwardCode(
                 node.data,
@@ -161,21 +233,36 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult
     );
 
     if (terminalNodes.length === 1) {
-        const lastOut = outgoingEdges[terminalNodes[0].id][0];
-        const lastOutName = lastOut ? edgeLabel(lastOut, `out_${terminalNodes[0].id}`) : sanitizeIdent(`out_${terminalNodes[0].id}`);
+        const node = terminalNodes[0];
+        const outputHandles = Object.keys(outputVars[node.id] || {});
+        const varName = outputHandles.length > 0 
+            ? outputVars[node.id][outputHandles[0]]
+            : getOutputVar(node.id, 'out', node);
+        
         forwardLines.push({
-            text: `        return ${lastOutName}`,
-            span: { kind: "return", nodeId: terminalNodes[0].id, edgeIds: lastOut ? [lastOut.id] : undefined }
+            text: `        return ${varName}`,
+            span: { kind: "return", nodeId: node.id }
         });
-    } else {
-        const returns = terminalNodes.map(n =>
-            outgoingEdges[n.id][0] ? edgeLabel(outgoingEdges[n.id][0], `out_${n.id}`) : sanitizeIdent(`out_${n.id}`)
-        );
-        const edgeIds = terminalNodes.flatMap(n => outgoingEdges[n.id][0]?.id ? [outgoingEdges[n.id][0]!.id] : []);
+    } else if (terminalNodes.length > 1) {
+        const returns = terminalNodes.map(n => {
+            const handles = Object.keys(outputVars[n.id] || {});
+            return handles.length > 0 ? outputVars[n.id][handles[0]] : getOutputVar(n.id, 'out', n);
+        });
         forwardLines.push({
             text: `        return (${returns.join(", ")})`,
-            span: { kind: "return", edgeIds }
+            span: { kind: "return" }
         });
+    } else {
+        // No terminal nodes (all have outputs) - return last computed variable
+        if (sortedNodes.length > 0) {
+            const lastNode = sortedNodes[sortedNodes.length - 1];
+            const handles = Object.keys(outputVars[lastNode.id] || {});
+            const varName = handles.length > 0 ? outputVars[lastNode.id][handles[0]] : getOutputVar(lastNode.id, 'out', lastNode);
+            forwardLines.push({
+                text: `        return ${varName}`,
+                span: { kind: "return", nodeId: lastNode.id }
+            });
+        }
     }
 
     // Stitch final lines with accurate line numbers for spans

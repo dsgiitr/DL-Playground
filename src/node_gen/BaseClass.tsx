@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { type ComponentType } from "react";
+import { type HandleSchema, type HandleSchemaFactory } from "../types/handleTypes";
 
 export type FieldType = 'number' | 'text' | 'boolean' | 'select' // This describes how user can input a param's value
 export interface FieldSpec {
@@ -23,12 +24,19 @@ export interface LayerDefinition<D extends LayerData> {
     // Optional diagram metadata to avoid ad-hoc maps in renderers.
     diagramLabel?: string;
     diagramFamily?: "input" | "output" | "merge" | "activation" | "block" | "other";
+    
+    // Handle configuration - supports both legacy HandleSpec and new HandleSchema
     handles?: HandleSpec | HandleFactory<D>;
+    handleSchema?: HandleSchema<D> | HandleSchemaFactory<D>;
+    
     // Pure functions
     // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
-    // shapeCompute: computes output shape, assumes verifier passed
-    shapeCompute(data: D, inputShapes: number[][]): number[];
+    
+    // shapeCompute: computes output shape(s), assumes verifier passed
+    // - Return number[] for single output
+    // - Return Record<handleId, number[]> for multi-output (keys must match output handle IDs)
+    shapeCompute(data: D, inputShapes: number[][]): number[] | Record<string, number[]>;
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component

@@ -23,9 +23,12 @@ export type ShapeResult = {
 export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
     const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
     const sources: Record<string, string[]> = {};
+    const edgesByTarget: Record<string, Edge[]> = {};
+    
     edges.forEach(e => {
         if (byId[e.target]) {
             (sources[e.target] ||= []).push(e.source);
+            (edgesByTarget[e.target] ||= []).push(e);
         }
     });
 
@@ -65,7 +68,23 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
             const ready = inputIds.every(src => shapes[src]);
             if (!ready) continue;
 
-            const inputShapes = inputIds.map(src => shapes[src]?.defaultShape || []);
+            // Gather input shapes, respecting sourceHandle for multi-output nodes
+            const inputShapes = inputIds.map((srcId, idx) => {
+                const srcShape = shapes[srcId];
+                if (!srcShape) return [];
+                
+                // Find the edge connecting srcId -> current node
+                const connectingEdges = edgesByTarget[id]?.filter(e => e.source === srcId) || [];
+                const sourceHandle = connectingEdges[idx]?.sourceHandle;
+                
+                // If source has per-handle shapes and we know which handle, use it
+                if (sourceHandle && srcShape.byHandle && srcShape.byHandle[sourceHandle]) {
+                    return srcShape.byHandle[sourceHandle];
+                }
+                
+                // Otherwise use default shape
+                return srcShape.defaultShape || [];
+            });
             const verdict = layer.shapeVerifier(node.data as any, inputShapes);
             if (!verdict.ok) {
                 failures.push({

@@ -131,18 +131,12 @@ function FlowContent() {
     );
     const onConnect: OnConnect = useCallback(connection => {
         setEdges(eds => {
-            const sameSource = eds.filter(e => e.source === connection.source && e.sourceHandle === connection.sourceHandle);
-            const suffix = sameSource.length ? `_dup${sameSource.length}` : "";
-            const labelBase = connection.source
-                ? `out_${connection.source}${connection.sourceHandle ? `_${connection.sourceHandle}` : ""}${suffix}`
-                : "out";
+            // No need to set edge labels - they're derived from handle labels
             return addEdge(
                 {
                     ...connection,
                     type: "custom",
-                    data: {
-                        label: labelBase
-                    }
+                    data: {}
                 },
                 eds
             );

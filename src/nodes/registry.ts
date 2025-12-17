@@ -47,6 +47,7 @@ import { SoftmaxNode, LogSoftmaxNode } from "./pytorch_core/SoftmaxNode";
 import { ProdNode, MaxNode, MinNode, ArgMaxNode, ArgMinNode } from "./pytorch_core/ArgExtremaNodes";
 import { BatchNorm2dNode, InstanceNorm2dNode, GroupNormNode, LayerNormNode, RMSNormNode } from "./pytorch_core/NormNodes";
 import { DropoutNode, SpatialDropout2dNode, AlphaDropoutNode, StochasticDepthNode } from "./pytorch_core/RegNodes";
+import { DualOutputConvNode } from "./vision/blocks/DualOutputConv";
 
 export type NodeGroup = {
     label: string;
@@ -154,7 +155,8 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             pointwiseconv2d_layer: PointwiseConv2dNode,
             convtranspose2d_layer: ConvTranspose2dNode,
             upsample_layer: UpsampleNode,
-            residual_block: ResidualBlockNode
+            residual_block: ResidualBlockNode,
+            dual_output_conv: DualOutputConvNode
         }
     },
     vision_pool: {

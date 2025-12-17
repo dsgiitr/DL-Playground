@@ -1,11 +1,16 @@
 import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
 import { type FieldSpec, type LayerData, type FieldType, type HandleSpec, type HandleFactory, renderHandles, ParamsList } from "./BaseClass";
+import { type HandleSchema, type HandleSchemaFactory } from "../types/handleTypes";
 
 export function createLayerComponent<D extends LayerData>(
     label: string,
     paramSchema: Record<string, FieldSpec>,
-    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
+    options?: { 
+        targetHandles?: number; 
+        handles?: HandleSpec | HandleFactory<D>;
+        handleSchema?: HandleSchema<D> | HandleSchemaFactory<D>;
+    }
 ) {
     return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
         const { setNodes, setEdges } = useReactFlow();
@@ -51,12 +56,34 @@ export function createLayerComponent<D extends LayerData>(
         const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
 
         const shapePreview = (() => {
-            const liveShape = (safeData as any).__shape as number[] | undefined;
+            const liveShape = (safeData as any).__shape as number[] | Record<string, number[]> | undefined;
             if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
+            if (liveShape && typeof liveShape === 'object') {
+                // Multi-output: show all handle shapes
+                return JSON.stringify(liveShape);
+            }
             return "";
         })();
 
+        // Prefer HandleSchema over legacy HandleSpec
         const resolvedHandles: HandleSpec = (() => {
+            // Check for new HandleSchema first
+            const schema = options?.handleSchema;
+            if (schema) {
+                const resolved = typeof schema === 'function' ? schema(safeData) : schema;
+                const handleLabels = (safeData as any).__handleLabels || {};
+                
+                return {
+                    targets: resolved.inputs
+                        .sort((a, b) => a.position - b.position)
+                        .map(h => h.id),
+                    sources: resolved.outputs
+                        .sort((a, b) => a.position - b.position)
+                        .map(h => h.id)
+                };
+            }
+            
+            // Fallback to legacy HandleSpec
             const h = options?.handles;
             if (typeof h === "function") return h(safeData);
             if (h && h.targets && h.sources) return h as HandleSpec;
