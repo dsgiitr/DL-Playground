@@ -4,6 +4,7 @@ import { layoutDiagramWithElk, type LayoutDirection } from "../utils/layout";
 import { buildGraphIR } from "../utils/graphIR";
 import type { GraphIR } from "../types/graph";
 import { projectGraphToDiagram } from "../utils/diagramProjector";
+import type { ReactNode } from "react";
 
 // DiagramView renders a publication-style SVG: minimal chrome, clean routing, export-ready.
 
@@ -71,12 +72,16 @@ export default function DiagramView({
     direction = "LR",
     onClose,
     graph,
+    extraActions,
+    fullscreen = true,
 }: {
     nodes: Node[];
     edges: Edge[];
     direction?: LayoutDirection;
     onClose: () => void;
     graph?: GraphIR;
+    extraActions?: ReactNode;
+    fullscreen?: boolean;
 }) {
     const [layout, setLayout] = useState<LayoutResult | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
@@ -135,31 +140,52 @@ export default function DiagramView({
         return `0 0 ${layout.width + 80} ${layout.height + 80}`;
     }, [layout]);
 
+    const shellStyle = fullscreen
+        ? {
+              position: "fixed" as const,
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 20,
+              padding: 20,
+          }
+        : {
+              position: "absolute" as const,
+              inset: 0,
+              background: "#0b0d10",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 12,
+          };
+
+    const panelStyle = fullscreen
+        ? {
+              background: "#0f1115",
+              border: "1px solid #222",
+              borderRadius: 10,
+              width: "90vw",
+              height: "90vh",
+              display: "flex",
+              flexDirection: "column" as const,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+          }
+        : {
+              background: "#0f1115",
+              border: "1px solid #222",
+              borderRadius: 10,
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column" as const,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)",
+          };
+
     return (
-        <div
-            style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.55)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 20,
-                padding: 20,
-            }}
-        >
-            <div
-                style={{
-                    background: "#0f1115",
-                    border: "1px solid #222",
-                    borderRadius: 10,
-                    width: "90vw",
-                    height: "90vh",
-                    display: "flex",
-                    flexDirection: "column",
-                    boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
-                }}
-            >
+        <div style={shellStyle}>
+            <div style={panelStyle}>
                 <div
                     style={{
                         padding: "10px 12px",
@@ -219,6 +245,7 @@ export default function DiagramView({
                         >
                             {exporting ? "Exporting…" : "Export SVG"}
                         </button>
+                        {extraActions}
                         <button
                             onClick={onClose}
                             style={{
@@ -349,16 +376,16 @@ export default function DiagramView({
                                         <text
                                             x={centerX}
                                             y={centerY}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        fontFamily="Inter, system-ui, sans-serif"
-                                        fontSize={14}
-                                        fill={theme.text}
-                                        fontWeight={600}
-                                    >
-                                        {n.label}
-                                    </text>
-                                )}
+                                            textAnchor="middle"
+                                            dominantBaseline="middle"
+                                            fontFamily="Inter, system-ui, sans-serif"
+                                            fontSize={14}
+                                            fill={theme.text}
+                                            fontWeight={600}
+                                        >
+                                            {n.label}
+                                        </text>
+                                    )}
                                 </g>
                             );
                         })}

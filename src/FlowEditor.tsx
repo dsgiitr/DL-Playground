@@ -4,8 +4,11 @@ import {
     applyNodeChanges,
     Background,
     ReactFlow,
+    type ReactFlowInstance,
     ReactFlowProvider,
     useReactFlow,
+    type NodeSelectionChange,
+    type EdgeSelectionChange,
     type DefaultEdgeOptions,
     type Edge,
     type FitViewOptions,
@@ -30,6 +33,7 @@ import type { GraphIR } from "./types/graph";
 import TraceView from "./components/TraceView";
 import { runTorchLensTrace } from "./utils/traceService";
 import type { TraceResponse } from "./types/trace";
+import { getModule, listModules, saveModule, deleteModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -53,6 +57,8 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 const onNodeDrag: OnNodeDrag = (_, node) => {
     console.log("drag event", node.data);
 };
+
+const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
@@ -89,7 +95,14 @@ function FlowContent() {
         const saved = localStorage.getItem("edges");
         return saved ? JSON.parse(saved) : [];
     });
+    const [modules, setModules] = useState<SavedModule[]>(() => listModules());
+    const [selection, setSelection] = useState<{ nodeIds: string[]; edgeIds: string[] }>({ nodeIds: [], edgeIds: [] });
+    const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    const [showModuleDiagram, setShowModuleDiagram] = useState(false);
+    const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [pendingModuleName, setPendingModuleName] = useState("");
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -331,6 +344,15 @@ function FlowContent() {
 
             const type = event.dataTransfer.getData("application/reactflow");
             if (!type) return;
+            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+            let moduleMeta: Record<string, unknown> | null = null;
+            if (moduleMetaRaw) {
+                try {
+                    moduleMeta = JSON.parse(moduleMetaRaw);
+                } catch (err) {
+                    console.warn("Failed to parse module metadata", err);
+                }
+            }
 
             const position = screenToFlowPosition({
                 x: event.clientX,
@@ -341,13 +363,148 @@ function FlowContent() {
                 id: getId(),
                 type: type,
                 position,
-                data: {},
+                data: moduleMeta
+                    ? {
+                        ...moduleMeta,
+                        label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
+                    }
+                    : {},
             };
 
             setNodes(nds => nds.concat(newNode));
         },
         [screenToFlowPosition, setNodes]
     );
+
+    const onSelectionChange = useCallback(
+        (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
+            const changedNodes = params.nodes || [];
+            const changedEdges = params.edges || [];
+
+            setNodes(nds => {
+                const next = nds.map(n => {
+                    const match = changedNodes.find(cn => cn.id === n.id);
+                    if (!match || typeof match.selected === "undefined") return n;
+                    const isSel = !!match.selected;
+                    return {
+                        ...n,
+                        selected: isSel,
+                        data: { ...(n.data || {}), __highlight: isSel ? true : undefined },
+                    };
+                });
+                const selectedIds = next.filter(n => n.selected).map(n => n.id);
+                setSelection(sel => ({ ...sel, nodeIds: selectedIds }));
+                return next;
+            });
+
+            setEdges(eds => {
+                const next = eds.map(e => {
+                    const match = changedEdges.find(ce => ce.id === e.id);
+                    if (!match || typeof match.selected === "undefined") return e;
+                    return { ...e, selected: !!match.selected };
+                });
+                const selectedIds = next.filter(e => e.selected).map(e => e.id);
+                setSelection(sel => ({ ...sel, edgeIds: selectedIds }));
+                return next;
+            });
+        },
+        []
+    );
+    const clearSelection = useCallback(() => {
+        setSelection({ nodeIds: [], edgeIds: [] });
+        setHighlightNodes(new Set());
+        setHighlightEdges(new Set());
+        setNodes(nds => nds.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })));
+        setEdges(eds => eds.map(e => ({ ...e, selected: false })));
+    }, [setNodes, setEdges]);
+
+    const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
+    const selectedEdgeIds = useMemo(() => edges.filter(e => e.selected).map(e => e.id), [edges]);
+
+    useEffect(() => {
+        const handler = (ev: Event) => {
+            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string }>;
+            const moduleId = custom.detail?.moduleId;
+            if (!moduleId) return;
+            const mod = getModule(moduleId);
+            if (!mod) {
+                alert("Module not found");
+                return;
+            }
+            const appliedRaw = applyGraphIR(mod.graph);
+            const applied = {
+                nodes: appliedRaw.nodes.map(n => ({
+                    ...n,
+                    selected: false,
+                    data: { ...(n.data || {}), __highlight: undefined },
+                })),
+                edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
+            };
+            if (!applied.nodes.length) {
+                alert("Saved module is empty. Try saving it again after selecting nodes.");
+                return;
+            }
+            setOpenModule({
+                module: mod,
+                nodes: applied.nodes,
+                edges: applied.edges,
+                fromNodeId: custom.detail?.nodeId,
+            });
+            setShowModuleDiagram(false);
+        };
+        window.addEventListener("module-open", handler as EventListener);
+        return () => window.removeEventListener("module-open", handler as EventListener);
+    }, []);
+
+    useEffect(() => {
+        if (openModule?.nodes?.length && moduleFlowRef.current) {
+            moduleFlowRef.current.fitView({ padding: 0.2, includeHiddenNodes: true });
+        }
+    }, [openModule?.nodes, openModule?.edges]);
+
+    const computeContract = useCallback(
+        (selectedIds: Set<string>): ModuleContract => {
+            const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
+            const outgoing = edges.filter(e => selectedIds.has(e.source) && !selectedIds.has(e.target));
+            return {
+                inputs: dedupe(incoming.map(e => e.targetHandle || "in")),
+                outputs: dedupe(outgoing.map(e => e.sourceHandle || "out")),
+            };
+        },
+        [edges]
+    );
+
+    const handleSaveModule = useCallback(() => {
+        const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+        if (!selectedIdsArr.length) {
+            setShowSaveModal(false);
+            return;
+        }
+        const selectedIds = new Set(selectedIdsArr);
+        const selectedNodes = nodes.filter(n => selectedIds.has(n.id));
+        const internalEdges = edges.filter(e => selectedIds.has(e.source) && selectedIds.has(e.target));
+        if (!selectedNodes.length) {
+            setShowSaveModal(false);
+            return;
+        }
+        const name = pendingModuleName.trim();
+        if (!name) {
+            alert("Enter a module name.");
+            return;
+        }
+        const contract = computeContract(selectedIds);
+        const moduleGraph = buildGraphIR(selectedNodes, internalEdges);
+        saveModule({
+            name,
+            version: "v1",
+            graph: moduleGraph,
+            contract,
+            description: `Saved from ${selectedNodes.length} node(s)`,
+        });
+        setModules(listModules());
+        setShowSaveModal(false);
+        alert(`Saved module "${name}"`);
+    }, [selection.nodeIds, nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
@@ -574,6 +731,22 @@ function FlowContent() {
                         onGenerateCode={onGenerateCode}
                         codePanelOpen={showLiveCode}
                         onCollapse={() => setSidebarCollapsed(true)}
+                        modules={modules}
+                        onDeleteModule={id => {
+                            deleteModule(id);
+                            setModules(listModules());
+                            setNodes(nds => {
+                                const remaining = nds.filter(n => {
+                                    const data = (n.data || {}) as { moduleId?: string };
+                                    return data.moduleId !== id;
+                                });
+                                const remainingIds = new Set(remaining.map(n => n.id));
+                                setEdges(eds =>
+                                    eds.filter(e => remainingIds.has(e.source) && remainingIds.has(e.target))
+                                );
+                                return remaining;
+                            });
+                        }}
                     />
                 )}
             </div>
@@ -647,6 +820,31 @@ function FlowContent() {
                             title="Run forward trace (TorchLens backend required)"
                         >
                             {traceLoading ? "Tracing…" : "TorchLens Trace"}
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={() => {
+                                const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+                                if (!selectedIdsArr.length) {
+                                    alert("Select at least one node to save as a module.");
+                                    return;
+                                }
+                                const suggestion = `Module ${modules.length + 1}`;
+                                setPendingModuleName(suggestion);
+                                setShowSaveModal(true);
+                            }}
+                            disabled={!selectedNodeIds.length && !selection.nodeIds.length}
+                            style={{
+                                padding: "6px 10px",
+                                background: selectedNodeIds.length || selection.nodeIds.length ? "#335" : "#222",
+                                color: selectedNodeIds.length || selection.nodeIds.length ? "#fff" : "#666",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: selectedNodeIds.length || selection.nodeIds.length ? "pointer" : "not-allowed"
+                            }}
+                            title="Save selected nodes as a reusable module"
+                        >
+                            Save Module
                         </button>
                         <button
                             className="nodrag"
@@ -763,11 +961,11 @@ function FlowContent() {
                             )}
                         </div>
                     </div>
-                    <div
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
+            <div
+                style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                             gap: "4px",
                             minHeight: "32px",
                             maxHeight: "120px",
@@ -789,6 +987,10 @@ function FlowContent() {
                                 ))}
                             </ol>
                         )}
+                        <div style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>Selected nodes: {selectedNodeIds.length ? selectedNodeIds.join(", ") : "none"}</span>
+                            <span>Selected edges: {selectedEdgeIds.length ? selectedEdgeIds.join(", ") : "none"}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -807,6 +1009,10 @@ function FlowContent() {
                             fitViewOptions={fitViewOptions}
                             onDrop={onDrop}
                             onDragOver={onDragOver}
+                            onSelectionChange={onSelectionChange}
+                            onPaneClick={clearSelection}
+                            multiSelectionKeyCode="Shift"
+                            selectionOnDrag
                             defaultEdgeOptions={defaultEdgeOptions}
                         >
                             <Background />
@@ -897,6 +1103,272 @@ function FlowContent() {
                     graph={graphSnapshot}
                     onClose={() => setShowDiagram(false)}
                 />
+            )}
+            {showSaveModal && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.55)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 70,
+                        padding: 16,
+                    }}
+                >
+                    <div
+                        style={{
+                            background: "#0f1115",
+                            border: "1px solid #222",
+                            borderRadius: 10,
+                            width: 360,
+                            padding: 16,
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Save Module</span>
+                            <button
+                                onClick={() => setShowSaveModal(false)}
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#888",
+                                    cursor: "pointer",
+                                    fontSize: 18,
+                                    lineHeight: 1,
+                                }}
+                                title="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                            Module name
+                            <input
+                                autoFocus
+                                value={pendingModuleName}
+                                onChange={e => setPendingModuleName(e.target.value)}
+                                style={{
+                                    background: "#111",
+                                    border: "1px solid #333",
+                                    borderRadius: 6,
+                                    padding: "8px 10px",
+                                    color: "#e6edf3",
+                                    fontSize: 14,
+                                }}
+                            />
+                        </label>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                            <button
+                                onClick={() => setShowSaveModal(false)}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#333",
+                                    color: "#e6edf3",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleSaveModule}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#1f8ecd",
+                                    color: "#fff",
+                                    border: "1px solid #1f8ecd",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {openModule && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.6)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 30,
+                        padding: 20,
+                    }}
+                >
+                    <div
+                        style={{
+                            background: "#0f1115",
+                            border: "1px solid #222",
+                            borderRadius: 10,
+                            width: "92vw",
+                            height: "92vh",
+                            display: "flex",
+                            flexDirection: "column",
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                        }}
+                    >
+                        <div
+                            style={{
+                                padding: "10px 12px",
+                                borderBottom: "1px solid #222",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 10,
+                                justifyContent: "space-between",
+                            }}
+                        >
+                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <span style={{ color: "#e6edf3", fontWeight: 700 }}>
+                                    Editing Module: {openModule.module.name} ({openModule.module.version})
+                                </span>
+                                <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    onClick={() => setShowModuleDiagram(true)}
+                                    style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 6,
+                                        border: "1px solid #444",
+                                        background: "#333",
+                                        color: "#fff",
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    Diagram View
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const updated = buildGraphIR(openModule.nodes, openModule.edges);
+                                        saveModule({
+                                            id: openModule.module.id,
+                                            name: openModule.module.name,
+                                            version: openModule.module.version,
+                                            graph: updated,
+                                            contract: openModule.module.contract,
+                                            description: openModule.module.description,
+                                        });
+                                        setModules(listModules());
+                                        alert("Module saved");
+                                        setOpenModule(null);
+                                    }}
+                                    style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 6,
+                                        border: "1px solid #1f8ecd",
+                                        background: "#1f8ecd",
+                                        color: "#fff",
+                                        cursor: "pointer",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    Save
+                                </button>
+                                <button
+                                    onClick={() => setOpenModule(null)}
+                                    style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 6,
+                                        border: "1px solid #444",
+                                        background: "#333",
+                                        color: "#fff",
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, position: "relative" }}>
+                            <ReactFlowProvider>
+                                <ReactFlow
+                                    key={`module-editor-${openModule.module.id}-${openModule.module.updatedAt || ""}`}
+                                    nodes={openModule.nodes}
+                                    edges={openModule.edges}
+                                    onInit={instance => {
+                                        moduleFlowRef.current = instance;
+                                        instance.fitView({ padding: 0.2, includeHiddenNodes: true });
+                                    }}
+                                    onNodesChange={changes =>
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
+                                                : curr
+                                        )
+                                    }
+                                    onEdgesChange={changes =>
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
+                                                : curr
+                                        )
+                                    }
+                                    onConnect={connection =>
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? {
+                                                      ...curr,
+                                                      edges: addEdge(
+                                                          {
+                                                              ...connection,
+                                                              type: "custom",
+                                                              data: { label: connection.source || "out" },
+                                                          },
+                                                          curr.edges
+                                                      ),
+                                                  }
+                                                : curr
+                                        )
+                                    }
+                                    nodeTypes={nodeTypes}
+                                    edgeTypes={edgeTypes}
+                                    fitView
+                                    fitViewOptions={fitViewOptions}
+                                    multiSelectionKeyCode="Shift"
+                                    selectionOnDrag
+                                    style={{ background: "#0b0d10" }}
+                                >
+                                    <Background />
+                                </ReactFlow>
+                            </ReactFlowProvider>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {openModule && showModuleDiagram && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 60,
+                        background: "rgba(0,0,0,0.72)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 12,
+                    }}
+                >
+                    <DiagramView
+                        nodes={openModule.nodes}
+                        edges={openModule.edges}
+                        graph={buildGraphIR(openModule.nodes, openModule.edges)}
+                        onClose={() => setShowModuleDiagram(false)}
+                        fullscreen
+                    />
+                </div>
             )}
             {showTrace && (
                 <TraceView
