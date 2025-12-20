@@ -30,8 +30,14 @@ import type { GraphIR } from "./types/graph";
 import TraceView from "./components/TraceView";
 import { runTorchLensTrace } from "./utils/traceService";
 import type { TraceResponse } from "./types/trace";
+import CustomNodeModal from "./components/CustomNodeModal.tsx"
 
 let id = 0;
+type IOItem = {
+  id: string;
+  label: string;
+};
+
 const getId = () => `node-${id++}`;
 const syncIdFromNodes = (nodes: Node[]) => {
     const maxId = nodes.reduce((max, n) => {
@@ -55,6 +61,15 @@ const onNodeDrag: OnNodeDrag = (_, node) => {
 };
 
 function FlowContent() {
+    const [customIO, setCustomIO] = useState<{
+        inputs: IOItem[];
+        outputs: IOItem[];
+        }>({
+        inputs: [],
+        outputs: [],
+        });
+
+    const [open,setOpen] = useState(false)
     const [nodes, setNodes] = useState<Node[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
         if (savedGraph) {
@@ -532,385 +547,450 @@ function FlowContent() {
     }, [nodes, highlightNodes]);
 
 
+function handleCustomNode(): void {
+  const selectedNodes = nodes.filter(n => n.selected);
+  const selectedIds = new Set(selectedNodes.map(n => n.id));
+
+  if (selectedNodes.length === 0) {
+    alert("Select nodes using Shift key");
+    return;
+  }
+
+  // 1. Find Entry Nodes (Nodes with no incoming edges from within the selection)
+  const entryNodes = selectedNodes.filter(node => {
+    return !edges.some(edge => edge.target === node.id && selectedIds.has(edge.source));
+  });
+
+  // 2. Find Exit Nodes (Nodes with no outgoing edges to nodes within the selection)
+  const exitNodes = selectedNodes.filter(node => {
+    return !edges.some(edge => edge.source === node.id && selectedIds.has(edge.target));
+  });
+
+  // 3. Map to IOItem format for your Modal
+  const inputs = entryNodes.map(n => ({ id: n.id, label: String(n.data?.label || "Input Port") }));
+  const outputs = exitNodes.map(n => ({ id: n.id, label: String(n.data?.label || "Output Port") }));
+
+  setCustomIO({ inputs, outputs });
+  setOpen(true);
+}
     return (
-        <div style={{ display: "flex", height: "100vh" }}>
-            <input
-                ref={uploadInputRef}
-                type="file"
-                accept="application/json"
-                style={{ display: "none" }}
-                onChange={onUploadGraph}
-            />
-            <div
-                style={{
-                    width: sidebarCollapsed ? 28 : sidebarWidth,
-                    transition: dragSidebar ? "none" : "width 0.15s",
-                    background: "#484444",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                    position: "relative"
-                }}
-            >
-                {sidebarCollapsed ? (
-                    <button
-                        onClick={() => setSidebarCollapsed(false)}
-                        style={{
-                            width: "100%",
-                            height: "100%",
-                            writingMode: "vertical-rl",
-                            background: "#1f8ecd",
-                            color: "#fff",
-                            border: "none",
-                            cursor: "pointer",
-                            fontWeight: 700
-                        }}
-                        title="Expand sidebar"
-                    >
-                        Show Nodes
-                    </button>
-                ) : (
-                    <Sidebar
-                        onGenerateCode={onGenerateCode}
-                        codePanelOpen={showLiveCode}
-                        onCollapse={() => setSidebarCollapsed(true)}
-                    />
-                )}
-            </div>
-            <div
-                onMouseDown={() => setDragSidebar(true)}
-                style={{
-                    width: 6,
-                    cursor: "col-resize",
-                    background: dragSidebar ? "#64ffda55" : "#2a2a2a",
-                    borderRight: "1px solid #222"
-                }}
-                title="Drag to resize sidebar"
-            />
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+        <>
+         <CustomNodeModal
+  open={open}
+  onClose={() => setOpen(false)}
+  inputs={customIO.inputs}
+  outputs={customIO.outputs}
+  onSave={(data) => {
+    console.log("Custom node data:", data);
+
+    /*
+      data = {
+        nodeName: string,
+        inputs: renamed inputs,
+        outputs: renamed outputs
+      }
+    */
+
+    setOpen(false);
+  }}
+/>
+            <div style={{ display: "flex", height: "100vh" }}>
+                <input
+                    ref={uploadInputRef}
+                    type="file"
+                    accept="application/json"
+                    style={{ display: "none" }}
+                    onChange={onUploadGraph}
+                />
                 <div
                     style={{
-                        padding: "8px",
+                        width: sidebarCollapsed ? 28 : sidebarWidth,
+                        transition: dragSidebar ? "none" : "width 0.15s",
+                        background: "#484444",
                         display: "flex",
-                        gap: "12px",
-                        alignItems: "center",
-                        minHeight: "40px",
-                        justifyContent: "space-between",
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 5,
-                        background: "#1a1a1a"
+                        flexDirection: "column",
+                        overflow: "hidden",
+                        position: "relative"
                     }}
                 >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {sidebarCollapsed ? (
                         <button
-                            className="nodrag"
-                            onClick={handleUndo}
-                            disabled={!canUndo}
+                            onClick={() => setSidebarCollapsed(false)}
                             style={{
-                                padding: "6px 10px",
-                                background: canUndo ? "#333" : "#222",
-                                color: canUndo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canUndo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Undo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleRedo}
-                            disabled={!canRedo}
-                            style={{
-                                padding: "6px 10px",
-                                background: canRedo ? "#333" : "#222",
-                                color: canRedo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canRedo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Redo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleTrace}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
+                                width: "100%",
+                                height: "100%",
+                                writingMode: "vertical-rl",
+                                background: "#1f8ecd",
                                 color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
+                                border: "none",
+                                cursor: "pointer",
+                                fontWeight: 700
                             }}
-                            title="Run forward trace (TorchLens backend required)"
+                            title="Expand sidebar"
                         >
-                            {traceLoading ? "Tracing…" : "TorchLens Trace"}
+                            Show Nodes
                         </button>
-                        <button
-                            className="nodrag"
-                            onClick={triggerUpload}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Import GraphIR JSON"
-                        >
-                            Import JSON
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={() => setShowDiagram(true)}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Open paper-style diagram view"
-                        >
-                            Diagram View
-                        </button>
-                        <div style={{ position: "relative" }}>
+                    ) : (
+                        <Sidebar
+                            onGenerateCode={onGenerateCode}
+                            codePanelOpen={showLiveCode}
+                            onCollapse={() => setSidebarCollapsed(true)}
+                        />
+                    )}
+                </div>
+                <div
+                    onMouseDown={() => setDragSidebar(true)}
+                    style={{
+                        width: 6,
+                        cursor: "col-resize",
+                        background: dragSidebar ? "#64ffda55" : "#2a2a2a",
+                        borderRight: "1px solid #222"
+                    }}
+                    title="Drag to resize sidebar"
+                />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+                    <div
+                        style={{
+                            padding: "8px",
+                            display: "flex",
+                            gap: "12px",
+                            alignItems: "center",
+                            minHeight: "40px",
+                            justifyContent: "space-between",
+                            position: "sticky",
+                            top: 0,
+                            zIndex: 5,
+                            background: "#1a1a1a"
+                        }}
+                    >
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <button
                                 className="nodrag"
-                                onClick={() => setExportMenuOpen(open => !open)}
+                                onClick={handleUndo}
+                                disabled={!canUndo}
+                                style={{
+                                    padding: "6px 10px",
+                                    background: canUndo ? "#333" : "#222",
+                                    color: canUndo ? "#fff" : "#666",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: canUndo ? "pointer" : "not-allowed"
+                                }}
+                            >
+                                Undo
+                            </button>
+                            <button
+                                className="nodrag"
+                                onClick={handleRedo}
+                                disabled={!canRedo}
+                                style={{
+                                    padding: "6px 10px",
+                                    background: canRedo ? "#333" : "#222",
+                                    color: canRedo ? "#fff" : "#666",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: canRedo ? "pointer" : "not-allowed"
+                                }}
+                            >
+                                Redo
+                            </button>
+                            <button
+                                className="nodrag"
+                                onClick={handleTrace}
                                 style={{
                                     padding: "6px 10px",
                                     background: "#333",
                                     color: "#fff",
                                     border: "1px solid #444",
                                     borderRadius: 6,
-                                    cursor: "pointer",
-                                    minWidth: 110,
-                                    textAlign: "left"
+                                    cursor: "pointer"
                                 }}
-                                title="Export diagram"
+                                title="Run forward trace (TorchLens backend required)"
                             >
-                                Export ▾
+                                {traceLoading ? "Tracing…" : "TorchLens Trace"}
                             </button>
-                            {exportMenuOpen && (
-                                <div
+                            <button
+                                className="nodrag"
+                                onClick={triggerUpload}
+                                style={{
+                                    padding: "6px 10px",
+                                    background: "#333",
+                                    color: "#fff",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer"
+                                }}
+                                title="Import GraphIR JSON"
+                            >
+                                Import JSON
+                            </button>
+                            <button
+                                className="nodrag"
+                                onClick={() => setShowDiagram(true)}
+                                style={{
+                                    padding: "6px 10px",
+                                    background: "#333",
+                                    color: "#fff",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer"
+                                }}
+                                title="Open paper-style diagram view"
+                            >
+                                Diagram View
+                            </button>
+                            <div style={{ position: "relative" }}>
+                                <button
+                                    className="nodrag"
+                                    onClick={() => setExportMenuOpen(open => !open)}
                                     style={{
-                                        position: "absolute",
-                                        top: "110%",
-                                        left: 0,
-                                        background: "#1a1a1a",
+                                        padding: "6px 10px",
+                                        background: "#333",
+                                        color: "#fff",
                                         border: "1px solid #444",
                                         borderRadius: 6,
-                                        boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
-                                        zIndex: 10,
-                                        minWidth: 150,
-                                        overflow: "hidden"
-                                    }}
-                                >
-                                    <button
-                                        onClick={() => exportDiagram("svg")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
-                                            textAlign: "left"
-                                    }}
-                                >
-                                    Export as SVG
-                                </button>
-                                <button
-                                    onClick={() => exportDiagram("png")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
+                                        cursor: "pointer",
+                                        minWidth: 110,
                                         textAlign: "left"
                                     }}
+                                    title="Export diagram"
                                 >
-                                    Export as PNG
+                                    Export ▾
                                 </button>
-                                    <button
-                                        onClick={() => {
-                                            downloadGraphJson();
-                                            setExportMenuOpen(false);
-                                        }}
+                                {exportMenuOpen && (
+                                    <div
                                         style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: "#e6edf3",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            borderTop: "1px solid #333"
+                                            position: "absolute",
+                                            top: "110%",
+                                            left: 0,
+                                            background: "#1a1a1a",
+                                            border: "1px solid #444",
+                                            borderRadius: 6,
+                                            boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
+                                            zIndex: 10,
+                                            minWidth: 150,
+                                            overflow: "hidden"
                                         }}
                                     >
-                                        Export JSON
+                                        <button
+                                            onClick={() => exportDiagram("svg")}
+                                            disabled={!!exporting}
+                                            style={{
+                                                padding: "8px 12px",
+                                                width: "100%",
+                                                background: "transparent",
+                                                border: "none",
+                                                color: exporting ? "#777" : "#e6edf3",
+                                                cursor: exporting ? "not-allowed" : "pointer",
+                                                textAlign: "left"
+                                        }}
+                                    >
+                                        Export as SVG
                                     </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                            minHeight: "32px",
-                            maxHeight: "120px",
-                            overflowY: "auto",
-                            padding: "4px 0"
-                        }}
-                    >
-                        {shapeResult && shapeResult.ok && (
-                            <span style={{ color: "#64ffda" }}>
-                                Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
-                            </span>
-                        )}
-                        {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
-                            <ol style={{ margin: 0, paddingLeft: "16px", color: "#ff6b6b", lineHeight: 1.4 }}>
-                                {shapeResult.failures.map((f, idx) => (
-                                    <li key={`${f.nodeId}-${idx}`} style={{ marginBottom: 2 }}>
-                                        {friendlyError(f)}
-                                    </li>
-                                ))}
-                            </ol>
-                        )}
-                    </div>
-                </div>
-
-                <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", inset: "0 0 0 0" }}>
-                        <ReactFlow
-                            nodes={nodesForFlow}
-                            edges={highlightedEdges}
-                            onNodesChange={onNodesChange}
-                            onEdgesChange={onEdgesChange}
-                            onConnect={onConnect}
-                            onNodeDrag={onNodeDrag}
-                            nodeTypes={nodeTypes}
-                            edgeTypes={edgeTypes}
-                            fitView
-                            fitViewOptions={fitViewOptions}
-                            onDrop={onDrop}
-                            onDragOver={onDragOver}
-                            defaultEdgeOptions={defaultEdgeOptions}
-                        >
-                            <Background />
-                        </ReactFlow>
-                    </div>
-                </div>
-            </div>
-            {showLiveCode && (
-                <>
-                    <div
-                        onMouseDown={() => setDragCodePanel(true)}
-                        style={{
-                            width: 6,
-                            cursor: "col-resize",
-                            background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
-                            borderLeft: "1px solid #222"
-                        }}
-                        title="Drag to resize code panel"
-                    />
-                    <div
-                        style={{
-                            width: codePanelWidth,
-                            height: "100vh",
-                            background: "#0f1115",
-                            borderLeft: "1px solid #222",
-                            display: "flex",
-                            flexDirection: "column",
-                            boxShadow: "0 0 20px rgba(0,0,0,0.35)",
-                            position: "relative",
-                            zIndex: 5
-                        }}
-                    >
-                        <div
-                            style={{
-                                padding: "12px 14px",
-                                borderBottom: "1px solid #222",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                background: "#12141a"
-                            }}
-                        >
-                            <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
-                            <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                        onClick={() => exportDiagram("png")}
+                                            disabled={!!exporting}
+                                            style={{
+                                                padding: "8px 12px",
+                                                width: "100%",
+                                                background: "transparent",
+                                                border: "none",
+                                                color: exporting ? "#777" : "#e6edf3",
+                                                cursor: exporting ? "not-allowed" : "pointer",
+                                            textAlign: "left"
+                                        }}
+                                    >
+                                        Export as PNG
+                                    </button>
+                                        <button
+                                            onClick={() => {
+                                                downloadGraphJson();
+                                                setExportMenuOpen(false);
+                                            }}
+                                            style={{
+                                                padding: "8px 12px",
+                                                width: "100%",
+                                                background: "transparent",
+                                                border: "none",
+                                                color: "#e6edf3",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                borderTop: "1px solid #333"
+                                            }}
+                                        >
+                                            Export JSON
+                                        </button>
+                                    </div>
+                                )}
                                 <button
-                                    onClick={() => navigator.clipboard.writeText(generatedCode)}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    className="nodrag"
+                                    onClick={handleCustomNode}
+                                    style={{
+                                        padding: "8px 12px",
+                                        background: "#333",
+                                        color: "#fff",
+                                        border: "1px solid #444",
+                                        borderRadius: 6,
+                                        cursor: "pointer",
+                                        gap: "12px",
+                                    }}
                                 >
-                                    Copy
-                                </button>
-                                <button
-                                    onClick={onDownloadCode}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
-                                >
-                                    Download
-                                </button>
-                                <button
-                                    onClick={() => setShowLiveCode(false)}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
-                                >
-                                    Collapse
+                                    Create Custom Node
                                 </button>
                             </div>
                         </div>
-                        <CodeViewer
-                            code={generatedCode}
-                            spans={generated.spans}
-                            onSelectionChange={handleSelectionTargets}
+                        <div
                             style={{
                                 flex: 1,
-                                margin: 0,
-                                padding: 16,
-                                overflow: "auto",
-                                background: "#0b0d10",
-                                color: "#d4d4d4",
-                                fontSize: 13,
-                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                                lineHeight: 1.5
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                minHeight: "32px",
+                                maxHeight: "120px",
+                                overflowY: "auto",
+                                padding: "4px 0"
                             }}
-                        />
+                        >
+                            {shapeResult && shapeResult.ok && (
+                                <span style={{ color: "#64ffda" }}>
+                                    Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
+                                </span>
+                            )}
+                            {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
+                                <ol style={{ margin: 0, paddingLeft: "16px", color: "#ff6b6b", lineHeight: 1.4 }}>
+                                    {shapeResult.failures.map((f, idx) => (
+                                        <li key={`${f.nodeId}-${idx}`} style={{ marginBottom: 2 }}>
+                                            {friendlyError(f)}
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                        </div>
                     </div>
-                </>
-            )}
-            {showDiagram && (
-                <DiagramView
-                    nodes={nodes}
-                    edges={edges}
-                    graph={graphSnapshot}
-                    onClose={() => setShowDiagram(false)}
-                />
-            )}
-            {showTrace && (
-                <TraceView
-                    trace={traceData}
-                    loading={traceLoading}
-                    error={traceError}
-                    onClose={() => setShowTrace(false)}
-                    onSelect={ids => {
-                        setHighlightNodes(new Set(ids));
-                        setHighlightEdges(new Set());
-                    }}
-                />
-            )}
-        </div>
+
+                    <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", inset: "0 0 0 0" }}>
+                            <ReactFlow
+                                nodes={nodesForFlow}
+                                edges={highlightedEdges}
+                                onNodesChange={onNodesChange}
+                                onEdgesChange={onEdgesChange}
+                                onConnect={onConnect}
+                                onNodeDrag={onNodeDrag}
+                                nodeTypes={nodeTypes}
+                                edgeTypes={edgeTypes}
+                                fitView
+                                fitViewOptions={fitViewOptions}
+                                onDrop={onDrop}
+                                onDragOver={onDragOver}
+                                defaultEdgeOptions={defaultEdgeOptions}
+                                selectionOnDrag
+                                multiSelectionKeyCode="Shift"
+                                selectionKeyCode="Shift"
+                            >
+                                <Background />
+                            </ReactFlow>
+                        </div>
+                    </div>
+                </div>
+                {showLiveCode && (
+                    <>
+                        <div
+                            onMouseDown={() => setDragCodePanel(true)}
+                            style={{
+                                width: 6,
+                                cursor: "col-resize",
+                                background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
+                                borderLeft: "1px solid #222"
+                            }}
+                            title="Drag to resize code panel"
+                        />
+                        <div
+                            style={{
+                                width: codePanelWidth,
+                                height: "100vh",
+                                background: "#0f1115",
+                                borderLeft: "1px solid #222",
+                                display: "flex",
+                                flexDirection: "column",
+                                boxShadow: "0 0 20px rgba(0,0,0,0.35)",
+                                position: "relative",
+                                zIndex: 5
+                            }}
+                        >
+                            <div
+                                style={{
+                                    padding: "12px 14px",
+                                    borderBottom: "1px solid #222",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    background: "#12141a"
+                                }}
+                            >
+                                <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                    <button
+                                        onClick={() => navigator.clipboard.writeText(generatedCode)}
+                                        style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    >
+                                        Copy
+                                    </button>
+                                    <button
+                                        onClick={onDownloadCode}
+                                        style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    >
+                                        Download
+                                    </button>
+                                    <button
+                                        onClick={() => setShowLiveCode(false)}
+                                        style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    >
+                                        Collapse
+                                    </button>
+                                </div>
+                            </div>
+                            <CodeViewer
+                                code={generatedCode}
+                                spans={generated.spans}
+                                onSelectionChange={handleSelectionTargets}
+                                style={{
+                                    flex: 1,
+                                    margin: 0,
+                                    padding: 16,
+                                    overflow: "auto",
+                                    background: "#0b0d10",
+                                    color: "#d4d4d4",
+                                    fontSize: 13,
+                                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                    lineHeight: 1.5
+                                }}
+                            />
+                        </div>
+                    </>
+                )}
+                {showDiagram && (
+                    <DiagramView
+                        nodes={nodes}
+                        edges={edges}
+                        graph={graphSnapshot}
+                        onClose={() => setShowDiagram(false)}
+                    />
+                )}
+                {showTrace && (
+                    <TraceView
+                        trace={traceData}
+                        loading={traceLoading}
+                        error={traceError}
+                        onClose={() => setShowTrace(false)}
+                        onSelect={ids => {
+                            setHighlightNodes(new Set(ids));
+                            setHighlightEdges(new Set());
+                        }}
+                    />
+                )}
+            </div>
+        </>
     );
 }
 
