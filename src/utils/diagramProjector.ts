@@ -21,7 +21,7 @@ function resolveDefinition(node: GraphNode) {
 
 function displayName(node: GraphNode): string {
     const def = resolveDefinition(node);
-    const raw = def?.diagramLabel || def?.label || node.display?.title || node.type || node.id;
+    const raw = node.display?.title || def?.diagramLabel || def?.label || node.type || node.id;
     if (!raw) return "Layer";
     const clean = raw.replace(/_layer$/i, "");
     return clean.charAt(0).toUpperCase() + clean.slice(1);
