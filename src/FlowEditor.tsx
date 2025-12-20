@@ -504,7 +504,6 @@ function FlowContent() {
         });
         setModules(listModules());
         setShowSaveModal(false);
-        alert(`Saved module "${name}"`);
     }, [selection.nodeIds, nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
