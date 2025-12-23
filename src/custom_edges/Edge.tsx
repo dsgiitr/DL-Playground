@@ -31,29 +31,31 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
     targetPosition,
     data,
   } = props;
-  
+
   // Access sourceHandle and targetHandle from the full props object
   // React Flow stores these but EdgeProps type definition might not expose them
   const fullEdge = props as any;
-  const sourceHandle = fullEdge.sourceHandle || (fullEdge.data as any)?.sourceHandle;
-  const targetHandle = fullEdge.targetHandle || (fullEdge.data as any)?.targetHandle;
-  
+  const sourceHandle =
+    fullEdge.sourceHandle || (fullEdge.data as any)?.sourceHandle;
+  const targetHandle =
+    fullEdge.targetHandle || (fullEdge.data as any)?.targetHandle;
+
   // Parse from edge ID as fallback if still undefined
   // Edge IDs follow pattern: xy-edge__node-10conv_out-node-11in-0
   let finalSourceHandle = sourceHandle;
-  if (!finalSourceHandle && id.includes('__')) {
-    const parts = id.split('__')[1]?.split('-');
+  if (!finalSourceHandle && id.includes("__")) {
+    const parts = id.split("__")[1]?.split("-");
     if (parts && parts.length >= 3) {
       // parts: ["node", "10conv_out", "node", ...]
       // Extract everything after "node-XX"
-      const sourceNodePart = parts.slice(0, 2).join('-'); // "node-10conv_out"
+      const sourceNodePart = parts.slice(0, 2).join("-"); // "node-10conv_out"
       const handleMatch = sourceNodePart.match(/node-\d+(.+)/);
       if (handleMatch && handleMatch[1]) {
         finalSourceHandle = handleMatch[1]; // "conv_out"
       }
     }
   }
-  
+
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -69,26 +71,29 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
     : undefined;
   const strokeWidth = data?.highlight ? 3.5 : 2;
   const { setEdges, setNodes, getNode } = useReactFlow();
-  
+
   // Read label from source node's handle labels or HandleSchema
   const sourceNode = getNode(source);
-  const handleLabels = (sourceNode?.data?.__handleLabels as Record<string, string> | undefined) || {};
-  const handleId = finalSourceHandle || 'out';
-  
+  const handleLabels =
+    (sourceNode?.data?.__handleLabels as Record<string, string> | undefined) ||
+    {};
+  const handleId = finalSourceHandle || "out";
+
   // Try to get custom label first, then defaultLabel from HandleSchema, finally fallback to handleId
   let label = handleLabels[handleId];
-  
+
   if (!label || !label.trim()) {
     // Try to get defaultLabel from HandleSchema
     const nodeType = sourceNode?.type;
     if (nodeType && LAYER_REGISTRY[nodeType]) {
       const layerDef = LAYER_REGISTRY[nodeType];
-      const handleSchema = typeof layerDef.handleSchema === 'function'
-        ? layerDef.handleSchema(sourceNode.data)
-        : layerDef.handleSchema;
-      
+      const handleSchema =
+        typeof layerDef.handleSchema === "function"
+          ? layerDef.handleSchema(sourceNode.data)
+          : layerDef.handleSchema;
+
       if (handleSchema) {
-        const handleDef = handleSchema.outputs.find(h => h.id === handleId);
+        const handleDef = handleSchema.outputs.find((h) => h.id === handleId);
         label = handleDef?.defaultLabel || handleId;
       } else {
         label = handleId;
