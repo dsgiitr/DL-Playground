@@ -17,19 +17,19 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Sidebar from "./Sidebar.tsx";
-import { edgeTypes } from "./types/edgeTypes";
-import { nodeTypes } from "./types/nodeTypes";
-import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape_verifier";
-import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import CodeViewer from "./components/CodeViewer.tsx";
 import DiagramView from "./components/DiagramView";
-import { exportDiagramDataUrl } from "./utils/diagramExport";
-import { buildGraphIR, applyGraphIR } from "./utils/graphIR";
-import type { GraphIR } from "./types/graph";
 import TraceView from "./components/TraceView";
-import { runTorchLensTrace } from "./utils/traceService";
+import Sidebar from "./Sidebar.tsx";
+import { edgeTypes } from "./types/edgeTypes";
+import type { GraphIR } from "./types/graph";
+import { nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
+import { exportDiagramDataUrl } from "./utils/diagramExport";
+import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
+import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
+import { runTorchLensTrace } from "./utils/traceService";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -112,7 +112,7 @@ function FlowContent() {
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getNodes } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
         changes => {
@@ -348,7 +348,67 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes]
     );
-
+    const onNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
+        const nodes = getNodes();
+        const getAbsolutePosition = (n: Node): { x: number; y: number } => {
+            if (!n.parentId) return n.position;
+            const parent = nodes.find((p) => p.id === n.parentId);
+            if (!parent) return n.position;
+            const parentAbs = getAbsolutePosition(parent);
+            return {
+                x: parentAbs.x + n.position.x,
+                y: parentAbs.y + n.position.y,
+            };
+        }
+        const nodeAbsPos = getAbsolutePosition(node);
+        const nodeWidth = node.measured?.width ?? node.width ?? 0;
+        const nodeHeight = node.measured?.height ?? node.height ?? 0;
+        const nodeCenter = {
+            x: nodeAbsPos.x + nodeWidth / 2,
+            y: nodeAbsPos.y + nodeHeight / 2
+        }
+        const targetParent = nodes.find((parent) => {
+            if (parent.id === node.id) return false;
+            if (parent.type !== 'repeat_layer') return false;
+            const pWidth = parent.measured?.width ?? parent.width ?? 0;
+            const pHeight = parent.measured?.height ?? parent.height ?? 0;
+            const parentAbs = getAbsolutePosition(parent);
+            return (
+                nodeCenter.x >= parentAbs.x &&
+                nodeCenter.x <= parentAbs.x + pWidth &&
+                nodeCenter.y >= parentAbs.y &&
+                nodeCenter.y <= parentAbs.y + pHeight
+            );
+        })
+        setNodes((nds) =>
+            nds.map((n) => {
+                if (n.id === node.id) {
+                    if (targetParent) {
+                        if (n.parentId === targetParent.id) return n;
+                        const parentAbs = getAbsolutePosition(targetParent);
+                        return {
+                            ...n,
+                            parentId: targetParent.id,
+                            extent: 'parent',
+                            position: {
+                                x: nodeAbsPos.x - parentAbs.x,
+                                y: nodeAbsPos.y - parentAbs.y
+                            }
+                        }
+                    }
+                    if (n.parentId) {
+                        return {
+                            ...n,
+                            parentId: undefined,
+                            extent: undefined,
+                            position: { ...nodeAbsPos }
+                        }
+                    }
+                }
+                return n;
+            })
+        )
+    }, [getNodes, setNodes]);
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
     const exportDiagram = useCallback(
@@ -443,35 +503,6 @@ function FlowContent() {
             return hasChanges ? nextNodes : currentNodes;
         })
     }, [nodes, edges, setNodes, shapeResult]);
-    // useEffect(() => {
-    //     const result = verifyShapes(nodes, edges);
-    //     setShapeResult(result);
-    //     if (!result.ok) {
-    //         console.warn("Shape validation failures:", result.failures);
-    //     }
-    // }, [nodes, edges]);
-
-    // useEffect(() => {
-    //     if (!shapeResult || !shapeResult.shapes) return;
-    //     skipHistory.current = true;
-    //     setNodes(prev => {
-    //         let changed = false;
-    //         const next = prev.map(n => {
-    //             const newShape = shapeResult.shapes[n.id];
-    //             if (!newShape) return n;
-    //             const oldShape = (n.data as any).__shape as number[] | undefined;
-    //             const same =
-    //                 Array.isArray(oldShape) &&
-    //                 Array.isArray(newShape) &&
-    //                 oldShape.length === newShape.length &&
-    //                 oldShape.every((v, i) => v === newShape[i]);
-    //             if (same) return n;
-    //             changed = true;
-    //             return { ...n, data: { ...n.data, __shape: newShape } };
-    //         });
-    //         return changed ? next : prev;
-    //     });
-    // }, [shapeResult, setNodes]);
 
     const friendlyError = useCallback((failure: ShapeFailure) => {
         const label = failure.label || failure.nodeType || failure.nodeId;
@@ -722,12 +753,12 @@ function FlowContent() {
                                             color: exporting ? "#777" : "#e6edf3",
                                             cursor: exporting ? "not-allowed" : "pointer",
                                             textAlign: "left"
-                                    }}
-                                >
-                                    Export as SVG
-                                </button>
-                                <button
-                                    onClick={() => exportDiagram("png")}
+                                        }}
+                                    >
+                                        Export as SVG
+                                    </button>
+                                    <button
+                                        onClick={() => exportDiagram("png")}
                                         disabled={!!exporting}
                                         style={{
                                             padding: "8px 12px",
@@ -736,11 +767,11 @@ function FlowContent() {
                                             border: "none",
                                             color: exporting ? "#777" : "#e6edf3",
                                             cursor: exporting ? "not-allowed" : "pointer",
-                                        textAlign: "left"
-                                    }}
-                                >
-                                    Export as PNG
-                                </button>
+                                            textAlign: "left"
+                                        }}
+                                    >
+                                        Export as PNG
+                                    </button>
                                     <button
                                         onClick={() => {
                                             downloadGraphJson();
@@ -801,6 +832,7 @@ function FlowContent() {
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
                             onNodeDrag={onNodeDrag}
+                            onNodeDragStop={onNodeDragStop}
                             nodeTypes={nodeTypes}
                             edgeTypes={edgeTypes}
                             fitView

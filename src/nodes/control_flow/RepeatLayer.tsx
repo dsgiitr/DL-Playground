@@ -1,13 +1,18 @@
-import { useMemo, useState } from "react";
-import { ParamsList, renderHandles, type FieldSpec, type FieldType, type HandleFactory, type HandleSpec, type LayerData } from "../../node_gen/BaseClass";
+import React, { useEffect, useMemo, useState } from "react";
+import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/BaseClass";
 // import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
-import { useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+
+type ResizableNodeProps = NodeProps<Node<LayerData>> & {
+    width?: number;
+    height?: number;
+};
 
 
 type RepeatLayerData = {
     repetitions: number;
-    nodes?: Node[];
-    edges?: Edge[];
+    internalNodes?: Node[];
+    internalEdges?: Edge[];
 }
 export class RepeatLayerNode {
     static label = "Repeat Layer";
@@ -16,7 +21,7 @@ export class RepeatLayerNode {
             required: true,
             type: 'number',
             label: 'Repetitions',
-            defaultValue: 1, 
+            defaultValue: 1,
             step: 1
         }
     }
@@ -29,7 +34,7 @@ export class RepeatLayerNode {
         return [_inputShapes[0]];
     }
     static getInitCode(_data: RepeatLayerData, _name: string) {
-        return `# No need to define for loop (or at most create a repeated block here)`   
+        return `# No need to define for loop (or at most create a repeated block here)`
     }
     static getForwardCode(_data: RepeatLayerData, _name: string, _inputs: Array<string>, _outputs: Array<string>) {
         return ``
@@ -47,14 +52,35 @@ export class RepeatLayerNode {
 export function createRepeatLayerComponent<D extends LayerData>(
     label: string,
     paramSchema: Record<string, FieldSpec>,
-    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
 ) {
-    return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
+    return ({ id, data, isConnectable, selected, width, height }: ResizableNodeProps) => {
         const { setNodes, setEdges } = useReactFlow();
-        const [isExpanded, setIsExpanded] = useState(false);
+        const [isExpanded] = useState(true);
         const safeData = data || ({} as D);
-        const isHighlighted = !!(safeData as any).__highlight;
-
+        const DEFAULT_W = 300;
+        const DEFAULT_H = 300;
+        useEffect(() => {
+            if (!width || !height) {
+                setNodes((nodes) =>
+                    nodes.map((n) => {
+                        if (n.id === id) {
+                            return {
+                                ...n,
+                                style: {
+                                    ...n.style,
+                                    width: DEFAULT_W,
+                                    height: DEFAULT_H,
+                                },
+                            };
+                        }
+                        return n;
+                    })
+                )
+            }
+        }, [id, width, height, setNodes]);
+        // const isHighlighted = !!(safeData as any).__highlight;
+        const renderWidth = width ?? DEFAULT_W;
+        const renderHeight = height ?? DEFAULT_H;
         const { requiredParams, optionalParams } = useMemo(() => {
             const keys = Object.keys(paramSchema);
             const req = keys.filter(k => paramSchema[k].required);
@@ -66,22 +92,11 @@ export function createRepeatLayerComponent<D extends LayerData>(
             let newValue: any = e.target.value;
             if (type === "number") {
                 newValue = newValue === "" ? undefined : parseFloat(newValue);
-            } else if (type === "boolean") {
-                newValue = (e.target as HTMLInputElement).checked;
             }
-            setNodes(nodes =>
-                nodes.map(n => {
-                    if (n.id !== id) return n;
-                    const newData = { ...n.data };
-                    if (newValue === undefined || newValue === "") {
-                        delete newData[key];
-                    } else {
-                        newData[key] = newValue;
-                    }
-                    return { ...n, data: newData };
-                })
-            );
+            setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, [key]: newValue } } : n));
+
         };
+        const handleStyle = { width: 10, height: 10, background: '#777' };
 
         const paramsToShow = new Set(requiredParams);
         optionalParams.forEach(key => {
@@ -89,103 +104,112 @@ export function createRepeatLayerComponent<D extends LayerData>(
                 paramsToShow.add(key);
             }
         });
-        const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
-        const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
-
-        const shapePreview = (() => {
-            const liveShape = (safeData as any).__shape as number[] | undefined;
-            if (Array.isArray(liveShape) && liveShape.length > 0) return JSON.stringify(liveShape);
-            return "";
-        })();
-
-        const resolvedHandles: HandleSpec = (() => {
-            const h = options?.handles;
-            if (typeof h === "function") return h(safeData);
-            if (h && h.targets && h.sources) return h as HandleSpec;
-            const targetCount = options?.targetHandles ?? 1;
-            return {
-                targets: Array.from({ length: targetCount }).map((_, i) => `in-${i}`),
-                sources: ["out-0"]
-            };
-        })();
-
         const handleDelete = (e: React.MouseEvent) => {
-            e.stopPropagation();
-            setNodes(nodes => nodes.filter(n => n.id !== id));
+            // e.stopPropagation();
+            setNodes(nodes => nodes.filter(n => n.id !== id))
             setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
-        };
-
+        }
         return (
-            <div
-                className="layer-node"
-                style={{
-                    backgroundColor: isHighlighted ? "#27210d" : "#222",
-                    border: isHighlighted ? "1px solid #f1c40f" : isExpanded ? "1px solid #64ffda" : "1px solid #555",
-                    borderRadius: "8px",
-                    minWidth: "170px",
-                    transition: "all 0.2s",
-                    position: "relative",
-                    boxShadow: isHighlighted
-                        ? "0 0 0 2px #f1c40f, 0 0 20px #f1c40f66"
-                        : undefined,
-                    transform: isHighlighted ? "translateY(-2px) scale(1.01)" : undefined
-                }}
-            >
-                {renderHandles("left", resolvedHandles.targets, isConnectable)}
+            <>
+                <NodeResizer
+                    color="#64ffda" isVisible={selected} minWidth={200} minHeight={200} />
+                <Handle
+                    type='target'
+                    position={Position.Left}
+                    id="in-external"
+                    style={{ ...handleStyle, left: -5, top: '50%' }}
+                    isConnectable={isConnectable}
+                />
+                <Handle
+                    type='source'
+                    position={Position.Left}
+                    id='in-internal'
+                    style={{ ...handleStyle, left: 15, top: '50%', background: '#64ffda' }}
+                    isConnectable={isConnectable}
+                />
                 <div
-                    onClick={() => setIsExpanded(!isExpanded)}
                     style={{
-                        fontWeight: "bold",
-                        color: "#64ffda",
-                        borderBottom: "1px solid #444",
-                        padding: "8px",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center"
+                        width: `${renderWidth}px`,
+                        height: `${renderHeight}px`,
+                        backgroundColor: "rgba(30, 30, 30, 0.6)", // Semi-transparent
+                        border: selected ? "2px solid #64ffda" : "2px dashed #555",
+                        borderRadius: "12px",
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        paddingTop: '30px', // Space for header
                     }}
                 >
-                    <span>{label}</span>
-                    <button
-                        className="nodrag"
-                        onClick={handleDelete}
-                        style={{
-                            marginLeft: "8px",
-                            cursor: "pointer",
-                            border: "none",
-                            background: "transparent",
-                            color: "#888",
-                            fontWeight: "bold",
-                            fontSize: "18px",
-                            lineHeight: "18px",
-                            width: "24px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                        }}
-                        aria-label="Delete node"
-                        title="Delete node"
-                    >
-                        ×
-                    </button>
+                    {/* Header Strip */}
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0,
+                        height: '30px',
+                        background: '#333',
+                        borderBottom: '1px solid #555',
+                        borderTopLeftRadius: '12px', borderTopRightRadius: '12px',
+                        display: 'flex', alignItems: 'center', padding: '0 8px',
+                        justifyContent: 'space-between'
+                    }}>
+                        <span style={{ fontWeight: 'bold', color: '#eee', fontSize: '12px' }}>{label}</span>
+                        <input
+                            type="number"
+                            className="nodrag"
+                            value={safeData['repetitions'] || 1}
+                            onChange={onChange('repetitions', 'number')}
+                            style={{ width: '50px', fontSize: '11px', background: '#222', border: '1px solid #555', color: '#fff' }}
+                        />
+                        <button
+                            className="nodrag"
+                            onClick={handleDelete}
+                            style={{
+                                marginLeft: "8px",
+                                cursor: "pointer",
+                                border: "none",
+                                background: "transparent",
+                                color: "#888",
+                                fontWeight: "bold",
+                                fontSize: "18px",
+                                lineHeight: "18px",
+                                width: "24px",
+                                height: "24px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center"
+                            }}
+                            aria-label="Delete node"
+                            title="Delete node"
+                        >
+                            ×
+                        </button>
+                    </div>
+                    {/* Content Area: Drag nodes here */}
+                    <div style={{ flex: 1, position: 'relative' }}>
+                        <span style={{
+                            position: 'absolute', top: '50%', left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            color: '#ffffff33', pointerEvents: 'none', fontSize: '10px'
+                        }}>
+                            Drag nodes here
+                        </span>
+                    </div>
                 </div>
-
-                <ParamsList
-                    renderKeys={renderList}
-                    optionalParams={optionalParams}
-                    paramSchema={paramSchema}
-                    data={safeData}
-                    onChange={onChange}
-                    onExpand={() => setIsExpanded(true)}
-                    hiddenCount={!isExpanded ? hiddenOptionCount : 0}
+                <Handle
+                    type="target"
+                    position={Position.Right}
+                    id="out-internal"
+                    style={{ ...handleStyle, right: 15, top: '50%', background: '#64ffda' }}
+                    isConnectable={isConnectable}
                 />
 
-                <div style={{ padding: "0 10px 10px", fontSize: "10px", color: "#888" }}>
-                    Shape: {shapePreview}
-                </div>
-                {renderHandles("right", resolvedHandles.sources, isConnectable)}
-            </div>
-        );
+                {/* D. External Source (Sends result to outside world) */}
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    id="out-external"
+                    style={{ ...handleStyle, right: -5, top: '50%' }}
+                    isConnectable={isConnectable}
+                />
+            </>
+        )
     };
 }
