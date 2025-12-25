@@ -29,7 +29,7 @@ import type { GraphIR } from "./types/graph";
 import { nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
-import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+// import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
@@ -378,6 +378,99 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes]
     );
+    // Code to handle Repeat Blocks
+    const onNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
+        const nodes = getNodes();
+        const getAbsolutePosition = (n: Node): { x: number; y: number } => {
+            if (!n.parentId) return n.position;
+            const parent = nodes.find((p) => p.id === n.parentId);
+            if (!parent) return n.position;
+            const parentAbs = getAbsolutePosition(parent);
+            return {
+                x: parentAbs.x + n.position.x,
+                y: parentAbs.y + n.position.y,
+            };
+        }
+        const nodeAbsPos = getAbsolutePosition(node);
+        const nodeWidth = node.measured?.width ?? node.width ?? 0;
+        const nodeHeight = node.measured?.height ?? node.height ?? 0;
+        const nodeCenter = {
+            x: nodeAbsPos.x + nodeWidth / 2,
+            y: nodeAbsPos.y + nodeHeight / 2
+        }
+        const targetParent = nodes.find((parent) => {
+            if (parent.id === node.id) return false;
+            if (parent.type !== 'repeat_layer') return false;
+            const pWidth = parent.measured?.width ?? parent.width ?? 0;
+            const pHeight = parent.measured?.height ?? parent.height ?? 0;
+            const parentAbs = getAbsolutePosition(parent);
+            return (
+                nodeCenter.x >= parentAbs.x &&
+                nodeCenter.x <= parentAbs.x + pWidth &&
+                nodeCenter.y >= parentAbs.y &&
+                nodeCenter.y <= parentAbs.y + pHeight
+            );
+        })
+        setNodes((nds) =>
+            nds.map((n) => {
+                if (n.id === node.id) {
+                    if (targetParent) {
+                        if (n.parentId === targetParent.id) return n;
+                        const parentAbs = getAbsolutePosition(targetParent);
+                        return {
+                            ...n,
+                            parentId: targetParent.id,
+                            extent: 'parent',
+                            position: {
+                                x: nodeAbsPos.x - parentAbs.x,
+                                y: nodeAbsPos.y - parentAbs.y
+                            }
+                        }
+                    }
+                    if (n.parentId) {
+                        return {
+                            ...n,
+                            parentId: undefined,
+                            extent: undefined,
+                            position: { ...nodeAbsPos }
+                        }
+                    }
+                }
+                return n;
+            })
+        )
+    }, [getNodes, setNodes]);
+    useEffect(() => {
+        let hasChanges = false;
+        const repeatParents = nodes.filter(n => n.type === 'repeat_layer');
+        if (repeatParents.length === 0) return;
+        const nextNodes = nodes.map((node) => {
+            if (node.type !== 'repeat_layer') return node;
+            const children = nodes.filter(child => child.parentId === node.id);
+            const childIds = new Set(children.map(c => c.id))
+            const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target))
+            const currentData = nodeTypes.data as { internalNodes?: Node[], internalEdges?: Edge[] }
+
+            // can be optimized in future
+            const prevNodeJson = JSON.stringify(currentData.internalNodes?.map(n => ({ id: n.id, data: n.data })));
+            const nextNodesJson = JSON.stringify(children.map(n => ({ id: n.id, data: n.data })));
+            if (prevNodeJson === nextNodesJson && currentData.internalEdges?.length === internalEdges.length) {
+                return node;
+            }
+            hasChanges = true;
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    internalNodes: children,
+                    internalEdges: internalEdges
+                }
+            }
+        })
+        if (hasChanges) {
+            setNodes(nextNodes);
+        }
+    }, [nodes, edges, setNodes])
 
     const onSelectionChange = useCallback(
         (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {

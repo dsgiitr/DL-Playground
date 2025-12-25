@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/BaseClass";
 // import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 import { Handle, NodeResizer, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { compileGraphToScript } from "../../utils/codeCompile";
 
 type ResizableNodeProps = NodeProps<Node<LayerData>> & {
     width?: number;
@@ -11,8 +12,8 @@ type ResizableNodeProps = NodeProps<Node<LayerData>> & {
 
 type RepeatLayerData = {
     repetitions: number;
-    internalNodes?: Node[];
-    internalEdges?: Edge[];
+    internalNodes: Node[];
+    internalEdges: Edge[];
 }
 export class RepeatLayerNode {
     static label = "Repeat Layer";
@@ -25,8 +26,10 @@ export class RepeatLayerNode {
             step: 1
         }
     }
-    static shapeVerifier(_data: RepeatLayerData, _inputShapes: number[][]) {
-        //TODO: fill this up
+    // TODO: run actual simulation through this 
+    static shapeVerifier(data: RepeatLayerData, inputShapes: number[][]) {
+        if (!inputShapes || inputShapes.length === 0) return { ok: false as const, error: "No input to loop" };
+        if (!data.internalNodes || data.internalNodes.length === 0) return { ok: true as const };
         return { ok: true as const };
     }
     static shapeCompute(_data: RepeatLayerData, _inputShapes: number[][]) {
@@ -36,8 +39,28 @@ export class RepeatLayerNode {
     static getInitCode(_data: RepeatLayerData, _name: string) {
         return `# No need to define for loop (or at most create a repeated block here)`
     }
-    static getForwardCode(_data: RepeatLayerData, _name: string, _inputs: Array<string>, _outputs: Array<string>) {
-        return ``
+    static getForwardCode(data: RepeatLayerData, name: string, inputs: Array<string>, outputs: Array<string>) {
+        const inputVar = inputs[0] || "x";
+        const outputVar = outputs[0] || "x";
+        const N = data.repetitions || 1;
+        if (!data.internalNodes || data.internalNodes.length === 0) {
+            return `${outputVar} = ${inputVar} # Empty Loop`;
+        }
+        const { forwardLines, returnVar } = compileGraphToScript(
+            data.internalNodes,
+            data.internalEdges,
+            `${name}_`
+        )
+        const loopBody = forwardLines?.map(l => `    ${l.text.trim()}`).join("\n        ");
+        return `
+        # Repeat Block (${N} iterations)
+        _loop_state = ${inputVar}
+        for _ in range(${N}):
+            x = _loop_state # Inject state into subgraph input
+        ${loopBody}
+            _loop_state = ${returnVar} # Update state with subgraph output
+        ${outputVar} = _loop_state
+        `.trim();
     }
     static Component = createRepeatLayerComponent<RepeatLayerData>(RepeatLayerNode.label, RepeatLayerNode.paramSchema)
 
@@ -57,6 +80,9 @@ export function createRepeatLayerComponent<D extends LayerData>(
         const { setNodes, setEdges } = useReactFlow();
         const [isExpanded] = useState(true);
         const safeData = data || ({} as D);
+
+        const childCount = (safeData as any).internalNodes?.length || 0;
+
         const DEFAULT_W = 300;
         const DEFAULT_H = 300;
         useEffect(() => {
@@ -150,6 +176,16 @@ export function createRepeatLayerComponent<D extends LayerData>(
                         display: 'flex', alignItems: 'center', padding: '0 8px',
                         justifyContent: 'space-between'
                     }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ fontWeight: 'bold', color: '#eee', fontSize: '12px' }}>{label}</span>
+                            {/* CHILD COUNT BADGE */}
+                            <span style={{
+                                fontSize: '10px', background: childCount > 0 ? '#1f8ecd' : '#555',
+                                color: '#fff', padding: '2px 6px', borderRadius: '10px'
+                            }}>
+                                {childCount} nodes
+                            </span>
+                        </div>
                         <span style={{ fontWeight: 'bold', color: '#eee', fontSize: '12px' }}>{label}</span>
                         <input
                             type="number"
