@@ -29,7 +29,7 @@ import type { GraphIR } from "./types/graph";
 import { nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
-import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+// import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
@@ -377,6 +377,7 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes]
     );
+    // Code to handle Repeat Blocks
     const onNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
         const nodes = getNodes();
         const getAbsolutePosition = (n: Node): { x: number; y: number } => {
@@ -438,6 +439,37 @@ function FlowContent() {
             })
         )
     }, [getNodes, setNodes]);
+    useEffect(() => {
+        let hasChanges = false;
+        const repeatParents = nodes.filter(n => n.type === 'repeat_layer');
+        if (repeatParents.length === 0) return;
+        const nextNodes = nodes.map((node) => {
+            if (node.type !== 'repeat_layer') return node;
+            const children = nodes.filter(child => child.parentId === node.id);
+            const childIds = new Set(children.map(c => c.id))
+            const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target))
+            const currentData = nodeTypes.data as { internalNodes?: Node[], internalEdges?: Edge[] }
+
+            // can be optimized in future
+            const prevNodeJson = JSON.stringify(currentData.internalNodes?.map(n => ({ id: n.id, data: n.data })));
+            const nextNodesJson = JSON.stringify(children.map(n => ({ id: n.id, data: n.data })));
+            if (prevNodeJson === nextNodesJson && currentData.internalEdges?.length === internalEdges.length) {
+                return node;
+            }
+            hasChanges = true;
+            return {
+                ...node,
+                data: {
+                    ...node.data,
+                    internalNodes: children,
+                    internalEdges: internalEdges
+                }
+            }
+        })
+        if (hasChanges) {
+            setNodes(nextNodes);
+        }
+    }, [nodes, edges, setNodes])
 
     const onSelectionChange = useCallback(
         (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
