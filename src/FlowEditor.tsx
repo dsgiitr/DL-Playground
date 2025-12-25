@@ -30,6 +30,7 @@ import { nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
@@ -162,8 +163,9 @@ function FlowContent() {
             );
         });
     }, [setEdges]);
-
-    const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
+    // Temporary swap to validate behaviour before debugging
+    // const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
+    const generated = useMemo(() => generateMainCode(nodes, edges), [nodes, edges]);
     const generatedCode = generated.code;
 
     const onGenerateCode = useCallback(() => {
