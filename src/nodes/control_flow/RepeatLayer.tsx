@@ -83,7 +83,7 @@ export function createRepeatLayerComponent<D extends LayerData>(
 
         const childCount = (safeData as any).internalNodes?.length || 0;
 
-        const DEFAULT_W = 300;
+        const DEFAULT_W = 400;
         const DEFAULT_H = 300;
         useEffect(() => {
             if (!width || !height) {
