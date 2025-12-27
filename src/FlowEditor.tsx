@@ -26,7 +26,7 @@ import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
 import type { GraphIR } from "./types/graph";
-import { nodeTypes } from "./types/nodeTypes";
+import { LAYER_REGISTRY, nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { useRepeatSystem } from "./utils/repeatLogic";
@@ -572,30 +572,44 @@ function FlowContent() {
         },
         [setNodes, setEdges]
     );
+    const verificationResult = useMemo(() => {
+        return verifyShapes(nodes, edges, LAYER_REGISTRY);
+    }, [nodes, edges]);
     useEffect(() => {
-        const result = verifyShapes(nodes, edges);
         setShapeResult(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(result)) return prev;
-            return result;
+            const prevStr = JSON.stringify(prev);
+            const nextStr = JSON.stringify(verificationResult);
+            return prevStr === nextStr ? prev : verificationResult
         })
-        if (!result.ok) {
-            console.warn("Shape validation failures:", result.failures);
+        if (!verificationResult.ok) {
+            console.warn("Shape validation Failures:", verificationResult.failures);
         }
-        if (!shapeResult || !shapeResult.shapes) return;
-        skipHistory.current = true;
+    }, [verificationResult]);
+
+    useEffect(() => {
+        if (!verificationResult.shapes) return;
         setNodes(currentNodes => {
+
+            const deepEqual = (a: any, b: any): boolean => {
+                if (a === b) return true;
+                if (!Array.isArray(a) || !Array.isArray(b)) return false;
+                if (a.length != b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (Array.isArray(a[i]) && Array.isArray(b[i])) {
+                        if (!deepEqual(a[i], b[i])) return false;
+                    } else if (a[i] !== b[i]) {
+                        return false;
+                    }
+                }
+                return true
+            }
             let hasChanges = false;
             const nextNodes = currentNodes.map(n => {
-                const shapeEntry = result.shapes[n.id];
+                const shapeEntry = verificationResult.shapes[n.id];
                 const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
                 const currentShapeArray =
                     n.data && typeof n.data === "object" ? (n.data as { __shape?: number[] }).__shape : undefined;
-                const isSame = (() => {
-                    if (currentShapeArray === newShapeArray) return true;
-                    if (!currentShapeArray || !newShapeArray) return false;
-                    if (currentShapeArray.length !== newShapeArray.length) return false;
-                    return currentShapeArray.every((val, index) => val === newShapeArray[index]);
-                })();
+                const isSame = deepEqual(currentShapeArray, newShapeArray)
                 if (isSame) return n;
                 hasChanges = true;
                 return {
@@ -606,7 +620,7 @@ function FlowContent() {
             })
             return hasChanges ? nextNodes : currentNodes;
         })
-    }, [nodes, edges, setNodes, shapeResult]);
+    }, [verificationResult, setNodes]);
 
     const friendlyError = useCallback((failure: ShapeFailure) => {
         const label = failure.label || failure.nodeType || failure.nodeId;

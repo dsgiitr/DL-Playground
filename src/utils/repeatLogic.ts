@@ -1,6 +1,5 @@
-import { useCallback, useEffect } from "react";
-import { type Node, type Edge } from "@xyflow/react";
-import { type Dispatch, type SetStateAction } from "react";
+import { type Edge, type Node } from "@xyflow/react";
+import { useCallback, useEffect, type Dispatch, type SetStateAction } from "react";
 // Helper to calculate absolute position (Pure function)
 const getAbsolutePosition = (node: Node, nodes: Node[]): { x: number; y: number } => {
     if (!node.parentId) return node.position;
@@ -97,7 +96,16 @@ export function useRepeatSystem(
             if (node.type !== "repeat_layer") return node;
             const children = nodes.filter(child => child.parentId === node.id);
             const childIds = new Set(children.map(c => c.id));
-            const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target));
+            const internalEdges = edges.filter(e => {
+                const isSourceChild = childIds.has(e.source);
+                const isTargetChild = childIds.has(e.target);
+                const isSourceParent = e.source === node.id;
+                const isTargetParent = e.target === node.id;
+                if (isSourceChild && isTargetChild) return true;
+                if (isSourceParent && isTargetChild) return true;
+                if (isSourceChild && isTargetParent) return true;
+                return false;
+            });
 
             const getTopologySig = (nodeList: Node[], edgeList: Edge[]) => {
                 const nodeSig = nodeList
@@ -115,7 +123,7 @@ export function useRepeatSystem(
                     .sort((a, b) => a.id.localeCompare(b.id))
                     .map(n => {
                         const d = n.data || {};
-                        const { internalNodes, internalEdges, __highlight, ...stableData } = d;
+                        const { internalNodes, internalEdges, __highlight, __shape, ...stableData } = d;
                         const stableString = JSON.stringify(stableData, Object.keys(stableData).sort());
                         return `${n.id}.${stableString}`;
                     })
