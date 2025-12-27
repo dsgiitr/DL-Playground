@@ -449,7 +449,7 @@ function FlowContent() {
             const children = nodes.filter(child => child.parentId === node.id);
             const childIds = new Set(children.map(c => c.id))
             const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target))
-            const currentData = nodeTypes.data as { internalNodes?: Node[], internalEdges?: Edge[] }
+            const currentData = node.data as { internalNodes?: Node[], internalEdges?: Edge[] }
 
             // can be optimized in future
             const prevNodeJson = JSON.stringify(currentData.internalNodes?.map(n => ({ id: n.id, data: n.data })));

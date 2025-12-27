@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import { LAYER_REGISTRY } from "../types/nodeTypes";
+import { LAYER_REGISTRY } from "./layerRegistry";
 
 export type CodeSpan = {
     line: number;
