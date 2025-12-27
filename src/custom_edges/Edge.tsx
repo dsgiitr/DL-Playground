@@ -1,4 +1,5 @@
-import { getBezierPath, BaseEdge, type EdgeProps, type Edge, EdgeLabelRenderer, useReactFlow } from "@xyflow/react";
+import { BaseEdge, type Edge, EdgeLabelRenderer, type EdgeProps, getBezierPath, useReactFlow } from "@xyflow/react";
+import { useState } from "react";
 
 type CustomEdgeData = {
     label: string;
@@ -25,20 +26,20 @@ export default function CustomEdge({
     const strokeWidth = data?.highlight ? 3.5 : 2;
     const { setEdges } = useReactFlow();
     const label = data?.label ?? id;
-
+    const [isHovered, setIsHovered] = useState(false);
     const onLabelChange = (newLabel: string) => {
         setEdges(edges =>
-        edges.map(e =>
-            e.id === id
-            ? {
-                ...e,
-                data: {
-                    ...e.data,
-                    label: newLabel
-                }
-                }
-            : e
-        )
+            edges.map(e =>
+                e.id === id
+                    ? {
+                        ...e,
+                        data: {
+                            ...e.data,
+                            label: newLabel
+                        }
+                    }
+                    : e
+            )
         );
     };
 
@@ -53,17 +54,20 @@ export default function CustomEdge({
     };
 
     return (
-        <g>
+        <g
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
             <path
                 d={edgePath}
                 stroke="transparent"
-                strokeWidth={12}
+                strokeWidth={40}
                 fill="none"
                 pointerEvents="stroke"
             >
                 {data?.error && <title>{data.error}</title>}
             </path>
-            {data?.highlight && (
+            {(data?.highlight) && (
                 <path
                     d={edgePath}
                     stroke="#f1c40f55"
@@ -82,11 +86,14 @@ export default function CustomEdge({
                         display: "flex",
                         alignItems: "center",
                         gap: 4,
-                        pointerEvents: "all",
                         background: "#0d1b2a",
                         padding: "2px 4px",
                         borderRadius: 6,
-                        border: "1px solid #223"
+                        border: "1px solid #223",
+                        // To set viewable edge labels, set this opacity variable
+                        // opacity: isHovered || data?.highlight ? 1 : 0,
+                        // transition: "opacity 0.1s ease-in-out",
+                        pointerEvents: isHovered ? "all" : "none"
                     }}
                     className="nodrag nopan"
                 >

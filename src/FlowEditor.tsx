@@ -29,6 +29,7 @@ import type { GraphIR } from "./types/graph";
 import { nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
+import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
@@ -340,6 +341,7 @@ function FlowContent() {
         },
         []
     );
+    const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
     const onDrop = useCallback(
         (event: React.DragEvent) => {
@@ -366,6 +368,8 @@ function FlowContent() {
                 id: getId(),
                 type: type,
                 position,
+                // width: 150,
+                // height: 50,
                 data: moduleMeta
                     ? {
                         ...moduleMeta,
@@ -373,151 +377,13 @@ function FlowContent() {
                     }
                     : {},
             };
+            const finalNode = assignParent(newNode, getNodes())
 
-            setNodes(nds => nds.concat(newNode));
+            setNodes(nds => [...nds, finalNode]);
         },
-        [screenToFlowPosition, setNodes]
+        [screenToFlowPosition, setNodes, assignParent, getNodes]
     );
     // Code to handle Repeat Blocks
-    const onNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
-        const nodes = getNodes();
-        const getAbsolutePosition = (n: Node): { x: number; y: number } => {
-            if (!n.parentId) return n.position;
-            const parent = nodes.find((p) => p.id === n.parentId);
-            if (!parent) return n.position;
-            const parentAbs = getAbsolutePosition(parent);
-            return {
-                x: parentAbs.x + n.position.x,
-                y: parentAbs.y + n.position.y,
-            };
-        }
-        const nodeAbsPos = getAbsolutePosition(node);
-        const nodeWidth = node.measured?.width ?? node.width ?? 0;
-        const nodeHeight = node.measured?.height ?? node.height ?? 0;
-        const nodeCenter = {
-            x: nodeAbsPos.x + nodeWidth / 2,
-            y: nodeAbsPos.y + nodeHeight / 2
-        }
-        const targetParent = nodes.find((parent) => {
-            if (parent.id === node.id) return false;
-            if (parent.type !== 'repeat_layer') return false;
-            const pWidth = parent.measured?.width ?? parent.width ?? 0;
-            const pHeight = parent.measured?.height ?? parent.height ?? 0;
-            const parentAbs = getAbsolutePosition(parent);
-            return (
-                nodeCenter.x >= parentAbs.x &&
-                nodeCenter.x <= parentAbs.x + pWidth &&
-                nodeCenter.y >= parentAbs.y &&
-                nodeCenter.y <= parentAbs.y + pHeight
-            );
-        })
-        setNodes((nds) =>
-            nds.map((n) => {
-                if (n.id === node.id) {
-                    if (targetParent) {
-                        if (n.parentId === targetParent.id) return n;
-                        const parentAbs = getAbsolutePosition(targetParent);
-                        return {
-                            ...n,
-                            parentId: targetParent.id,
-                            extent: 'parent',
-                            position: {
-                                x: nodeAbsPos.x - parentAbs.x,
-                                y: nodeAbsPos.y - parentAbs.y
-                            }
-                        }
-                    }
-                    if (n.parentId) {
-                        return {
-                            ...n,
-                            parentId: undefined,
-                            extent: undefined,
-                            position: { ...nodeAbsPos }
-                        }
-                    }
-                }
-                return n;
-            })
-        )
-    }, [getNodes, setNodes]);
-    // useEffect(() => {
-    //     let hasChanges = false;
-    //     const repeatParents = nodes.filter(n => n.type === 'repeat_layer');
-    //     if (repeatParents.length === 0) return;
-    //     const nextNodes = nodes.map((node) => {
-    //         if (node.type !== 'repeat_layer') return node;
-    //         const children = nodes.filter(child => child.parentId === node.id);
-    //         const childIds = new Set(children.map(c => c.id))
-    //         const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target))
-    //         const currentData = node.data as { internalNodes?: Node[], internalEdges?: Edge[] }
-
-    //         // can be optimized in future
-    //         const prevNodeJson = JSON.stringify(currentData.internalNodes?.map(n => ({ id: n.id, data: n.data })));
-    //         const nextNodesJson = JSON.stringify(children.map(n => ({ id: n.id, data: n.data })));
-    //         if (prevNodeJson === nextNodesJson && currentData.internalEdges?.length === internalEdges.length) {
-    //             return node;
-    //         }
-    //         hasChanges = true;
-    //         return {
-    //             ...node,
-    //             data: {
-    //                 ...node.data,
-    //                 internalNodes: children,
-    //                 internalEdges: internalEdges
-    //             }
-    //         }
-    //     })
-    //     if (hasChanges) {
-    //         setNodes(nextNodes);
-    //     }
-    // }, [nodes, edges, setNodes])
-    useEffect(() => {
-        const repeatParents = nodes.filter(n => n.type === 'repeat_layer');
-        if (repeatParents.length === 0) return;
-        let hasChanges = false;
-        const nextNodes = nodes.map((node) => {
-            if (node.type !== 'repeat_layer') return node;
-            const children = nodes.filter(child => child.parentId === node.id);
-            const childIds = new Set(children.map(c => c.id));
-            const internalEdges = edges.filter(e => childIds.has(e.source) && childIds.has(e.target));
-
-            const getTopologySig = (nodeList: Node[], edgeList: Edge[]) => {
-                const nodeSig = nodeList.map(n => n.id).sort().join('|');
-                const edgeSig = edgeList.map(e => `${e.id}:${e.sourceHandle}:${e.targetHandle}`).sort().join('|');
-                return `${nodeSig}::${edgeSig}`;
-            }
-            const getDataSig = (nodeList: Node[]) => {
-                return nodeList
-                    .sort((a, b) => a.id.localeCompare(b.id))
-                    .map(n => {
-                        const d = n.data || {};
-                        const { internalNodes, internalEdges, __highlight, ...stableData } = d;
-                        const stableString = JSON.stringify(stableData, Object.keys(stableData).sort());
-                        return `${n.id}.${stableString}`;
-                    })
-                    .join('||');
-            }
-            const graphTopologySig = getTopologySig(children, internalEdges)
-            const graphDataSig = getDataSig(children);
-            const currentData = (node.data || {}) as { internalNodes?: Node[], internalEdges?: Edge[] };
-            const storedTopologySig = getTopologySig(currentData.internalNodes || [], currentData.internalEdges || []);
-            const storedDataSig = getDataSig(currentData.internalNodes || []);
-            if (graphTopologySig === storedTopologySig && graphDataSig === storedDataSig) return node;
-
-            hasChanges = true;
-            return {
-                ...node,
-                data: {
-                    ...currentData,
-                    internalNodes: children,
-                    internalEdges: internalEdges
-                }
-            }
-        })
-        if (hasChanges) {
-            setNodes(nextNodes);
-        }
-    }, [nodes, edges, setNodes]);
 
     const onSelectionChange = useCallback(
         (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
