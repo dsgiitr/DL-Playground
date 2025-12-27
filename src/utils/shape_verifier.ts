@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import { LAYER_REGISTRY } from "../types/nodeTypes";
+// import { LAYER_REGISTRY } from "../types/nodeTypes";
 
 export type ShapeFailure = {
     nodeId: string;
@@ -20,10 +20,17 @@ export type ShapeResult = {
     failures: ShapeFailure[];
 };
 
-export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
+export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<string, any>): ShapeResult {
     const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
     const sources: Record<string, string[]> = {};
     edges.forEach(e => {
+        const sourceNode = byId[e.source];
+        const targetNode = byId[e.target];
+        if (sourceNode && targetNode) {
+            if (sourceNode.parentId === targetNode.id) {
+                return;
+            }
+        }
         if (byId[e.target]) {
             (sources[e.target] ||= []).push(e.source);
         }
@@ -42,9 +49,14 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
                 pending.delete(id);
                 continue;
             }
-            const layer = node.type ? LAYER_REGISTRY[node.type] : undefined;
+            const layer = node.type ? registry[node.type] : undefined;
+            console.log(`inspecting ${layer.label}`);
             if (!layer) {
-                failures.push({ nodeId: id, nodeType: node.type, error: `Unknown node type: ${node.type ?? "undefined"}` });
+                failures.push({
+                    nodeId: id,
+                    nodeType: node.type,
+                    error: `Unknown node type: ${node.type ?? "undefined"}`,
+                });
                 pending.delete(id);
                 progressed = true;
                 continue;
@@ -56,7 +68,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
                     nodeType: node.type,
                     label: layer.label,
                     error: "Missing upstream node",
-                    upstream: inputIds
+                    upstream: inputIds,
                 });
                 pending.delete(id);
                 progressed = true;
@@ -66,7 +78,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
             if (!ready) continue;
 
             const inputShapes = inputIds.map(src => shapes[src]?.defaultShape || []);
-            const verdict = layer.shapeVerifier(node.data as any, inputShapes);
+            const verdict = layer.shapeVerifier(node.data as any, inputShapes, registry);
             if (!verdict.ok) {
                 failures.push({
                     nodeId: id,
@@ -74,7 +86,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
                     label: layer.label,
                     error: verdict.error,
                     inputShapes,
-                    upstream: inputIds
+                    upstream: inputIds,
                 });
                 pending.delete(id);
                 progressed = true;
@@ -98,13 +110,13 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
     if (pending.size) {
         pending.forEach(id => {
             const node = byId[id];
-            const layer = node?.type ? LAYER_REGISTRY[node.type] : undefined;
+            const layer = node?.type ? registry[node.type] : undefined;
             failures.push({
                 nodeId: id,
                 nodeType: node?.type,
                 label: layer?.label,
                 error: "Missing upstream shape (disconnected edge or invalid source)",
-                upstream: sources[id] || []
+                upstream: sources[id] || [],
             });
         });
     }

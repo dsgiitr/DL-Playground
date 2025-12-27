@@ -3,6 +3,7 @@ import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/B
 // import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 import { Handle, NodeResizeControl, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import { compileGraphToScript } from "../../utils/codeCompile";
+import { verifyShapes } from "../../utils/shape_verifier";
 
 type ResizableNodeProps = NodeProps<Node<LayerData>> & {
     width?: number;
@@ -27,14 +28,104 @@ export class RepeatLayerNode {
         }
     }
     // TODO: run actual simulation through this 
-    static shapeVerifier(data: RepeatLayerData, inputShapes: number[][]) {
-        if (!inputShapes || inputShapes.length === 0) return { ok: false as const, error: "No input to loop" };
-        if (!data.internalNodes || data.internalNodes.length === 0) return { ok: true as const };
+    static shapeVerifier(data: RepeatLayerData, inputShapes: number[][], registry?: Record<string, any>) {
+        // 1. SAFETY: Handle uninitialized data (Fixes the "New Node" crash)
+        const safeData = data || { internalNodes: [], internalEdges: [] };
+
+        // 2. SAFETY: Handle empty internal nodes (Fast exit)
+        if (!safeData.internalNodes || safeData.internalNodes.length === 0) {
+            return { ok: true as const };
+        }
+
+        // 3. CHECK: Registry must be present
+        if (!registry) {
+            return { ok: false as const, error: "System Error: Registry not passed to RepeatLayer verifier." };
+        }
+
+        // 4. CHECK: Inputs required
+        if (!inputShapes || inputShapes.length === 0) {
+            return { ok: false as const, error: "Repeat Layer requires an input to loop over." };
+        }
+
+        const loopInputShape = inputShapes[0];
+
+        // 5. Logic: Mock Environment
+        const internalIds = new Set(safeData.internalNodes.map(n => n.id));
+        const edgesToCheck = (safeData.internalEdges || []).map(e => ({ ...e }));
+
+        const inputEdges = edgesToCheck.filter(e => !internalIds.has(e.source));
+        const outputEdges = edgesToCheck.filter(e => !internalIds.has(e.target));
+
+        if (inputEdges.length === 0) return { ok: false as const, error: "Internal graph disconnected from Loop Start." };
+        if (outputEdges.length === 0) return { ok: false as const, error: "Internal graph disconnected from Loop End." };
+
+        const MOCK_INPUT_ID = "__LOOP_ENTRY__";
+
+        // Ensure InputNode compatible format
+        const mockDims = loopInputShape.map((size, idx) => ({
+            label: `D${idx}`,
+            size: size.toString(),
+            type: "inferred"
+        }));
+
+        const mockInputNode: Node = {
+            id: MOCK_INPUT_ID,
+            type: "input_layer", // Ensure "input_layer" is in your registry!
+            position: { x: 0, y: 0 },
+            data: {
+                label: "Loop Start",
+                dims: mockDims
+            }
+        }
+
+        inputEdges.forEach(e => { e.source = MOCK_INPUT_ID; });
+
+        const nodesToVerify = [...safeData.internalNodes, mockInputNode];
+        const edgesToVerify = edgesToCheck.filter(e =>
+            (internalIds.has(e.source) || e.source === MOCK_INPUT_ID) &&
+            internalIds.has(e.target)
+        );
+
+        // Recursive call
+        const result = verifyShapes(nodesToVerify, edgesToVerify, registry);
+
+        if (!result.ok) {
+            const firstFail = result.failures[0];
+            return {
+                ok: false as const,
+                error: `Internal Error (${firstFail.label || firstFail.nodeId}): ${firstFail.error}`
+            }
+        }
+
+        // 6. Logic: Loop Consistency
+        for (const outEdge of outputEdges) {
+            const sourceNodeId = outEdge.source;
+            const sourceShape = result.shapes[sourceNodeId]?.defaultShape;
+
+            if (!sourceShape) {
+                return { ok: false as const, error: `Could not determine shape for output ${sourceNodeId}` };
+            }
+
+            const shapesMatch = sourceShape.length === loopInputShape.length &&
+                sourceShape.every((v, i) => v === loopInputShape[i]);
+
+            if (!shapesMatch) {
+                return {
+                    ok: false as const,
+                    error: `Shape Mismatch: Loop Start is [${loopInputShape}], but Loop End receives [${sourceShape}]. They must match.`
+                };
+            }
+        }
+
         return { ok: true as const };
     }
-    static shapeCompute(_data: RepeatLayerData, _inputShapes: number[][]) {
-        //TODO: fill this up
-        return [_inputShapes[0]];
+    static shapeCompute(_data: RepeatLayerData, inputShapes: number[][]) {
+        //Since the shape is constant for now, pass through the shape. 
+        console.log("shape compute ran")
+        if (!inputShapes || inputShapes.length === 0 || !inputShapes[0]) {
+            return [[]]
+        }
+        return inputShapes[0];
     }
     static getInitCode(_data: RepeatLayerData, _name: string) {
         return `# No need to define for loop (or at most create a repeated block here)`
