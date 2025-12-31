@@ -34,6 +34,14 @@ import type { GraphIR } from "./types/graph";
 import TraceView from "./components/TraceView";
 import { runTorchLensTrace } from "./utils/traceService";
 import type { TraceResponse } from "./types/trace";
+import {
+  getModule,
+  listModules,
+  saveModule,
+  deleteModule,
+  type ModuleContract,
+  type SavedModule,
+} from "./utils/moduleRegistry";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -57,6 +65,8 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 const onNodeDrag: OnNodeDrag = (_, node) => {
   console.log("drag event", node.data);
 };
+
+const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
 function FlowContent() {
   const [nodes, setNodes] = useState<Node[]>(() => {
@@ -488,35 +498,6 @@ function FlowContent() {
       return hasChanges ? nextNodes : currentNodes;
     });
   }, [nodes, edges, setNodes, shapeResult]);
-  // useEffect(() => {
-  //     const result = verifyShapes(nodes, edges);
-  //     setShapeResult(result);
-  //     if (!result.ok) {
-  //         console.warn("Shape validation failures:", result.failures);
-  //     }
-  // }, [nodes, edges]);
-
-  // useEffect(() => {
-  //     if (!shapeResult || !shapeResult.shapes) return;
-  //     skipHistory.current = true;
-  //     setNodes(prev => {
-  //         let changed = false;
-  //         const next = prev.map(n => {
-  //             const newShape = shapeResult.shapes[n.id];
-  //             if (!newShape) return n;
-  //             const oldShape = (n.data as any).__shape as number[] | undefined;
-  //             const same =
-  //                 Array.isArray(oldShape) &&
-  //                 Array.isArray(newShape) &&
-  //                 oldShape.length === newShape.length &&
-  //                 oldShape.every((v, i) => v === newShape[i]);
-  //             if (same) return n;
-  //             changed = true;
-  //             return { ...n, data: { ...n.data, __shape: newShape } };
-  //         });
-  //         return changed ? next : prev;
-  //     });
-  // }, [shapeResult, setNodes]);
 
   const friendlyError = useCallback((failure: ShapeFailure) => {
     const label = failure.label || failure.nodeType || failure.nodeId;

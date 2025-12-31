@@ -81,6 +81,7 @@ import {
   StochasticDepthNode,
 } from "./pytorch_core/RegNodes";
 import { DualOutputConvNode } from "./vision/blocks/DualOutputConv";
+import { ModuleRefNode } from "./ModuleRefNode";
 
 export type NodeGroup = {
   label: string;
