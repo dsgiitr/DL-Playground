@@ -161,12 +161,15 @@ function FlowContent() {
   const onConnect: OnConnect = useCallback(
     (connection) => {
       setEdges((eds) => {
-        // No need to set edge labels - they're derived from handle labels
+        // Store sourceHandle and targetHandle in edge data for easy access
         return addEdge(
           {
             ...connection,
             type: "custom",
-            data: {},
+            data: {
+              sourceHandle: connection.sourceHandle || undefined,
+              targetHandle: connection.targetHandle || undefined,
+            },
           },
           eds
         );

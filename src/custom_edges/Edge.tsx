@@ -15,6 +15,11 @@ type CustomEdgeData = {
   highlight?: boolean;
   // Optional callback to remove this edge from parent state (preferred over internal store updates).
   onDelete?: (id: string) => void;
+  // Handle IDs for source and target
+  sourceHandle?: string;
+  targetHandle?: string;
+  // Per-edge label for variable naming in code (overrides default)
+  edgeLabel?: string;
 };
 type CustomEdge = Edge<CustomEdgeData, "custom">;
 
@@ -22,7 +27,6 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
   const {
     id,
     source,
-    target,
     sourceX,
     sourceY,
     targetX,
@@ -32,29 +36,8 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
     data,
   } = props;
 
-  // Access sourceHandle and targetHandle from the full props object
-  // React Flow stores these but EdgeProps type definition might not expose them
-  const fullEdge = props as any;
-  const sourceHandle =
-    fullEdge.sourceHandle || (fullEdge.data as any)?.sourceHandle;
-  const targetHandle =
-    fullEdge.targetHandle || (fullEdge.data as any)?.targetHandle;
-
-  // Parse from edge ID as fallback if still undefined
-  // Edge IDs follow pattern: xy-edge__node-10conv_out-node-11in-0
-  let finalSourceHandle = sourceHandle;
-  if (!finalSourceHandle && id.includes("__")) {
-    const parts = id.split("__")[1]?.split("-");
-    if (parts && parts.length >= 3) {
-      // parts: ["node", "10conv_out", "node", ...]
-      // Extract everything after "node-XX"
-      const sourceNodePart = parts.slice(0, 2).join("-"); // "node-10conv_out"
-      const handleMatch = sourceNodePart.match(/node-\d+(.+)/);
-      if (handleMatch && handleMatch[1]) {
-        finalSourceHandle = handleMatch[1]; // "conv_out"
-      }
-    }
-  }
+  // Access sourceHandle and targetHandle from edge data
+  const sourceHandle = data?.sourceHandle;
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -70,55 +53,43 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
     ? "#ff6b6b"
     : undefined;
   const strokeWidth = data?.highlight ? 3.5 : 2;
-  const { setEdges, setNodes, getNode } = useReactFlow();
+  const { setEdges, getNode } = useReactFlow();
 
-  // Read label from source node's handle labels or HandleSchema
+  // Get handle's default label from HandleSchema
   const sourceNode = getNode(source);
-  const handleLabels =
-    (sourceNode?.data?.__handleLabels as Record<string, string> | undefined) ||
-    {};
-  const handleId = finalSourceHandle || "out";
+  const handleId = sourceHandle || "out";
 
-  // Try to get custom label first, then defaultLabel from HandleSchema, finally fallback to handleId
-  let label = handleLabels[handleId];
+  let handleDefaultLabel = handleId;
+  const nodeType = sourceNode?.type;
+  if (nodeType && LAYER_REGISTRY[nodeType]) {
+    const layerDef = LAYER_REGISTRY[nodeType];
+    const handleSchema =
+      typeof layerDef.handleSchema === "function"
+        ? layerDef.handleSchema(sourceNode.data)
+        : layerDef.handleSchema;
 
-  if (!label || !label.trim()) {
-    // Try to get defaultLabel from HandleSchema
-    const nodeType = sourceNode?.type;
-    if (nodeType && LAYER_REGISTRY[nodeType]) {
-      const layerDef = LAYER_REGISTRY[nodeType];
-      const handleSchema =
-        typeof layerDef.handleSchema === "function"
-          ? layerDef.handleSchema(sourceNode.data)
-          : layerDef.handleSchema;
-
-      if (handleSchema) {
-        const handleDef = handleSchema.outputs.find((h) => h.id === handleId);
-        label = handleDef?.defaultLabel || handleId;
-      } else {
-        label = handleId;
-      }
-    } else {
-      label = handleId;
+    if (handleSchema) {
+      const handleDef = handleSchema.outputs.find((h) => h.id === handleId);
+      handleDefaultLabel = handleDef?.defaultLabel || handleId;
     }
   }
 
+  // Edge label is either the custom per-edge label or auto-generated from handle
+  const edgeLabel = data?.edgeLabel || handleDefaultLabel;
+
   const onLabelChange = (newLabel: string) => {
-    // Update the source node's handle label (affects all edges from this handle)
-    setNodes((nodes) =>
-      nodes.map((n) =>
-        n.id === source
+    // Update this edge's label (does not affect other edges from the same handle)
+    setEdges((edges) =>
+      edges.map((e) =>
+        e.id === id
           ? {
-              ...n,
+              ...e,
               data: {
-                ...n.data,
-                __handleLabels: {
-                  ...(n.data?.__handleLabels || {}),
-                  [handleId]: newLabel,
-                },
+                ...e.data,
+                edgeLabel: newLabel,
               },
             }
-          : n
+          : e
       )
     );
   };
@@ -165,49 +136,68 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
             position: "absolute",
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
-            gap: 4,
+            gap: 2,
             pointerEvents: "all",
             background: "#0d1b2a",
-            padding: "2px 4px",
+            padding: "4px 6px",
             borderRadius: 6,
             border: "1px solid #223",
           }}
           className="nodrag nopan"
         >
-          <input
+          {/* Handle label (readonly, shows internal naming) */}
+          <div
             style={{
-              background: "#0099ff60",
-              padding: "2px 4px",
-              borderRadius: 5,
-              fontSize: 8,
-              fontWeight: 600,
-              border: "none",
-              color: "#fff",
-              width: 70,
+              fontSize: 7,
+              color: "#999",
+              fontStyle: "italic",
+              marginBottom: 2,
             }}
-            className="nodrag nopan"
-            onChange={(e) => onLabelChange(e.target.value)}
-            value={label}
-          />
-          <button
-            onClick={onDelete}
-            style={{
-              cursor: "pointer",
-              border: "none",
-              background: "#d9534f",
-              color: "#fff",
-              borderRadius: 4,
-              padding: "0 6px",
-              fontSize: 10,
-              lineHeight: "16px",
-            }}
-            title="Delete edge"
-            aria-label="Delete edge"
-            className="nodrag nopan"
+            title="Handle output name (from node definition)"
           >
-            ✕
-          </button>
+            {handleDefaultLabel}
+          </div>
+
+          {/* Edge label (editable, shows code variable name) */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              style={{
+                background: "#0099ff60",
+                padding: "2px 4px",
+                borderRadius: 5,
+                fontSize: 8,
+                fontWeight: 600,
+                border: "none",
+                color: "#fff",
+                width: 70,
+              }}
+              className="nodrag nopan"
+              onChange={(e) => onLabelChange(e.target.value)}
+              value={edgeLabel}
+              placeholder="var name"
+              title="Variable name in generated code"
+            />
+            <button
+              onClick={onDelete}
+              style={{
+                cursor: "pointer",
+                border: "none",
+                background: "#d9534f",
+                color: "#fff",
+                borderRadius: 4,
+                padding: "0 6px",
+                fontSize: 10,
+                lineHeight: "16px",
+              }}
+              title="Delete edge"
+              aria-label="Delete edge"
+              className="nodrag nopan"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </EdgeLabelRenderer>
     </g>

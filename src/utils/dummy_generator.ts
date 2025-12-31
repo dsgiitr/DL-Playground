@@ -111,13 +111,20 @@ export function generatePyTorchCode(
     if (!outputVars[nodeId]) outputVars[nodeId] = {};
     if (outputVars[nodeId][handleId]) return outputVars[nodeId][handleId];
 
-    // Generate variable name from handle label
-    const handleLabels =
-      (node?.data?.__handleLabels as Record<string, string> | undefined) || {};
-    const customLabel = handleLabels[handleId];
+    // Check if there are edges from this handle with custom labels
+    const edgesFromHandle = edges.filter(
+      (e) => e.source === nodeId && (e.sourceHandle || "out") === handleId
+    );
 
-    if (customLabel && customLabel.trim()) {
-      let varName = sanitizeIdent(customLabel.trim());
+    // If there's at least one edge with a custom edgeLabel, use it
+    const edgeWithLabel = edgesFromHandle.find(
+      (e) => e.data?.edgeLabel && (e.data.edgeLabel as string).trim()
+    );
+
+    if (edgeWithLabel && edgeWithLabel.data?.edgeLabel) {
+      let varName = sanitizeIdent(
+        (edgeWithLabel.data.edgeLabel as string).trim()
+      );
       // Ensure uniqueness
       let finalName = varName;
       let counter = 1;
@@ -134,7 +141,6 @@ export function generatePyTorchCode(
     }
 
     // Fallback: use 'x' as base name for generic outputs
-    // Strip common patterns like 'out', 'out-0', 'out_0' to just use 'x'
     const baseName = "x";
 
     // Make it unique by appending counter
