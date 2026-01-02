@@ -56,9 +56,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
     animated: true,
 };
 
-const onNodeDrag: OnNodeDrag = (_, node) => {
-    console.log("drag event", node.data);
-};
+
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
@@ -98,7 +96,6 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
-    const [selection, setSelection] = useState<{ nodeIds: string[]; edgeIds: string[] }>({ nodeIds: [], edgeIds: [] });
     const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
@@ -389,40 +386,32 @@ function FlowContent() {
 
     const onSelectionChange = useCallback(
         (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
-            const changedNodes = params.nodes || [];
-            const changedEdges = params.edges || [];
+            const selectedNodeIdsFromParam = new Set((params.nodes || []).map(n => n.id));
+            const selectedEdgeIdsFromParam = new Set((params.edges || []).map(e => e.id));
 
             setNodes(nds => {
-                const next = nds.map(n => {
-                    const match = changedNodes.find(cn => cn.id === n.id);
-                    if (!match || typeof match.selected === "undefined") return n;
-                    const isSel = !!match.selected;
+                return nds.map(n => {
+                    const isSelected = selectedNodeIdsFromParam.has(n.id);
                     return {
                         ...n,
-                        selected: isSel,
-                        data: { ...(n.data || {}), __highlight: isSel ? true : undefined },
+                        selected: isSelected,
+                        data: { ...(n.data || {}), __highlight: isSelected ? true : undefined },
                     };
                 });
-                const selectedIds = next.filter(n => n.selected).map(n => n.id);
-                setSelection(sel => ({ ...sel, nodeIds: selectedIds }));
-                return next;
             });
 
             setEdges(eds => {
-                const next = eds.map(e => {
-                    const match = changedEdges.find(ce => ce.id === e.id);
-                    if (!match || typeof match.selected === "undefined") return e;
-                    return { ...e, selected: !!match.selected };
+                return eds.map(e => {
+                    return {
+                        ...e,
+                        selected: selectedEdgeIdsFromParam.has(e.id),
+                    };
                 });
-                const selectedIds = next.filter(e => e.selected).map(e => e.id);
-                setSelection(sel => ({ ...sel, edgeIds: selectedIds }));
-                return next;
             });
         },
         []
     );
     const clearSelection = useCallback(() => {
-        setSelection({ nodeIds: [], edgeIds: [] });
         setHighlightNodes(new Set());
         setHighlightEdges(new Set());
         setNodes(nds => nds.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })));
@@ -431,6 +420,13 @@ function FlowContent() {
 
     const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
     const selectedEdgeIds = useMemo(() => edges.filter(e => e.selected).map(e => e.id), [edges]);
+
+    useEffect(() => {
+        console.log({
+            selectedNodeIds,
+            selectedEdgeIds,
+        });
+    }, [selectedNodeIds, selectedEdgeIds]);
 
     useEffect(() => {
         const handler = (ev: Event) => {
@@ -486,7 +482,7 @@ function FlowContent() {
     );
 
     const handleSaveModule = useCallback(() => {
-        const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+        const selectedIdsArr = selectedNodeIds;
         if (!selectedIdsArr.length) {
             setShowSaveModal(false);
             return;
@@ -514,7 +510,7 @@ function FlowContent() {
         });
         setModules(listModules());
         setShowSaveModal(false);
-    }, [selection.nodeIds, nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
+    }, [nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
@@ -819,7 +815,7 @@ function FlowContent() {
                         <button
                             className="nodrag"
                             onClick={() => {
-                                const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+                                const selectedIdsArr = selectedNodeIds;
                                 if (!selectedIdsArr.length) {
                                     alert("Select at least one node to save as a module.");
                                     return;
@@ -828,14 +824,14 @@ function FlowContent() {
                                 setPendingModuleName(suggestion);
                                 setShowSaveModal(true);
                             }}
-                            disabled={!selectedNodeIds.length && !selection.nodeIds.length}
+                            disabled={!selectedNodeIds.length}
                             style={{
                                 padding: "6px 10px",
-                                background: selectedNodeIds.length || selection.nodeIds.length ? "#335" : "#222",
-                                color: selectedNodeIds.length || selection.nodeIds.length ? "#fff" : "#666",
+                                background: selectedNodeIds.length ? "#335" : "#222",
+                                color: selectedNodeIds.length ? "#fff" : "#666",
                                 border: "1px solid #444",
                                 borderRadius: 6,
-                                cursor: selectedNodeIds.length || selection.nodeIds.length ? "pointer" : "not-allowed"
+                                cursor: selectedNodeIds.length ? "pointer" : "not-allowed"
                             }}
                             title="Save selected nodes as a reusable module"
                         >
@@ -997,7 +993,6 @@ function FlowContent() {
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
-                            onNodeDrag={onNodeDrag}
                             onNodeDragStop={onNodeDragStop}
                             nodeTypes={nodeTypes}
                             edgeTypes={edgeTypes}
