@@ -132,3 +132,29 @@ export function applyGraphIR(graph: GraphIR): { nodes: Node[]; edges: Edge[] } {
     const sortedNodes = sortNodesByHierarchy(nodes);
     return { nodes: sortedNodes, edges };
 }
+
+/**
+ * Filters the graph to return only the "Root" layer (Top-level nodes and edges).
+ * This is useful for compilation and verification steps that should treat
+ * nested subgraphs (like Repeat Layers) as encapsulated black boxes.
+ * * Usage:
+ * const { rootNodes, rootEdges } = getRootGraph(nodes, edges);
+ * verifyShapes(rootNodes, rootEdges, ...);
+ */
+export function getRootGraph(nodes: Node[], edges: Edge[]): { rootNodes: Node[]; rootEdges: Edge[] } {
+    // Root nodes: only nodes that DO NOT have a parent
+    const rootNodes = nodes.filter(n => !n.parentId);
+    const rootNodeIds = new Set(rootNodes.map(n => n.id));
+    // Root Edges: Only edges where BOTH source and target are in root
+    // This excludes:
+    // - Internal edges (Child -> Child)
+    // - Boundary edges managed by Repeat Layers (Child-> Parent)
+    // This keeps:
+    // - Normal edges (Node A -> Node B)
+    // - Edges connecting to Repeat Layer external handles (Node A -> Repeat Layer)
+
+    const rootEdges = edges.filter(e => {
+        return rootNodeIds.has(e.source) && rootNodeIds.has(e.target);
+    });
+    return { rootNodes, rootEdges };
+}

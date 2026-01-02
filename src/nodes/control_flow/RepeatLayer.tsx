@@ -137,17 +137,33 @@ export class RepeatLayerNode {
         if (!data.internalNodes || data.internalNodes.length === 0) {
             return `${outputVar} = ${inputVar} # Empty Loop`;
         }
-        const { forwardLines, returnVar } = compileGraphToScript(
+        const startEdges = data.internalEdges.filter(e => e.sourceHandle === 'in-internal')
+        const stateInjection = startEdges.map(e => {
+            const varName = e.data?.label as string || "x";
+            const cleanName = varName.replace(/-/g, '_')
+            return `${cleanName} = _loop_state`;
+        }).join("\n            ")
+        const injectionCode = stateInjection.length > 0 ? stateInjection : `x = _loop_state`
+        const { forwardLines, returnVar: defaultReturn } = compileGraphToScript(
             data.internalNodes,
             data.internalEdges,
-            `${name}_`
+            ``
         )
+        const endEdge = data.internalEdges.find(e => e.targetHandle === 'out-internal')
+        let returnVar = defaultReturn;
+        if (endEdge && endEdge.data?.label) {
+            const label = endEdge.data?.label as string || 'out-internal';
+            returnVar = label.replace(/-/g, '_')
+        }
+        console.log(forwardLines)
+        console.log(returnVar)
         const loopBody = forwardLines?.map(l => `    ${l.text.trim()}`).join("\n        ");
         return `
         # Repeat Block (${N} iterations)
         _loop_state = ${inputVar}
         for _ in range(${N}):
-            x = _loop_state # Inject state into subgraph input
+            # Inject state into subgraph input
+            ${injectionCode}
         ${loopBody}
             _loop_state = ${returnVar} # Update state with subgraph output
         ${outputVar} = _loop_state

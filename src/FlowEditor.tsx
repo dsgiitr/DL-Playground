@@ -32,7 +32,7 @@ import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
-import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
+import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
@@ -165,7 +165,10 @@ function FlowContent() {
     }, [setEdges]);
     // Temporary swap to validate behaviour before debugging
     // const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
-    const generated = useMemo(() => generateMainCode(nodes, edges), [nodes, edges]);
+    const generated = useMemo(() => {
+        const { rootNodes, rootEdges } = getRootGraph(nodes, edges);
+        return generateMainCode(rootNodes, rootEdges);
+    }, [nodes, edges]);
     const generatedCode = generated.code;
 
     const onGenerateCode = useCallback(() => {
