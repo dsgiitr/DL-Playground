@@ -127,8 +127,18 @@ export class RepeatLayerNode {
         }
         return inputShapes[0];
     }
-    static getInitCode(_data: RepeatLayerData, _name: string) {
-        return `# No need to define for loop (or at most create a repeated block here)`
+    static getInitCode(data: RepeatLayerData, name: string) {
+        if (!data.internalNodes || data.internalNodes.length === 0) {
+            return `#Empty Loop`;
+        }
+        const { initLines } = compileGraphToScript(
+            data.internalNodes,
+            data.internalEdges
+        );
+        if (!initLines || initLines.length === 0) {
+            return `pass # Loop contains no trainable layers`;
+        }
+        return initLines.map(l => l.text.trim()).join("\n        ")
     }
     static getForwardCode(data: RepeatLayerData, name: string, inputs: Array<string>, outputs: Array<string>) {
         const inputVar = inputs[0] || "x";
