@@ -63,6 +63,7 @@ export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedA
     const now = new Date().toISOString();
     const next: SavedModule = {
         ...def,
+        //crypto
         id: def.id || `mod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         createdAt: now,
         updatedAt: now,

@@ -35,7 +35,7 @@ import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
-import type { TraceResponse } from "./types/trace";
+import { useModuleStack } from "./nodes/UseModuleStack.ts";
 import { getModule, listModules, saveModule, deleteModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 
 let id = 0;
@@ -100,7 +100,12 @@ function FlowContent() {
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
     const [selection, setSelection] = useState<{ nodeIds: string[]; edgeIds: string[] }>({ nodeIds: [], edgeIds: [] });
-    const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
+    const openModule = moduleStack.length
+    ? moduleStack[moduleStack.length - 1]
+    : null;
+
+
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
@@ -453,12 +458,12 @@ function FlowContent() {
                 alert("Saved module is empty. Try saving it again after selecting nodes.");
                 return;
             }
-            setOpenModule({
+            setModuleStack(stack => [...stack,{
                 module: mod,
                 nodes: applied.nodes,
                 edges: applied.edges,
                 fromNodeId: custom.detail?.nodeId,
-            });
+            }]);
             setShowModuleDiagram(false);
         };
         window.addEventListener("module-open", handler as EventListener);
@@ -1257,7 +1262,7 @@ function FlowContent() {
                                         });
                                         setModules(listModules());
                                         alert("Module saved");
-                                        setOpenModule(null);
+                                        setModuleStack(stack => stack.slice(0, -1));
                                     }}
                                     style={{
                                         padding: "6px 10px",
@@ -1272,7 +1277,7 @@ function FlowContent() {
                                     Save
                                 </button>
                                 <button
-                                    onClick={() => setOpenModule(null)}
+                                    onClick={() => setModuleStack(stack => stack.slice(0, -1))}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1297,36 +1302,48 @@ function FlowContent() {
                                         instance.fitView({ padding: 0.2, includeHiddenNodes: true });
                                     }}
                                     onNodesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
-                                                : curr
-                                        )
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            const updated = {
+                                            ...top,
+                                            nodes: applyNodeChanges(changes, top.nodes),
+                                            };
+                                            return [...stack.slice(0, -1), updated];
+                                        })
                                     }
                                     onEdgesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
-                                                : curr
-                                        )
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            const updated = {
+                                            ...top,
+                                            edges: applyEdgeChanges(changes, top.edges),
+                                            };
+                                            return [...stack.slice(0, -1), updated];
+                                        })
                                     }
                                     onConnect={connection =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? {
-                                                      ...curr,
-                                                      edges: addEdge(
-                                                          {
-                                                              ...connection,
-                                                              type: "custom",
-                                                              data: { label: connection.source || "out" },
-                                                          },
-                                                          curr.edges
-                                                      ),
-                                                  }
-                                                : curr
-                                        )
-                                    }
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            return [
+                                            ...stack.slice(0, -1),
+                                            {
+                                                ...top,
+                                                edges: addEdge(
+                                                {
+                                                    ...connection,
+                                                    type: "custom",
+                                                    data: { label: connection.source || "out" },
+                                                },
+                                                top.edges
+                                                ),
+                                            },
+                                            ];
+                                        })
+                                        }
+
                                     nodeTypes={nodeTypes}
                                     edgeTypes={edgeTypes}
                                     fitView
