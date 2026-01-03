@@ -51,6 +51,10 @@ export interface LayerDefinition<D extends LayerData> {
     data: D,
     inputShapes: number[][]
   ): number[] | Record<string, number[]>;
+  
+  // Code generation
+  getHelperClasses?(data: D): string[]; // Optional: return list of helper class names needed
+  getHelperClassDefinitions?(data: D): Record<string, string>; // Optional: return {className: pythonCode}
   getInitCode(data: D, name: string): string;
   getForwardCode(
     data: D,

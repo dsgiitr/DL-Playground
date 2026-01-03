@@ -100,6 +100,24 @@ export class DualOutputConvNode {
     };
   }
 
+  static getHelperClasses(_data: DualOutputConvData): string[] {
+    return ["DualConvModule"];
+  }
+
+  static getHelperClassDefinitions(_data: DualOutputConvData): Record<string, string> {
+    return {
+      DualConvModule: `# Custom multi-output module for DualConv
+class DualConvModule(nn.Module):
+    def __init__(self, in_c, out_c, k):
+        super().__init__()
+        self.conv = nn.Conv2d(in_c, out_c, k)
+    def forward(self, x):
+        conv_out = self.conv(x)
+        flat_out = conv_out.flatten(start_dim=1)
+        return conv_out, flat_out`
+    };
+  }
+
   static getInitCode(data: DualOutputConvData, name: string): string {
     const in_channels =
       data.in_channels ?? this.paramSchema.in_channels.defaultValue;
@@ -108,19 +126,8 @@ export class DualOutputConvNode {
     const kernel_size =
       data.kernel_size ?? this.paramSchema.kernel_size.defaultValue;
 
-    // Define custom module inline that returns tuple
-    return [
-      `# Custom multi-output module`,
-      `class DualConvModule(nn.Module):`,
-      `    def __init__(self, in_c, out_c, k):`,
-      `        super().__init__()`,
-      `        self.conv = nn.Conv2d(in_c, out_c, k)`,
-      `    def forward(self, x):`,
-      `        conv_out = self.conv(x)`,
-      `        flat_out = conv_out.flatten(start_dim=1)`,
-      `        return conv_out, flat_out`,
-      `self.${name} = DualConvModule(${in_channels}, ${out_channels}, ${kernel_size})`,
-    ].join("\n        ");
+    // Just instantiate the helper class (defined globally)
+    return `self.${name} = DualConvModule(${in_channels}, ${out_channels}, ${kernel_size})`;
   }
 
   static getForwardCode(

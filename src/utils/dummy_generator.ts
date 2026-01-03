@@ -91,6 +91,33 @@ export function generatePyTorchCode(
   spans.push({ line: lines.length, kind: "header" });
   lines.push("");
   spans.push({ line: lines.length, kind: "header" });
+
+  // Add helper classes if needed
+  const helperClassDefs = new Map<string, string>();
+  sortedNodes.forEach((node) => {
+    const type = node.type;
+    if (type && LAYER_REGISTRY[type]) {
+      const ClassRef = LAYER_REGISTRY[type];
+      // Check if this node provides helper class definitions
+      if (ClassRef.getHelperClassDefinitions) {
+        const defs = ClassRef.getHelperClassDefinitions(node.data);
+        Object.entries(defs).forEach(([name, code]) => {
+          helperClassDefs.set(name, code);
+        });
+      }
+    }
+  });
+
+  // Inject helper classes before main model
+  helperClassDefs.forEach((code, className) => {
+    code.split('\n').forEach((line) => {
+      lines.push(line);
+      spans.push({ line: lines.length, kind: "header" });
+    });
+    lines.push("");
+    spans.push({ line: lines.length, kind: "header" });
+  });
+
   lines.push("class GeneratedModel(nn.Module):");
   spans.push({ line: lines.length, kind: "header" });
   lines.push("    def __init__(self):");
