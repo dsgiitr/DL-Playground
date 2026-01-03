@@ -23,7 +23,14 @@ type CustomEdgeData = {
 };
 type CustomEdge = Edge<CustomEdgeData, "custom">;
 
-export default function CustomEdge(props: EdgeProps<CustomEdge>) {
+// Extend EdgeProps to include handle IDs which are passed by React Flow
+// but might be missing from the strict type definition in some versions
+interface ExtendedEdgeProps extends EdgeProps<CustomEdge> {
+  sourceHandleId?: string | null;
+  targetHandleId?: string | null;
+}
+
+export default function CustomEdge(props: ExtendedEdgeProps) {
   const {
     id,
     source,
@@ -34,10 +41,12 @@ export default function CustomEdge(props: EdgeProps<CustomEdge>) {
     sourcePosition,
     targetPosition,
     data,
+    sourceHandleId,
+    targetHandleId,
   } = props;
 
-  // Access sourceHandle and targetHandle from edge data
-  const sourceHandle = data?.sourceHandle;
+  // Access sourceHandle and targetHandle from props (preferred) or edge data (fallback)
+  const sourceHandle = sourceHandleId || data?.sourceHandle;
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,

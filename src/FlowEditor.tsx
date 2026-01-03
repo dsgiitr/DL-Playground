@@ -128,6 +128,7 @@ function FlowContent() {
   const [traceData, setTraceData] = useState<TraceResponse | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState<string | null>(null);
+  const [modules, setModules] = useState<SavedModule[]>([]);
   const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
   const historyIndexRef = useRef(0);
   const [canUndo, setCanUndo] = useState(false);
@@ -135,6 +136,11 @@ function FlowContent() {
   const isRestoring = useRef(false);
   const skipHistory = useRef(false);
   const { screenToFlowPosition } = useReactFlow();
+
+  // Load modules on mount
+  useEffect(() => {
+    setModules(listModules());
+  }, []);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
@@ -617,6 +623,11 @@ function FlowContent() {
             onGenerateCode={onGenerateCode}
             codePanelOpen={showLiveCode}
             onCollapse={() => setSidebarCollapsed(true)}
+            modules={modules}
+            onDeleteModule={(id) => {
+              deleteModule(id);
+              setModules(listModules());
+            }}
           />
         )}
       </div>
