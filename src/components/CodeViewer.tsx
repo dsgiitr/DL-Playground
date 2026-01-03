@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent as ReactMouseEvent } from "react";
-import type { CodeSpan } from "../utils/dummy_generator";
+import type { CodeSpan } from "../utils/codeCompile";
 
 type Props = {
     code: string;

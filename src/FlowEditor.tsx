@@ -28,7 +28,7 @@ import {
   type ShapeResult,
   type ShapeFailure,
 } from "./utils/shape_verifier";
-import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+import { generateMainCode } from "./utils/codeCompile.ts";
 import CodeViewer from "./components/CodeViewer.tsx";
 import DiagramView from "./components/DiagramView";
 import TraceView from "./components/TraceView";
@@ -157,7 +157,9 @@ function FlowContent() {
                     ...connection,
                     type: "custom",
                     data: {
-                        label: labelBase
+                        label: labelBase,
+                        sourceHandle: connection.sourceHandle || undefined,
+                        targetHandle: connection.targetHandle || undefined,
                     }
                 },
                 eds
@@ -165,7 +167,7 @@ function FlowContent() {
         });
     }, [setEdges]);
 
-    const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
+    const generated = useMemo(() => generateMainCode(nodes, edges), [nodes, edges]);
     const generatedCode = generated.code;
 
   const onGenerateCode = useCallback(() => {
