@@ -1,73 +1,74 @@
 import { type LayerDefinition } from "../node_gen/BaseClass";
-import { registerLayer, LAYER_REGISTRY } from "../utils/layerRegistry";
-import { AddNode } from "./pytorch_core/AddNode";
-import { ConcatNode } from "./pytorch_core/ConcatNode";
-import { FlattenNode } from "./pytorch_core/FlattenNode";
-import { ReshapeNode } from "./pytorch_core/ReshapeNode";
-import { TransposeNode } from "./pytorch_core/TransposeNode";
+import { LAYER_REGISTRY, registerLayer } from "../utils/layerRegistry";
+import { ModuleListNode } from "./control_flow/ModuleList";
+import { RepeatLayerNode } from "./control_flow/RepeatLayer";
 import { LinearLayerNode } from "./dense/LinearLayer";
 import { InputNode } from "./inputs/InputNode";
-import { Conv1dNode } from "./vision/conv/Conv1dNode";
-import { Conv2dNode } from "./vision/conv/Conv2dNode";
-import { Conv3dNode } from "./vision/conv/Conv3dNode";
-import { DepthwiseConv2dNode } from "./vision/conv/DepthwiseConv2dNode";
-import { PointwiseConv2dNode } from "./vision/conv/PointwiseConv2dNode";
-import { ConvTranspose2dNode } from "./vision/conv/ConvTranspose2dNode";
-import { UpsampleNode } from "./vision/conv/UpsampleNode";
-import { MaxPool2dNode } from "./vision/pooling/MaxPool2dNode";
-import { MaxPool1dNode } from "./vision/pooling/MaxPool1dNode";
-import { AvgPool2dNode } from "./vision/pooling/AvgPool2dNode";
-import { AvgPool1dNode } from "./vision/pooling/AvgPool1dNode";
-import { AdaptiveAvgPool2dNode } from "./vision/pooling/AdaptiveAvgPool2dNode";
-import { AdaptiveMaxPool2dNode } from "./vision/pooling/AdaptiveMaxPool2dNode";
-import { GlobalAvgPool2dNode } from "./vision/pooling/GlobalAvgPool2dNode";
-import { GlobalMaxPool2dNode } from "./vision/pooling/GlobalMaxPool2dNode";
-import { MaxPool3dNode } from "./vision/pooling/MaxPool3dNode";
-import { AvgPool3dNode } from "./vision/pooling/AvgPool3dNode";
-import { ResidualBlockNode } from "./vision/blocks/ResidualBlock";
-import { EmbeddingNode } from "./sequence/EmbeddingNode";
-import { RNNNode } from "./sequence/RNNNode";
-import { LSTMNode } from "./sequence/LSTMNode";
-import { GRUNode } from "./sequence/GRUNode";
-import { MultiheadAttentionNode } from "./sequence/MultiheadAttentionNode";
-import { PositionalEncodingNode } from "./sequence/PositionalEncodingNode";
-import { MSELossNode } from "./losses/MSELossNode";
-import { CrossEntropyLossNode } from "./losses/CrossEntropyLossNode";
 import { BCELossNode } from "./losses/BCELossNode";
+import { CrossEntropyLossNode } from "./losses/CrossEntropyLossNode";
+import { MSELossNode } from "./losses/MSELossNode";
 import { AccuracyNode } from "./metrics/AccuracyNode";
-import { ZerosNode, OnesNode, RandNode } from "./pytorch_core/ConstantTensorNodes";
-import { RepeatNode } from "./pytorch_core/RepeatNode";
-import { makeElementwiseBinary } from "./pytorch_core/ElementwiseBinaryNode";
-import { makeUnaryElementwise } from "./pytorch_core/UnaryElementwiseNode";
-import { MatMulNode } from "./pytorch_core/MatMulNode";
-import { PowNode } from "./pytorch_core/PowNode";
-import { ClipNode } from "./pytorch_core/ClipNode";
-import { makeReduction } from "./pytorch_core/ReductionNode";
-import { RepeatLayerNode } from "./control_flow/RepeatLayer";
+import { ModuleRefNode } from "./ModuleRefNode";
 import {
-    ReLUNode,
-    LeakyReLUNode,
-    GELUNode,
     ELUNode,
+    GELUNode,
+    HardSigmoidNode,
+    HardSwishNode,
+    LeakyReLUNode,
+    ReLUNode,
     SELUNode,
-    TanhNode,
     SigmoidNode,
     SoftplusNode,
     SoftsignNode,
-    HardSwishNode,
-    HardSigmoidNode,
+    TanhNode,
 } from "./pytorch_core/activations";
-import { SoftmaxNode, LogSoftmaxNode } from "./pytorch_core/SoftmaxNode";
-import { ProdNode, MaxNode, MinNode, ArgMaxNode, ArgMinNode } from "./pytorch_core/ArgExtremaNodes";
+import { AddNode } from "./pytorch_core/AddNode";
+import { ArgMaxNode, ArgMinNode, MaxNode, MinNode, ProdNode } from "./pytorch_core/ArgExtremaNodes";
+import { ClipNode } from "./pytorch_core/ClipNode";
+import { ConcatNode } from "./pytorch_core/ConcatNode";
+import { OnesNode, RandNode, ZerosNode } from "./pytorch_core/ConstantTensorNodes";
+import { makeElementwiseBinary } from "./pytorch_core/ElementwiseBinaryNode";
+import { FlattenNode } from "./pytorch_core/FlattenNode";
+import { MatMulNode } from "./pytorch_core/MatMulNode";
 import {
     BatchNorm2dNode,
-    InstanceNorm2dNode,
     GroupNormNode,
+    InstanceNorm2dNode,
     LayerNormNode,
     RMSNormNode,
 } from "./pytorch_core/NormNodes";
-import { DropoutNode, SpatialDropout2dNode, AlphaDropoutNode, StochasticDepthNode } from "./pytorch_core/RegNodes";
-import { ModuleRefNode } from "./ModuleRefNode";
+import { PowNode } from "./pytorch_core/PowNode";
+import { makeReduction } from "./pytorch_core/ReductionNode";
+import { AlphaDropoutNode, DropoutNode, SpatialDropout2dNode, StochasticDepthNode } from "./pytorch_core/RegNodes";
+import { RepeatNode } from "./pytorch_core/RepeatNode";
+import { ReshapeNode } from "./pytorch_core/ReshapeNode";
+import { LogSoftmaxNode, SoftmaxNode } from "./pytorch_core/SoftmaxNode";
+import { TransposeNode } from "./pytorch_core/TransposeNode";
+import { makeUnaryElementwise } from "./pytorch_core/UnaryElementwiseNode";
+import { EmbeddingNode } from "./sequence/EmbeddingNode";
+import { GRUNode } from "./sequence/GRUNode";
+import { LSTMNode } from "./sequence/LSTMNode";
+import { MultiheadAttentionNode } from "./sequence/MultiheadAttentionNode";
+import { PositionalEncodingNode } from "./sequence/PositionalEncodingNode";
+import { RNNNode } from "./sequence/RNNNode";
+import { ResidualBlockNode } from "./vision/blocks/ResidualBlock";
+import { Conv1dNode } from "./vision/conv/Conv1dNode";
+import { Conv2dNode } from "./vision/conv/Conv2dNode";
+import { Conv3dNode } from "./vision/conv/Conv3dNode";
+import { ConvTranspose2dNode } from "./vision/conv/ConvTranspose2dNode";
+import { DepthwiseConv2dNode } from "./vision/conv/DepthwiseConv2dNode";
+import { PointwiseConv2dNode } from "./vision/conv/PointwiseConv2dNode";
+import { UpsampleNode } from "./vision/conv/UpsampleNode";
+import { AdaptiveAvgPool2dNode } from "./vision/pooling/AdaptiveAvgPool2dNode";
+import { AdaptiveMaxPool2dNode } from "./vision/pooling/AdaptiveMaxPool2dNode";
+import { AvgPool1dNode } from "./vision/pooling/AvgPool1dNode";
+import { AvgPool2dNode } from "./vision/pooling/AvgPool2dNode";
+import { AvgPool3dNode } from "./vision/pooling/AvgPool3dNode";
+import { GlobalAvgPool2dNode } from "./vision/pooling/GlobalAvgPool2dNode";
+import { GlobalMaxPool2dNode } from "./vision/pooling/GlobalMaxPool2dNode";
+import { MaxPool1dNode } from "./vision/pooling/MaxPool1dNode";
+import { MaxPool2dNode } from "./vision/pooling/MaxPool2dNode";
+import { MaxPool3dNode } from "./vision/pooling/MaxPool3dNode";
 
 export type NodeGroup = {
     label: string;
@@ -222,6 +223,7 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
         label: "Control Flow",
         nodes: {
             repeat_layer: RepeatLayerNode,
+            module_list: ModuleListNode,
         },
     },
 };
