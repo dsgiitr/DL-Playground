@@ -4,36 +4,38 @@ import {
     applyNodeChanges,
     Background,
     ReactFlow,
-    type ReactFlowInstance,
     ReactFlowProvider,
     useReactFlow,
-    type NodeSelectionChange,
-    type EdgeSelectionChange,
     type DefaultEdgeOptions,
     type Edge,
+    type EdgeSelectionChange,
     type FitViewOptions,
     type Node,
+    type NodeSelectionChange,
     type OnConnect,
     type OnEdgesChange,
     type OnNodeDrag,
     type OnNodesChange,
+    type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Sidebar from "./Sidebar.tsx";
-import { edgeTypes } from "./types/edgeTypes";
-import { nodeTypes } from "./types/nodeTypes";
-import { verifyShapes, type ShapeResult, type ShapeFailure } from "./utils/shape_verifier";
-import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import CodeViewer from "./components/CodeViewer.tsx";
 import DiagramView from "./components/DiagramView";
-import { exportDiagramDataUrl } from "./utils/diagramExport";
-import { buildGraphIR, applyGraphIR } from "./utils/graphIR";
-import type { GraphIR } from "./types/graph";
 import TraceView from "./components/TraceView";
-import { runTorchLensTrace } from "./utils/traceService";
+import Sidebar from "./Sidebar.tsx";
+import { edgeTypes } from "./types/edgeTypes";
+import type { GraphIR } from "./types/graph";
+import { LAYER_REGISTRY, nodeTypes } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
-import { getModule, listModules, saveModule, deleteModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
+import { exportDiagramDataUrl } from "./utils/diagramExport";
+import { useRepeatSystem } from "./utils/repeatLogic";
+// import { generatePyTorchCode } from "./utils/dummy_generator.ts";
+import { generateMainCode } from "./utils/codeCompile";
+import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
+import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
+import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
+import { runTorchLensTrace } from "./utils/traceService";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -125,7 +127,7 @@ function FlowContent() {
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getNodes } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
         changes => {
@@ -161,8 +163,12 @@ function FlowContent() {
             );
         });
     }, [setEdges]);
-
-    const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
+    // Temporary swap to validate behaviour before debugging
+    // const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
+    const generated = useMemo(() => {
+        const { rootNodes, rootEdges } = getRootGraph(nodes, edges);
+        return generateMainCode(rootNodes, rootEdges);
+    }, [nodes, edges]);
     const generatedCode = generated.code;
 
     const onGenerateCode = useCallback(() => {
@@ -337,6 +343,7 @@ function FlowContent() {
         },
         []
     );
+    const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
     const onDrop = useCallback(
         (event: React.DragEvent) => {
@@ -363,6 +370,8 @@ function FlowContent() {
                 id: getId(),
                 type: type,
                 position,
+                // width: 150,
+                // height: 50,
                 data: moduleMeta
                     ? {
                         ...moduleMeta,
@@ -370,11 +379,13 @@ function FlowContent() {
                     }
                     : {},
             };
+            const finalNode = assignParent(newNode, getNodes())
 
-            setNodes(nds => nds.concat(newNode));
+            setNodes(nds => [...nds, finalNode]);
         },
-        [screenToFlowPosition, setNodes]
+        [screenToFlowPosition, setNodes, assignParent, getNodes]
     );
+    // Code to handle Repeat Blocks
 
     const onSelectionChange = useCallback(
         (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
@@ -564,30 +575,44 @@ function FlowContent() {
         },
         [setNodes, setEdges]
     );
+    const verificationResult = useMemo(() => {
+        return verifyShapes(nodes, edges, LAYER_REGISTRY);
+    }, [nodes, edges]);
     useEffect(() => {
-        const result = verifyShapes(nodes, edges);
         setShapeResult(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(result)) return prev;
-            return result;
+            const prevStr = JSON.stringify(prev);
+            const nextStr = JSON.stringify(verificationResult);
+            return prevStr === nextStr ? prev : verificationResult
         })
-        if (!result.ok) {
-            console.warn("Shape validation failures:", result.failures);
+        if (!verificationResult.ok) {
+            console.warn("Shape validation Failures:", verificationResult.failures);
         }
-        if (!shapeResult || !shapeResult.shapes) return;
-        skipHistory.current = true;
+    }, [verificationResult]);
+
+    useEffect(() => {
+        if (!verificationResult.shapes) return;
         setNodes(currentNodes => {
+
+            const deepEqual = (a: any, b: any): boolean => {
+                if (a === b) return true;
+                if (!Array.isArray(a) || !Array.isArray(b)) return false;
+                if (a.length != b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (Array.isArray(a[i]) && Array.isArray(b[i])) {
+                        if (!deepEqual(a[i], b[i])) return false;
+                    } else if (a[i] !== b[i]) {
+                        return false;
+                    }
+                }
+                return true
+            }
             let hasChanges = false;
             const nextNodes = currentNodes.map(n => {
-                const shapeEntry = result.shapes[n.id];
+                const shapeEntry = verificationResult.shapes[n.id];
                 const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
                 const currentShapeArray =
                     n.data && typeof n.data === "object" ? (n.data as { __shape?: number[] }).__shape : undefined;
-                const isSame = (() => {
-                    if (currentShapeArray === newShapeArray) return true;
-                    if (!currentShapeArray || !newShapeArray) return false;
-                    if (currentShapeArray.length !== newShapeArray.length) return false;
-                    return currentShapeArray.every((val, index) => val === newShapeArray[index]);
-                })();
+                const isSame = deepEqual(currentShapeArray, newShapeArray)
                 if (isSame) return n;
                 hasChanges = true;
                 return {
@@ -598,36 +623,7 @@ function FlowContent() {
             })
             return hasChanges ? nextNodes : currentNodes;
         })
-    }, [nodes, edges, setNodes, shapeResult]);
-    // useEffect(() => {
-    //     const result = verifyShapes(nodes, edges);
-    //     setShapeResult(result);
-    //     if (!result.ok) {
-    //         console.warn("Shape validation failures:", result.failures);
-    //     }
-    // }, [nodes, edges]);
-
-    // useEffect(() => {
-    //     if (!shapeResult || !shapeResult.shapes) return;
-    //     skipHistory.current = true;
-    //     setNodes(prev => {
-    //         let changed = false;
-    //         const next = prev.map(n => {
-    //             const newShape = shapeResult.shapes[n.id];
-    //             if (!newShape) return n;
-    //             const oldShape = (n.data as any).__shape as number[] | undefined;
-    //             const same =
-    //                 Array.isArray(oldShape) &&
-    //                 Array.isArray(newShape) &&
-    //                 oldShape.length === newShape.length &&
-    //                 oldShape.every((v, i) => v === newShape[i]);
-    //             if (same) return n;
-    //             changed = true;
-    //             return { ...n, data: { ...n.data, __shape: newShape } };
-    //         });
-    //         return changed ? next : prev;
-    //     });
-    // }, [shapeResult, setNodes]);
+    }, [verificationResult, setNodes]);
 
     const friendlyError = useCallback((failure: ShapeFailure) => {
         const label = failure.label || failure.nodeType || failure.nodeId;
@@ -919,12 +915,12 @@ function FlowContent() {
                                             color: exporting ? "#777" : "#e6edf3",
                                             cursor: exporting ? "not-allowed" : "pointer",
                                             textAlign: "left"
-                                    }}
-                                >
-                                    Export as SVG
-                                </button>
-                                <button
-                                    onClick={() => exportDiagram("png")}
+                                        }}
+                                    >
+                                        Export as SVG
+                                    </button>
+                                    <button
+                                        onClick={() => exportDiagram("png")}
                                         disabled={!!exporting}
                                         style={{
                                             padding: "8px 12px",
@@ -933,11 +929,11 @@ function FlowContent() {
                                             border: "none",
                                             color: exporting ? "#777" : "#e6edf3",
                                             cursor: exporting ? "not-allowed" : "pointer",
-                                        textAlign: "left"
-                                    }}
-                                >
-                                    Export as PNG
-                                </button>
+                                            textAlign: "left"
+                                        }}
+                                    >
+                                        Export as PNG
+                                    </button>
                                     <button
                                         onClick={() => {
                                             downloadGraphJson();
@@ -960,11 +956,11 @@ function FlowContent() {
                             )}
                         </div>
                     </div>
-            <div
-                style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
+                    <div
+                        style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
                             gap: "4px",
                             minHeight: "32px",
                             maxHeight: "120px",
@@ -1002,6 +998,7 @@ function FlowContent() {
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
                             onNodeDrag={onNodeDrag}
+                            onNodeDragStop={onNodeDragStop}
                             nodeTypes={nodeTypes}
                             edgeTypes={edgeTypes}
                             fitView
@@ -1319,16 +1316,16 @@ function FlowContent() {
                                         setOpenModule(curr =>
                                             curr
                                                 ? {
-                                                      ...curr,
-                                                      edges: addEdge(
-                                                          {
-                                                              ...connection,
-                                                              type: "custom",
-                                                              data: { label: connection.source || "out" },
-                                                          },
-                                                          curr.edges
-                                                      ),
-                                                  }
+                                                    ...curr,
+                                                    edges: addEdge(
+                                                        {
+                                                            ...connection,
+                                                            type: "custom",
+                                                            data: { label: connection.source || "out" },
+                                                        },
+                                                        curr.edges
+                                                    ),
+                                                }
                                                 : curr
                                         )
                                     }

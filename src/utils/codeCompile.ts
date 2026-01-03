@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import { LAYER_REGISTRY } from "../types/nodeTypes";
+import { LAYER_REGISTRY } from "./layerRegistry";
 
 export type CodeSpan = {
     line: number;
@@ -20,11 +20,169 @@ function sanitizeIdent(name: string): string {
     const safe = /^[A-Za-z_]/.test(cleaned[0]) ? cleaned : `_${cleaned}`;
     return safe;
 }
-/**
- *  @deprecated Use functions in `codeCompile.ts`
- *  This function has been deprecated and a refactored version is added to codeCompile.ts
- *  Prefer generateMainCode and compileGraphtoScripts function
- */
+
+// Converts graphs into 3 components: initlines, forward lines, returnVar
+export function compileGraphToScript(
+    nodes: Node[],
+    edges: Edge[],
+    variablePrefix: string = "" // Prefix for local variables to avoid namespace collisions
+) {
+    if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
+    const initLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
+    const forwardLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
+    const nodeOutputMap: Record<string, string[]> = {};
+    // 1. Build Adjacency List
+    const adj: Record<string, string[]> = {};
+    const inDegree: Record<string, number> = {};
+    nodes.forEach(n => {
+        adj[n.id] = [];
+        inDegree[n.id] = 0;
+    });
+    edges.forEach(e => {
+        if (adj[e.source]) adj[e.source].push(e.target);
+        if (inDegree[e.target] !== undefined) inDegree[e.target]++;
+    });
+
+    // 2. Topological Sort
+    const queue: string[] = nodes.filter(n => inDegree[n.id] === 0).map(n => n.id);
+    const sortedIds: string[] = [];
+
+    while (queue.length > 0) {
+        const u = queue.shift()!;
+        sortedIds.push(u);
+        if (adj[u]) {
+            adj[u].forEach(v => {
+                inDegree[v]--;
+                if (inDegree[v] === 0) queue.push(v);
+            });
+        }
+    }
+
+    const finalOrderIds =
+        sortedIds.length === nodes.length
+            ? sortedIds
+            : [...sortedIds, ...nodes.map(n => n.id).filter(id => !sortedIds.includes(id))];
+    const sortedNodes = finalOrderIds.map(id => nodes.find(n => n.id === id)!);
+
+    // This code creates a list of all the input and output edges of a node
+    const incomingEdges: Record<string, Edge[]> = {};
+    const outgoingEdges: Record<string, Edge[]> = {};
+
+    nodes.forEach(n => {
+        incomingEdges[n.id] = [];
+        outgoingEdges[n.id] = [];
+    });
+
+    edges.forEach(e => {
+        incomingEdges[e.target]?.push(e);
+        outgoingEdges[e.source]?.push(e);
+    });
+
+    const getVarName = (base: string) => sanitizeIdent(`${variablePrefix}${base}`);
+    const edgeLabel = (edge: Edge, fallback: string) => {
+        const base = (edge.data as any)?.label || fallback;
+        return getVarName(base);
+    };
+
+    const seedLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
+    nodes
+        .filter(n => (incomingEdges[n.id] ?? []).length === 0)
+        .forEach(n => {
+            const outs = outgoingEdges[n.id] ?? [];
+            outs.forEach((e, idx) => {
+                const name = edgeLabel(e, `in_${n.id}_${idx}`);
+                seedLines.push({
+                    text: `        ${name} = x  # input passthrough`,
+                    span: { kind: "forward", nodeId: n.id, edgeIds: [e.id] },
+                });
+            });
+        });
+
+    sortedNodes.forEach((node, index) => {
+        const layerName = `${sanitizeIdent(node.id)}_layer`;
+        const type = node.type;
+        if (type && LAYER_REGISTRY[type]) {
+            const ClassRef = LAYER_REGISTRY[type];
+            const line = ClassRef.getInitCode(node.data, layerName);
+
+            initLines.push({ text: `        ${line}`, span: { kind: "init", nodeId: node.id } });
+
+            const inEdges = incomingEdges[node.id];
+            const inputNames =
+                inEdges.length === 0 ? ["x"] : inEdges.map((e, idx) => edgeLabel(e, `in_${e.source || idx}`));
+
+            const outEdges = outgoingEdges[node.id];
+            const handlesSpec =
+                typeof ClassRef.handles === "function" ? ClassRef.handles(node.data as any) : ClassRef.handles;
+            const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
+            const outputNames = (sourceHandles || []).length
+                ? sourceHandles.map((handleId, idx) => {
+                      const matching = outEdges.find(e => e.sourceHandle === handleId);
+                      const base = matching
+                          ? edgeLabel(matching, `out_${node.id}_${handleId}`)
+                          : `out_${node.id}_${idx}`;
+                      return sanitizeIdent(base);
+                  })
+                : outEdges.length === 0
+                ? [sanitizeIdent(`out_${node.id}`)]
+                : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
+            nodeOutputMap[node.id] = outputNames;
+            const forward_line = ClassRef.getForwardCode(node.data, layerName, inputNames, outputNames);
+
+            forwardLines.push({
+                text: `        ${forward_line}`,
+                span: { kind: "forward", nodeId: node.id, edgeIds: outEdges.map(e => e.id) },
+            });
+        }
+    });
+    const terminalNodes = sortedNodes.filter(n => outgoingEdges[n.id].length === 0);
+    let returnVar = "x";
+    const allTerminalOutputs: string[] = [];
+    terminalNodes.forEach(n => {
+        const outputs = nodeOutputMap[n.id] || [];
+        allTerminalOutputs.push(...outputs);
+    });
+    if (allTerminalOutputs.length === 1) {
+        returnVar = allTerminalOutputs[0];
+    } else if (allTerminalOutputs.length > 1) {
+        returnVar = `(${allTerminalOutputs.join(", ")})`;
+    }
+    return { initLines, forwardLines, returnVar };
+}
+
+export function generateMainCode(nodes: Node[], edges: Edge[]): CodeGenResult {
+    const lines: string[] = [];
+    const spans: CodeSpan[] = [];
+    // Header
+    lines.push("import torch", "import torch.nn as nn", "", "class GeneratedModel(nn.Module):");
+    spans.push({ line: 1, kind: "header" }, { line: 2, kind: "header" }, { line: 4, kind: "header" });
+
+    // Init
+    lines.push("    def __init__(self):");
+    lines.push("        super().__init__()");
+
+    // Compile Main Graph
+    const { initLines, forwardLines, returnVar } = compileGraphToScript(nodes, edges);
+
+    // Stitch Init
+    initLines?.forEach(l => {
+        lines.push(l.text);
+        if (l.span) spans.push({ ...l.span, line: lines.length });
+    });
+    lines.push("");
+
+    lines.push("    def forward(self, x):");
+    forwardLines?.forEach(l => {
+        lines.push(l.text);
+        if (l.span) spans.push({ ...l.span, line: lines.length });
+    });
+    lines.push(`        return ${returnVar}`);
+    spans.push({ line: lines.length, kind: "return" });
+    return { code: lines.join("\n"), spans };
+}
+// Current code doesn't work for multiple inputs. We need to add input blocks or something similar. Output blocks can also be created.
+// Right now if the same output is being used by 2 blocks hence 2 protruding edges are there then the label on each edge is different, this may be changed later.
+// Though this requires us that the nodes have labelled outputs and edges are not between 2 nodes but between 2 "handles"
 export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult {
     if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
 
@@ -60,7 +218,10 @@ export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult
         }
     }
 
-    const finalOrderIds = sortedIds.length === nodes.length ? sortedIds : nodes.map(n => n.id);
+    const finalOrderIds =
+        sortedIds.length === nodes.length
+            ? sortedIds
+            : [...sortedIds, ...nodes.map(n => n.id).filter(id => !sortedIds.includes(id))];
     const sortedNodes = finalOrderIds.map(id => nodes.find(n => n.id === id)!);
 
     // This code creates a list of all the input and output edges of a node

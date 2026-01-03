@@ -1,4 +1,5 @@
 import { type LayerDefinition } from "../node_gen/BaseClass";
+import { registerLayer, LAYER_REGISTRY } from "../utils/layerRegistry";
 import { AddNode } from "./pytorch_core/AddNode";
 import { ConcatNode } from "./pytorch_core/ConcatNode";
 import { FlattenNode } from "./pytorch_core/FlattenNode";
@@ -42,10 +43,29 @@ import { MatMulNode } from "./pytorch_core/MatMulNode";
 import { PowNode } from "./pytorch_core/PowNode";
 import { ClipNode } from "./pytorch_core/ClipNode";
 import { makeReduction } from "./pytorch_core/ReductionNode";
-import { ReLUNode, LeakyReLUNode, GELUNode, ELUNode, SELUNode, TanhNode, SigmoidNode, SoftplusNode, SoftsignNode, HardSwishNode, HardSigmoidNode } from "./pytorch_core/activations";
+import { RepeatLayerNode } from "./control_flow/RepeatLayer";
+import {
+    ReLUNode,
+    LeakyReLUNode,
+    GELUNode,
+    ELUNode,
+    SELUNode,
+    TanhNode,
+    SigmoidNode,
+    SoftplusNode,
+    SoftsignNode,
+    HardSwishNode,
+    HardSigmoidNode,
+} from "./pytorch_core/activations";
 import { SoftmaxNode, LogSoftmaxNode } from "./pytorch_core/SoftmaxNode";
 import { ProdNode, MaxNode, MinNode, ArgMaxNode, ArgMinNode } from "./pytorch_core/ArgExtremaNodes";
-import { BatchNorm2dNode, InstanceNorm2dNode, GroupNormNode, LayerNormNode, RMSNormNode } from "./pytorch_core/NormNodes";
+import {
+    BatchNorm2dNode,
+    InstanceNorm2dNode,
+    GroupNormNode,
+    LayerNormNode,
+    RMSNormNode,
+} from "./pytorch_core/NormNodes";
 import { DropoutNode, SpatialDropout2dNode, AlphaDropoutNode, StochasticDepthNode } from "./pytorch_core/RegNodes";
 import { ModuleRefNode } from "./ModuleRefNode";
 
@@ -59,7 +79,7 @@ export type NodeGroup = {
 export const NODE_GROUPS: Record<string, NodeGroup> = {
     inputs: {
         label: "Inputs",
-        nodes: { input_layer: InputNode }
+        nodes: { input_layer: InputNode },
     },
     torch_ops: {
         label: "Torch Ops",
@@ -92,17 +112,17 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
                 min_layer: MinNode,
                 argmax_layer: ArgMaxNode,
                 argmin_layer: ArgMinNode,
-                repeat_layer: RepeatNode
+                repeat_layer: RepeatNode,
             };
-        })()
+        })(),
     },
     tensor_shape: {
         label: "Tensor Shape",
-        nodes: { reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode }
+        nodes: { reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode },
     },
     tensor_create: {
         label: "Tensor Creation",
-        nodes: { zeros_layer: ZerosNode, ones_layer: OnesNode, rand_layer: RandNode }
+        nodes: { zeros_layer: ZerosNode, ones_layer: OnesNode, rand_layer: RandNode },
     },
     activations: {
         label: "Activations",
@@ -119,8 +139,8 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             hardswish_layer: HardSwishNode,
             hardsigmoid_layer: HardSigmoidNode,
             softmax_layer: SoftmaxNode,
-            logsoftmax_layer: LogSoftmaxNode
-        }
+            logsoftmax_layer: LogSoftmaxNode,
+        },
     },
     normalization: {
         label: "Normalization",
@@ -129,8 +149,8 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             instancenorm2d_layer: InstanceNorm2dNode,
             groupnorm_layer: GroupNormNode,
             layernorm_layer: LayerNormNode,
-            rmsnorm_layer: RMSNormNode
-        }
+            rmsnorm_layer: RMSNormNode,
+        },
     },
     regularization: {
         label: "Regularization",
@@ -138,12 +158,12 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             dropout_layer: DropoutNode,
             spatialdropout2d_layer: SpatialDropout2dNode,
             alphadropout_layer: AlphaDropoutNode,
-            stochasticdepth_layer: StochasticDepthNode
-        }
+            stochasticdepth_layer: StochasticDepthNode,
+        },
     },
     dense: {
         label: "Linear / Dense",
-        nodes: { linear_layer: LinearLayerNode }
+        nodes: { linear_layer: LinearLayerNode },
     },
     vision_conv: {
         label: "Vision - Convolution",
@@ -155,8 +175,8 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             pointwiseconv2d_layer: PointwiseConv2dNode,
             convtranspose2d_layer: ConvTranspose2dNode,
             upsample_layer: UpsampleNode,
-            residual_block: ResidualBlockNode
-        }
+            residual_block: ResidualBlockNode,
+        },
     },
     vision_pool: {
         label: "Vision - Pooling",
@@ -170,8 +190,8 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             adaptiveavgpool2d_layer: AdaptiveAvgPool2dNode,
             adaptivemaxpool2d_layer: AdaptiveMaxPool2dNode,
             globalavgpool2d_layer: GlobalAvgPool2dNode,
-            globalmaxpool2d_layer: GlobalMaxPool2dNode
-        }
+            globalmaxpool2d_layer: GlobalMaxPool2dNode,
+        },
     },
     sequence: {
         label: "Sequence / Attention",
@@ -181,35 +201,40 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
             lstm_layer: LSTMNode,
             gru_layer: GRUNode,
             multihead_attention_layer: MultiheadAttentionNode,
-            positional_encoding_layer: PositionalEncodingNode
-        }
+            positional_encoding_layer: PositionalEncodingNode,
+        },
     },
     losses: {
         label: "Losses",
         nodes: {
             mse_loss: MSELossNode,
             cross_entropy_loss: CrossEntropyLossNode,
-            bce_loss: BCELossNode
-        }
+            bce_loss: BCELossNode,
+        },
     },
     metrics: {
         label: "Metrics",
         nodes: {
-            accuracy_metric: AccuracyNode
-        }
-    }
-};
-
-const BASE_LAYER_REGISTRY: Record<string, LayerDefinition<any>> = Object.values(NODE_GROUPS).reduce(
-    (acc, group) => {
-        Object.assign(acc, group.nodes as Record<string, LayerDefinition<any>>);
-        return acc;
+            accuracy_metric: AccuracyNode,
+        },
     },
-    {} as Record<string, LayerDefinition<any>>
-);
-
-export const LAYER_REGISTRY: Record<string, LayerDefinition<any>> = {
-    ...BASE_LAYER_REGISTRY,
-    // Custom module reference node; instances carry metadata in `data`.
-    module_ref: ModuleRefNode,
+    control: {
+        label: "Control Flow",
+        nodes: {
+            repeat_layer: RepeatLayerNode,
+        },
+    },
 };
+
+Object.values(NODE_GROUPS).forEach(group => {
+    Object.entries(group.nodes).forEach(([key, Class]) => {
+        registerLayer(key, Class as LayerDefinition<any>);
+    });
+});
+
+// 2. Register Special Nodes (like ModuleRef)
+registerLayer("module_ref", ModuleRefNode);
+
+// 3. Re-export the populated registry for convenience
+console.log(LAYER_REGISTRY);
+export { LAYER_REGISTRY };

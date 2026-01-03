@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { ComponentType } from "react";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import type { LayerDefinition } from "../node_gen/BaseClass";
+import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";
 import type { ModuleContract } from "../utils/moduleRegistry";
 
 export type ModuleRefData = {

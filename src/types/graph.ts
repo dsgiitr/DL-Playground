@@ -21,6 +21,8 @@ export interface GraphNode {
     display?: GraphDisplay;
     handles: GraphHandle[];
     position?: { x: number; y: number };
+    parentId?: string;
+    extent?: "parent";
     data?: Record<string, unknown>;
 }
 

@@ -76,23 +76,23 @@ export function InputControl({
     const isOptional = !spec.required;
     const style = (isOptional && value !== undefined)
         ? {
-              width: "60px",
-              backgroundColor: "#111",
-              border: "1px solid #64ffda",
-              color: "white",
-              borderRadius: "4px",
-              padding: "2px 4px",
-              fondSize: "11px"
-          }
+            width: "60px",
+            backgroundColor: "#111",
+            border: "1px solid #64ffda",
+            color: "white",
+            borderRadius: "4px",
+            padding: "2px 4px",
+            fondSize: "11px"
+        }
         : {
-              width: "60px",
-              backgroundColor: "#111",
-              border: "1px solid #444",
-              color: "white",
-              borderRadius: "4px",
-              padding: "2px 4px",
-              fondSize: "11px"
-          };
+            width: "60px",
+            backgroundColor: "#111",
+            border: "1px solid #444",
+            color: "white",
+            borderRadius: "4px",
+            padding: "2px 4px",
+            fondSize: "11px"
+        };
     switch (spec.type) {
         case "boolean":
             return (
@@ -197,7 +197,7 @@ export function renderHandles(side: "left" | "right", ids: string[], isConnectab
                 key={`${side}-${idLabel}`}
                 style={{
                     position: "absolute",
-                    [isLeft ? "left" : "right"]: -24,
+                    [isLeft ? "left" : "right"]: -1,
                     top: topPct,
                     transform: "translateY(-50%)",
                     display: "flex",
