@@ -140,6 +140,35 @@ export function generatePyTorchCode(
       return finalName;
     }
 
+    // Try to get handle's defaultLabel from HandleSchema
+    if (node?.type && LAYER_REGISTRY[node.type]) {
+      const layerDef = LAYER_REGISTRY[node.type];
+      const handleSchema =
+        typeof layerDef.handleSchema === "function"
+          ? layerDef.handleSchema(node.data as any)
+          : layerDef.handleSchema;
+
+      if (handleSchema) {
+        const handleDef = handleSchema.outputs.find((h) => h.id === handleId);
+        if (handleDef?.defaultLabel) {
+          let varName = sanitizeIdent(handleDef.defaultLabel);
+          // Ensure uniqueness
+          let finalName = varName;
+          let counter = 1;
+          while (
+            Object.values(outputVars).some((handles) =>
+              Object.values(handles).includes(finalName)
+            )
+          ) {
+            finalName = `${varName}_${counter}`;
+            counter++;
+          }
+          outputVars[nodeId][handleId] = finalName;
+          return finalName;
+        }
+      }
+    }
+
     // Fallback: use 'x' as base name for generic outputs
     const baseName = "x";
 
