@@ -212,6 +212,7 @@ export function ParamsList<D>({
         const spec = paramSchema[key];
         if (!spec) return null;
         return (
+<<<<<<< HEAD
           <div
             key={key}
             style={{
@@ -226,6 +227,18 @@ export function ParamsList<D>({
                 fontSize: "11px",
                 color: optionalParams.includes(key) ? "#aaa" : "#fff",
               }}
+=======
+            <div
+                key={`${side}-${idLabel}`}
+                style={{
+                    position: "absolute",
+                    [isLeft ? "left" : "right"]: -1,
+                    top: topPct,
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    alignItems: "center"
+                }}
+>>>>>>> b0a3a31f319e6c29b9c50b2e83868152b738ef03
             >
               {spec.label || key}
             </label>

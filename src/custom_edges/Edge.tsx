@@ -6,6 +6,7 @@ import {
   EdgeLabelRenderer,
   useReactFlow,
 } from "@xyflow/react";
+import { useState } from "react";
 import { LAYER_REGISTRY } from "../types/nodeTypes";
 
 type CustomEdgeData = {
@@ -47,6 +48,30 @@ export default function CustomEdge(props: ExtendedEdgeProps) {
 
   // Access sourceHandle and targetHandle from props (preferred) or edge data (fallback)
   const sourceHandle = sourceHandleId || data?.sourceHandle;
+=======
+}: EdgeProps<CustomEdge>) {
+    const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+    const stroke = data?.highlight ? "#f1c40f" : data?.error ? "#ff6b6b" : undefined;
+    const strokeWidth = data?.highlight ? 3.5 : 2;
+    const { setEdges } = useReactFlow();
+    const label = data?.label ?? id;
+    const [isHovered, setIsHovered] = useState(false);
+    const onLabelChange = (newLabel: string) => {
+        setEdges(edges =>
+            edges.map(e =>
+                e.id === id
+                    ? {
+                        ...e,
+                        data: {
+                            ...e.data,
+                            label: newLabel
+                        }
+                    }
+                    : e
+            )
+        );
+    };
+>>>>>>> b0a3a31f319e6c29b9c50b2e83868152b738ef03
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -85,6 +110,9 @@ export default function CustomEdge(props: ExtendedEdgeProps) {
 
   // Edge label is either the custom per-edge label or auto-generated from handle
   const edgeLabel = data?.edgeLabel || handleDefaultLabel;
+
+  const label = data?.label ?? id;
+  const [isHovered, setIsHovered] = useState(false);
 
   const onLabelChange = (newLabel: string) => {
     // Update this edge's label (does not affect other edges from the same handle)

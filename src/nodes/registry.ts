@@ -1,4 +1,5 @@
 import { type LayerDefinition } from "../node_gen/BaseClass";
+import { registerLayer, LAYER_REGISTRY } from "../utils/layerRegistry";
 import { AddNode } from "./pytorch_core/AddNode";
 import { ConcatNode } from "./pytorch_core/ConcatNode";
 import { FlattenNode } from "./pytorch_core/FlattenNode";
@@ -46,6 +47,7 @@ import { MatMulNode } from "./pytorch_core/MatMulNode";
 import { PowNode } from "./pytorch_core/PowNode";
 import { ClipNode } from "./pytorch_core/ClipNode";
 import { makeReduction } from "./pytorch_core/ReductionNode";
+import { RepeatLayerNode } from "./control_flow/RepeatLayer";
 import {
   ReLUNode,
   LeakyReLUNode,
@@ -250,6 +252,12 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
       accuracy_metric: AccuracyNode,
     },
   },
+  control: {
+    label: "Control Flow",
+    nodes: {
+      repeat_layer: RepeatLayerNode,
+    },
+  },
 };
 
 export const LAYER_REGISTRY: Record<
@@ -259,3 +267,6 @@ export const LAYER_REGISTRY: Record<
   Object.assign(acc, group.nodes as Record<string, LayerDefinition<any>>);
   return acc;
 }, {} as Record<string, LayerDefinition<any>>);
+
+// Register ModuleRefNode after building the main registry
+Object.assign(LAYER_REGISTRY, { module_ref: ModuleRefNode });

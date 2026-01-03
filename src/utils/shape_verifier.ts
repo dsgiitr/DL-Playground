@@ -20,12 +20,21 @@ export type ShapeResult = {
   failures: ShapeFailure[];
 };
 
-export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
+export function verifyShapes(nodes: Node[], edges: Edge[], registry?: Record<string, any>): ShapeResult {
+  const reg = registry || LAYER_REGISTRY;
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const sources: Record<string, string[]> = {};
   const edgesByTarget: Record<string, Edge[]> = {};
 
   edges.forEach((e) => {
+    const sourceNode = byId[e.source];
+    const targetNode = byId[e.target];
+    // Skip edges where target is inside source (parent-child relationship)
+    if (sourceNode && targetNode) {
+      if (sourceNode.parentId === targetNode.id) {
+        return;
+      }
+    }
     if (byId[e.target]) {
       (sources[e.target] ||= []).push(e.source);
       (edgesByTarget[e.target] ||= []).push(e);
@@ -45,7 +54,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
         pending.delete(id);
         continue;
       }
-      const layer = node.type ? LAYER_REGISTRY[node.type] : undefined;
+      const layer = node.type ? reg[node.type] : undefined;
       if (!layer) {
         failures.push({
           nodeId: id,
@@ -126,7 +135,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[]): ShapeResult {
   if (pending.size) {
     pending.forEach((id) => {
       const node = byId[id];
-      const layer = node?.type ? LAYER_REGISTRY[node.type] : undefined;
+      const layer = node?.type ? reg[node.type] : undefined;
       failures.push({
         nodeId: id,
         nodeType: node?.type,
