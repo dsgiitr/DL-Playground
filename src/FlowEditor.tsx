@@ -35,7 +35,13 @@ import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "./utils/graphIR";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
-import { useModuleStack } from "./nodes/UseModuleStack.ts";
+
+type OpenModule = {
+    module: SavedModule;
+    nodes: Node[];
+    edges: Edge[];
+    fromNodeId?: string;
+};
 import { getModule, listModules, saveModule, deleteModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 
 let id = 0;
@@ -100,7 +106,9 @@ function FlowContent() {
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
     const [selection, setSelection] = useState<{ nodeIds: string[]; edgeIds: string[] }>({ nodeIds: [], edgeIds: [] });
+    // Here the stack is created ( actually an array which will act as stack)
     const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
+    // Just defining the openModule system that if there is something in moduleStack then remove the top or else keep it null
     const openModule = moduleStack.length
     ? moduleStack[moduleStack.length - 1]
     : null;
@@ -458,6 +466,7 @@ function FlowContent() {
                 alert("Saved module is empty. Try saving it again after selecting nodes.");
                 return;
             }
+            // Adding that pop up def to the stack
             setModuleStack(stack => [...stack,{
                 module: mod,
                 nodes: applied.nodes,
@@ -596,7 +605,7 @@ function FlowContent() {
         if (!verificationResult.shapes) return;
         setNodes(currentNodes => {
 
-            const deepEqual = (a: any, b: any): boolean => {
+            const deepEqual = (a: unknown, b: unknown): boolean => {
                 if (a === b) return true;
                 if (!Array.isArray(a) || !Array.isArray(b)) return false;
                 if (a.length != b.length) return false;
@@ -1262,6 +1271,7 @@ function FlowContent() {
                                         });
                                         setModules(listModules());
                                         alert("Module saved");
+                                        // Removing the top element from the stack
                                         setModuleStack(stack => stack.slice(0, -1));
                                     }}
                                     style={{
@@ -1276,6 +1286,7 @@ function FlowContent() {
                                 >
                                     Save
                                 </button>
+                                {/* When closing the pop up as it is at the top thus remove the stack */}
                                 <button
                                     onClick={() => setModuleStack(stack => stack.slice(0, -1))}
                                     style={{
