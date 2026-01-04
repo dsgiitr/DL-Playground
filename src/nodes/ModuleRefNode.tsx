@@ -3,7 +3,7 @@ import type { ComponentType } from "react";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";
 import type { ModuleContract } from "../utils/moduleRegistry";
-
+// Nodes[] -> custommodule.data -> moduleID -> getmodule (CustomModules object) -> savedmodule -> graphIR 
 export type ModuleRefData = {
     moduleId?: string;
     name?: string;

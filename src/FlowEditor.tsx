@@ -510,6 +510,8 @@ function FlowContent() {
             version: "v1",
             graph: moduleGraph,
             contract,
+            selectedNodes: selectedNodes,
+            selectedEdges: internalEdges,
             description: `Saved from ${selectedNodes.length} node(s)`,
         });
         setModules(listModules());

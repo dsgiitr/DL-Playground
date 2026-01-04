@@ -1,8 +1,10 @@
-import type { GraphIR } from "../types/graph";
-
+import type { GraphIR} from "../types/graph";
+import { type Edge, type Node } from "@xyflow/react";
 export type ModuleContract = {
     inputs: string[];
     outputs: string[];
+    internalNodes: Node[];
+    internalEdges: Edge[];
     // internal nodes 
     // internal edges 
     // external reference: [ids]
@@ -61,8 +63,8 @@ export function deleteModule(id: string) {
     const filtered = loadAll().filter(m => m.id !== id);
     persist(filtered);
 }
-
-export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string }): SavedModule {
+// def == default.graph == GraphIR
+export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string, selectedNodes?: Node[], selectedEdges?: Edge[] }): SavedModule {
     const now = new Date().toISOString();
     // subgraph traveral: find custom 
     const next: SavedModule = {
@@ -73,6 +75,8 @@ export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedA
         contract: {
             inputs: dedupeHandles(def.contract.inputs || ["in"]),
             outputs: dedupeHandles(def.contract.outputs || ["out"]),
+            internalNodes: def.selectedNodes || [],
+            internalEdges: def.selectedEdges || []
         },
     };
 
