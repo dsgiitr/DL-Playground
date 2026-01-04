@@ -102,7 +102,7 @@ export default function Sidebar({
                                                 moduleId: mod.id,
                                                 name: mod.name,
                                                 version: mod.version,
-                                                contract: mod.contract,
+                                                handles: mod.handles,
                                                 description: mod.description
                                             })
                                         }
@@ -131,7 +131,7 @@ export default function Sidebar({
                                             </button>
                                         </div>
                                         <span style={{ fontSize: 11, color: "#d0d0d0" }}>
-                                            {mod.version} • {mod.contract.inputs.length} in / {mod.contract.outputs.length} out
+                                            {mod.version} • {mod.handles.inputs.length} in / {mod.handles.outputs.length} out
                                         </span>
                                     </div>
                                 ))}

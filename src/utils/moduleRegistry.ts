@@ -1,6 +1,6 @@
 import type { GraphIR } from "../types/graph";
 
-export type ModuleContract = {
+export type ModuleHandles = {
     inputs: string[];
     outputs: string[];
     // internal nodes 
@@ -13,7 +13,7 @@ export type SavedModule = {
     name: string;
     version: string;
     graph: GraphIR;
-    contract: ModuleContract;
+    handles: ModuleHandles;
     description?: string;
     createdAt: string;
     updatedAt: string;
@@ -21,11 +21,29 @@ export type SavedModule = {
 
 const STORAGE_KEY = "customModules";
 
+type RawSavedModule = Omit<SavedModule, "handles"> & {
+    handles?: ModuleHandles;
+    contract?: ModuleHandles;
+};
+
+function normalizeModule(mod: RawSavedModule): SavedModule {
+    const { handles, contract, ...rest } = mod;
+    const resolved = handles || contract || { inputs: ["in"], outputs: ["out"] };
+    return {
+        ...(rest as Omit<SavedModule, "handles">),
+        handles: {
+            inputs: dedupeHandles(resolved.inputs || ["in"]),
+            outputs: dedupeHandles(resolved.outputs || ["out"]),
+        },
+    };
+}
+
 function safeParse(raw: string | null): SavedModule[] {
     if (!raw) return [];
     try {
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? (parsed as SavedModule[]) : [];
+        if (!Array.isArray(parsed)) return [];
+        return (parsed as RawSavedModule[]).map(normalizeModule);
     } catch (err) {
         console.warn("Failed to parse saved modules", err);
         return [];
@@ -70,9 +88,9 @@ export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedA
         id: def.id || `mod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         createdAt: now,
         updatedAt: now,
-        contract: {
-            inputs: dedupeHandles(def.contract.inputs || ["in"]),
-            outputs: dedupeHandles(def.contract.outputs || ["out"]),
+        handles: {
+            inputs: dedupeHandles(def.handles.inputs || ["in"]),
+            outputs: dedupeHandles(def.handles.outputs || ["out"]),
         },
     };
 

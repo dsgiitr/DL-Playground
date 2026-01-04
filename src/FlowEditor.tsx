@@ -33,7 +33,7 @@ import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
-import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
+import { deleteModule, getModule, listModules, saveModule, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
 
@@ -469,8 +469,8 @@ function FlowContent() {
         }
     }, [openModule?.nodes, openModule?.edges]);
 
-    const computeContract = useCallback(
-        (selectedIds: Set<string>): ModuleContract => {
+    const computeModuleHandles = useCallback(
+        (selectedIds: Set<string>): ModuleHandles => {
             const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
             const outgoing = edges.filter(e => selectedIds.has(e.source) && !selectedIds.has(e.target));
             return {
@@ -499,18 +499,18 @@ function FlowContent() {
             alert("Enter a module name.");
             return;
         }
-        const contract = computeContract(selectedIds);
+        const handles = computeModuleHandles(selectedIds);
         const moduleGraph = buildGraphIR(selectedNodes, internalEdges);
         saveModule({
             name,
             version: "v1",
             graph: moduleGraph,
-            contract,
+            handles,
             description: `Saved from ${selectedNodes.length} node(s)`,
         });
         setModules(listModules());
         setShowSaveModal(false);
-    }, [nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
+    }, [nodes, edges, computeModuleHandles, selectedNodeIds, pendingModuleName]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
@@ -1249,7 +1249,7 @@ function FlowContent() {
                                             name: openModule.module.name,
                                             version: openModule.module.version,
                                             graph: updated,
-                                            contract: openModule.module.contract,
+                                            handles: openModule.module.handles,
                                             description: openModule.module.description,
                                         });
                                         setModules(listModules());

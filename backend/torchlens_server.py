@@ -17,6 +17,7 @@ from pydantic import BaseModel
 import torchlens as tl
 from graphviz import Source
 import base64
+import inspect
 import tempfile
 import os
 from pathlib import Path
@@ -205,6 +206,7 @@ app.add_middleware(
 
 logger = logging.getLogger("torchlens_server")
 logging.basicConfig(level=logging.INFO)
+DEBUG_TORCHLENS = os.getenv("TORCHLENS_DEBUG", "").lower() in {"1", "true", "yes", "on"}
 
 
 @app.post("/api/torchlens", response_model=TraceResponse)
@@ -233,15 +235,30 @@ def run_trace(req: TraceRequest):
         with torch.no_grad():
             # Save all layers; request unrolled graph.
             # link to the function https://github.com/johnmarktaylor91/torchlens/blob/main/torchlens/user_funcs.py#L100
-            history = tl.log_forward_pass(
-                model,
-                x,
-                vis_opt="unrolled",
-                layers_to_save="all",
-                vis_save_only=True,
-                vis_fileformat="svg",
-                vis_outpath=str(Path(tmpdir) / "torchlens_graph"),
-            )
+            tl_kwargs = {
+                "vis_opt": "unrolled",
+                "layers_to_save": "all",
+                "vis_save_only": True,
+                "vis_fileformat": "svg",
+                "vis_outpath": str(Path(tmpdir) / "torchlens_graph"),
+            }
+            # TorchLens versions differ; enable input-saving knobs if present.
+            sig = inspect.signature(tl.log_forward_pass)
+            param_names = set(sig.parameters)
+            for name in (
+                "save_input_tensors",
+                "save_inputs",
+                "save_input_args",
+                "save_args",
+                "save_function_args",
+                "save_input_activations",
+                "save_activations",
+            ):
+                if name in param_names:
+                    tl_kwargs[name] = True
+            if DEBUG_TORCHLENS:
+                logger.info("TorchLens log_forward_pass params: %s", sorted(tl_kwargs.keys()))
+            history = tl.log_forward_pass(model, x, **tl_kwargs)
         # Prefer in-memory rendering from DOT.
         dot_graph = getattr(history, "dot_graph", None) or getattr(getattr(history, "graph", None), "dot_graph", None)
         if dot_graph:
@@ -271,6 +288,11 @@ def run_trace(req: TraceRequest):
                 return str(tuple(val.shape))
         except Exception:
             pass
+        if hasattr(val, "shape"):
+            try:
+                return str(tuple(val.shape))  # type: ignore[arg-type]
+            except Exception:
+                pass
         if isinstance(val, (list, tuple)):
             # If this is a list/tuple of tensors or shapes, return a list of shapes; otherwise string-coerce.
             shapes: List[str] = []
@@ -312,8 +334,33 @@ def run_trace(req: TraceRequest):
                     return dt
         return None
 
+    def prefer_nonempty(primary: object, fallback: object) -> object:
+        """Prefer primary unless it's an empty list/tuple (TorchLens can return empty tensors list)."""
+        if primary is None:
+            return fallback
+        if isinstance(primary, (list, tuple)) and not primary:
+            return fallback
+        return primary
+
+    def parent_shapes_from_layer(layer: object) -> Optional[str]:
+        parent_layers = getattr(layer, "parent_layers", None)
+        if not parent_layers:
+            return None
+        shapes: List[str] = []
+        for parent in parent_layers:
+            try:
+                parent_layer = history[parent]
+            except Exception:
+                continue
+            parent_shape = tensor_shape_to_str(getattr(parent_layer, "tensor_shape", None))
+            if parent_shape:
+                shapes.append(parent_shape)
+        if not shapes:
+            return None
+        return shapes[0] if len(shapes) == 1 else "[" + ", ".join(shapes) + "]"
+
     if labels:
-        for lbl in labels:
+        for idx, lbl in enumerate(labels):
             layer = history[lbl]
             scope = getattr(layer, "layer_label", getattr(layer, "layer_name", lbl))
             op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
@@ -321,10 +368,30 @@ def run_trace(req: TraceRequest):
             input_tensors = getattr(layer, "input_tensors", None)
             input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
             output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
+            tensor_shape = getattr(layer, "tensor_shape", None)
 
-            # Prefer actual tensors for shapes; fall back to dimension metadata (avoid tensor truthiness)
-            preferred_input = input_tensors if input_tensors is not None else input_dims
-            preferred_output = tensor_contents if tensor_contents is not None else output_dims
+            # Prefer actual tensors for shapes; fall back to dimension metadata if tensors list is empty.
+            preferred_input = prefer_nonempty(input_tensors, input_dims)
+            preferred_output = prefer_nonempty(tensor_contents, output_dims)
+            if preferred_output is None and tensor_shape is not None:
+                preferred_output = tensor_shape
+            if preferred_input is None:
+                preferred_input = parent_shapes_from_layer(layer)
+            if preferred_input is None and getattr(layer, "is_input_layer", False):
+                if req.inputShapes:
+                    preferred_input = [tuple(req.inputShapes[0])]
+            if DEBUG_TORCHLENS:
+                logger.info(
+                    "TorchLens layer=%s op=%s input_tensors=%s input_dims=%s output_dims=%s tensor_contents=%s",
+                    scope,
+                    op,
+                    type(input_tensors).__name__,
+                    input_dims,
+                    output_dims,
+                    type(tensor_contents).__name__,
+                )
+                if idx == 0:
+                    logger.info("TorchLens layer attrs: %s", sorted(getattr(layer, "__dict__", {}).keys()))
 
             dtype_val = (
                 getattr(layer, "input_dtype", None)
@@ -346,16 +413,36 @@ def run_trace(req: TraceRequest):
     else:
         layer_dict = getattr(history, "layers", None)
         if layer_dict:
-            for layer in layer_dict.values():
+            for idx, layer in enumerate(layer_dict.values()):
                 scope = getattr(layer, "layer_label", getattr(layer, "layer_name", ""))
                 op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
                 tensor_contents = getattr(layer, "tensor_contents", None)
                 input_tensors = getattr(layer, "input_tensors", None)
                 input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
                 output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
+                tensor_shape = getattr(layer, "tensor_shape", None)
 
-                preferred_input = input_tensors if input_tensors is not None else input_dims
-                preferred_output = tensor_contents if tensor_contents is not None else output_dims
+                preferred_input = prefer_nonempty(input_tensors, input_dims)
+                preferred_output = prefer_nonempty(tensor_contents, output_dims)
+                if preferred_output is None and tensor_shape is not None:
+                    preferred_output = tensor_shape
+                if preferred_input is None:
+                    preferred_input = parent_shapes_from_layer(layer)
+                if preferred_input is None and getattr(layer, "is_input_layer", False):
+                    if req.inputShapes:
+                        preferred_input = [tuple(req.inputShapes[0])]
+                if DEBUG_TORCHLENS:
+                    logger.info(
+                        "TorchLens layer=%s op=%s input_tensors=%s input_dims=%s output_dims=%s tensor_contents=%s",
+                        scope,
+                        op,
+                        type(input_tensors).__name__,
+                        input_dims,
+                        output_dims,
+                        type(tensor_contents).__name__,
+                    )
+                    if idx == 0:
+                        logger.info("TorchLens layer attrs: %s", sorted(getattr(layer, "__dict__", {}).keys()))
 
                 dtype_val = (
                     getattr(layer, "input_dtype", None)

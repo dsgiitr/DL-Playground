@@ -2,13 +2,13 @@
 import type { ComponentType } from "react";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";
-import type { ModuleContract } from "../utils/moduleRegistry";
+import type { ModuleHandles } from "../utils/moduleRegistry";
 
 export type ModuleRefData = {
     moduleId?: string;
     name?: string;
     version?: string;
-    contract?: ModuleContract;
+    handles?: ModuleHandles;
     description?: string;
     __highlight?: boolean;
 };
@@ -47,16 +47,16 @@ function renderHandles(side: "left" | "right", ids: string[]) {
     });
 }
 
-function toHandles(contract?: ModuleContract): Handles {
-    if (!contract) return { targets: ["in"], sources: ["out"] };
-    const inputs = contract.inputs?.length ? contract.inputs : ["in"];
-    const outputs = contract.outputs?.length ? contract.outputs : ["out"];
+function toHandles(handles?: ModuleHandles): Handles {
+    if (!handles) return { targets: ["in"], sources: ["out"] };
+    const inputs = handles.inputs?.length ? handles.inputs : ["in"];
+    const outputs = handles.outputs?.length ? handles.outputs : ["out"];
     return { targets: inputs, sources: outputs };
 }
 
 const ModuleRefComponent: ComponentType<NodeProps<ModuleRefData>> = ({ id, data, isConnectable }) => {
     const { setNodes, setEdges } = useReactFlow();
-    const handles = toHandles(data?.contract);
+    const handles = toHandles(data?.handles ?? (data as { contract?: ModuleHandles } | undefined)?.contract);
     const name = data?.name || "Module";
     const version = data?.version || "v1";
     const isHighlighted = !!data?.__highlight;
@@ -157,7 +157,7 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
     diagramLabel: "Module",
     diagramFamily: "block",
     paramSchema: {},
-    handles: (data: ModuleRefData) => toHandles(data.contract),
+    handles: (data: ModuleRefData) => toHandles(data.handles ?? (data as { contract?: ModuleHandles }).contract),
     shapeVerifier: (data: ModuleRefData, inputShapes: number[][]) => {
         void data;
         void inputShapes;
