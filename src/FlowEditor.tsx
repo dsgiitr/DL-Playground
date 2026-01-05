@@ -89,6 +89,9 @@ const updateModuleRefData = (
     return { ...node, data: { ...node.data, ...updates } };
 };
 
+// this saves the name of the module and hanldes empty name case 
+const resolveModuleName = (input: string, fallback: string) => input.trim() || fallback;
+
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
@@ -134,6 +137,7 @@ function FlowContent() {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
+    const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -508,6 +512,56 @@ function FlowContent() {
     useEffect(() => {
         setModuleNameInput(openModule?.module?.name || "");
     }, [openModule?.module?.name]);
+
+    // this is used when the save as existing module is selected 
+    const saveExistingModule = useCallback(() => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const nextVersion = nextIncrementModuleVersion(openModule.module.version);
+        const nextName = resolveModuleName(moduleNameInput, openModule.module.name);
+        saveModule({
+            id: openModule.module.id,
+            name: nextName,
+            version: nextVersion,
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setNodes(nds =>
+            nds.map(n =>
+                updateModuleRefData(n, openModule.module.id, {
+                    name: nextName,
+                    version: nextVersion,
+                    handles: openModule.module.handles,
+                })
+            )
+        );
+        setModules(listModules());
+        alert("Module saved");
+        setOpenModule(null);
+    }, [openModule, moduleNameInput, setNodes]);
+  
+    // creates a brand‑new module from the edited nodes/edges
+    const saveModuleAsNew = useCallback(() => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
+        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
+        saveModule({
+            name: newName,
+            version: "v1",
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setModules(listModules());
+        alert("Module saved as new");
+        setOpenModule(null);
+    }, [openModule, moduleNameInput]);
 
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
@@ -1283,7 +1337,7 @@ function FlowContent() {
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>({openModule.module.version})</span>
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
                             </div>
-                            <div style={{ display: "flex", gap: 8 }}>
+                            <div style={{ display: "flex", gap: 8, position: "relative" }}>
                                 <button
                                     onClick={() => setShowModuleDiagram(true)}
                                     style={{
@@ -1298,33 +1352,7 @@ function FlowContent() {
                                     Diagram View
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
-                                        const nextVersion = nextIncrementModuleVersion(openModule.module.version);
-                                        const nextName = moduleNameInput.trim() || openModule.module.name;
-                                        saveModule({
-                                            id: openModule.module.id,
-                                            name: nextName,
-                                            version: nextVersion,
-                                            graph: updatedGraph,
-                                            handles: openModule.module.handles,
-                                            internalNodes: openModule.nodes,
-                                            internalEdges: openModule.edges,
-                                            description: openModule.module.description,
-                                        });
-                                        setNodes(nds =>
-                                            nds.map(n =>
-                                                updateModuleRefData(n, openModule.module.id, {
-                                                    name: nextName,
-                                                    version: nextVersion,
-                                                    handles: openModule.module.handles,
-                                                })
-                                            )
-                                        );
-                                        setModules(listModules());
-                                        alert("Module saved");
-                                        setOpenModule(null);
-                                    }}
+                                    onClick={() => setShowModuleSaveMenu(open => !open)}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1335,8 +1363,65 @@ function FlowContent() {
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Save
+                                    Save ▾
                                 </button>
+                                {/* this shows the saving dropdown */}
+                                {showModuleSaveMenu && (
+                                    <div
+                                        style={{
+                                            position: "absolute",
+                                            right: 0,
+                                            top: "100%",
+                                            marginTop: 6,
+                                            background: "#111827",
+                                            border: "1px solid #1f2937",
+                                            borderRadius: 8,
+                                            padding: 6,
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: 6,
+                                            minWidth: 160,
+                                            zIndex: 5,
+                                        }}
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setShowModuleSaveMenu(false);
+                                                saveExistingModule();
+                                            }}
+                                            style={{
+                                                padding: "6px 8px",
+                                                borderRadius: 6,
+                                                border: "1px solid #334155",
+                                                background: "#1f2937",
+                                                color: "#e6edf3",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            Save changes
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowModuleSaveMenu(false);
+                                                saveModuleAsNew();
+                                            }}
+                                            style={{
+                                                padding: "6px 8px",
+                                                borderRadius: 6,
+                                                border: "1px solid #334155",
+                                                background: "#0f172a",
+                                                color: "#e6edf3",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            Save as new module
+                                        </button>
+                                    </div>
+                                )}
                                 <button
                                     onClick={() => setOpenModule(null)}
                                     style={{
