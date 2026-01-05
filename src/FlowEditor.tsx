@@ -449,7 +449,10 @@ function FlowContent() {
                 alert("Module not found");
                 return;
             }
-            const appliedRaw = applyGraphIR(mod.graph);
+            const appliedRaw =
+                mod.internalNodes && mod.internalEdges
+                    ? { nodes: mod.internalNodes, edges: mod.internalEdges }
+                    : applyGraphIR(mod.graph);
             const normalizedNodes = normalizeModuleRefNodes(appliedRaw.nodes);
             const applied = {
                 nodes: normalizedNodes.map(n => ({
@@ -518,6 +521,8 @@ function FlowContent() {
             version: "v1",
             graph: moduleGraph,
             handles,
+            internalNodes: selectedNodes,
+            internalEdges,
             description: `Saved from ${selectedNodes.length} node(s)`,
         });
         setModules(listModules());
@@ -1262,6 +1267,8 @@ function FlowContent() {
                                             version: openModule.module.version,
                                             graph: updated,
                                             handles: openModule.module.handles,
+                                            internalNodes: openModule.nodes,
+                                            internalEdges: openModule.edges,
                                             description: openModule.module.description,
                                         });
                                         setModules(listModules());

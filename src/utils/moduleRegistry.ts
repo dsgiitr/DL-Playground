@@ -1,3 +1,4 @@
+import type { Edge, Node } from "@xyflow/react";
 import type { GraphIR } from "../types/graph";
 
 export type ModuleHandles = {
@@ -14,6 +15,8 @@ export type SavedModule = {
     version: string;
     graph: GraphIR;
     handles: ModuleHandles;
+    internalNodes?: Node[];
+    internalEdges?: Edge[];
     description?: string;
     createdAt: string;
     updatedAt: string;
