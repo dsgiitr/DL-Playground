@@ -1,4 +1,5 @@
 import type { GraphIR } from "../types/graph";
+import type { FieldSpec } from '../node_gen/BaseClass';
 
 export type ModuleContract = {
     inputs: string[];
@@ -10,13 +11,15 @@ export type ModuleContract = {
 
 export type SavedModule = {
     id: string;
-    name: string;
+    name:string;
     version: string;
     graph: GraphIR;
     contract: ModuleContract;
     description?: string;
     createdAt: string;
     updatedAt: string;
+    variableSchema?: Record<string, FieldSpec>;
+    variableMap?: Record<string, Array<{ nodeId: string; paramName: string; }>>;
 };
 
 const STORAGE_KEY = "customModules";

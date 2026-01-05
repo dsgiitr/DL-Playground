@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
-import type { ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";
-import type { ModuleContract } from "../utils/moduleRegistry";
+import { getModule, type ModuleContract } from "../utils/moduleRegistry";
+import { type LayerDefinition, type FieldType, ParamsList } from "../node_gen/BaseClass";
 
 export type ModuleRefData = {
     moduleId?: string;
@@ -11,6 +11,7 @@ export type ModuleRefData = {
     contract?: ModuleContract;
     description?: string;
     __highlight?: boolean;
+    [key: string]: any; // Allow other properties for variables
 };
 
 type Handles = { targets: string[]; sources: string[] };
@@ -56,10 +57,51 @@ function toHandles(contract?: ModuleContract): Handles {
 
 const ModuleRefComponent: ComponentType<NodeProps<ModuleRefData>> = ({ id, data, isConnectable }) => {
     const { setNodes, setEdges } = useReactFlow();
+    const [isExpanded, setIsExpanded] = useState(false);
     const handles = toHandles(data?.contract);
     const name = data?.name || "Module";
     const version = data?.version || "v1";
     const isHighlighted = !!data?.__highlight;
+
+    const module = useMemo(() => (data?.moduleId ? getModule(data.moduleId) : undefined), [data?.moduleId]);
+    const paramSchema = useMemo(() => module?.variableSchema || {}, [module]);
+
+    const { requiredParams, optionalParams } = useMemo(() => {
+        const keys = Object.keys(paramSchema);
+        const req = keys.filter(k => paramSchema[k].required);
+        const opt = keys.filter(k => !paramSchema[k].required);
+        return { requiredParams: req, optionalParams: opt };
+    }, [paramSchema]);
+
+    const onChange = (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        let newValue: any = e.target.value;
+        if (type === "number") {
+            newValue = newValue === "" ? undefined : parseFloat(newValue);
+        } else if (type === "boolean") {
+            newValue = (e.target as HTMLInputElement).checked;
+        }
+        setNodes(nodes =>
+            nodes.map(n => {
+                if (n.id !== id) return n;
+                const newData: ModuleRefData = { ...n.data };
+                if (newValue === undefined || newValue === "") {
+                    delete newData[key];
+                } else {
+                    newData[key] = newValue;
+                }
+                return { ...n, data: newData };
+            })
+        );
+    };
+
+    const paramsToShow = new Set(requiredParams);
+    optionalParams.forEach(key => {
+        if (isExpanded || data[key] !== undefined) {
+            paramsToShow.add(key);
+        }
+    });
+    const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
+    const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
 
     return (
         <div
@@ -85,6 +127,19 @@ const ModuleRefComponent: ComponentType<NodeProps<ModuleRefData>> = ({ id, data,
                     </span>
                 )}
             </div>
+            
+            {renderList.length > 0 && <div style={{borderBottom: '1px solid #333', margin: '6px 0'}} />}
+
+            <ParamsList
+                renderKeys={renderList}
+                optionalParams={optionalParams}
+                paramSchema={paramSchema}
+                data={data}
+                onChange={onChange}
+                onExpand={() => setIsExpanded(true)}
+                hiddenCount={!isExpanded ? hiddenOptionCount : 0}
+            />
+
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 11, color: "#9fb0c3", alignItems: "center" }}>
                 <span>{handles.targets.length} in</span>
                 <span>•</span>
@@ -96,7 +151,7 @@ const ModuleRefComponent: ComponentType<NodeProps<ModuleRefData>> = ({ id, data,
                         if (data?.moduleId) {
                             window.dispatchEvent(
                                 new CustomEvent("module-open", {
-                                    detail: { moduleId: data.moduleId, nodeId: id },
+                                    detail: { moduleId: data.moduleId, nodeId: id, data },
                                 })
                             );
                         }
@@ -125,7 +180,6 @@ const ModuleRefComponent: ComponentType<NodeProps<ModuleRefData>> = ({ id, data,
                     }}
                     title="Delete module"
                     style={{
-                        marginLeft: "auto",
                         padding: "2px 6px",
                         background: "#2b2b2b",
                         border: "1px solid #444",
@@ -156,7 +210,7 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
     label: "Module",
     diagramLabel: "Module",
     diagramFamily: "block",
-    paramSchema: {},
+    paramSchema: {}, // paramSchema is now effectively dynamic inside the component
     handles: (data: ModuleRefData) => toHandles(data.contract),
     shapeVerifier: (data: ModuleRefData, inputShapes: number[][]) => {
         void data;
