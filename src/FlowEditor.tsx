@@ -21,7 +21,8 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeViewer from "./components/CodeViewer.tsx";
-import DiagramView from "./components/DiagramView";
+import DiagramView from "./components/DiagramView"; 
+import DiagnosticsPanel from "./components/DiagnosticsPanel";  // this is diagnostic error panel loaded from @DiagnosticsPanel.tsx
 import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
@@ -150,6 +151,7 @@ function FlowContent() {
     const [exporting, setExporting] = useState<"png" | "svg" | null>(null);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [showDiagram, setShowDiagram] = useState(false);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [showTrace, setShowTrace] = useState(false);
     const [traceData, setTraceData] = useState<TraceResponse | null>(null);
     const [traceLoading, setTraceLoading] = useState(false);
@@ -160,7 +162,7 @@ function FlowContent() {
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-    const { screenToFlowPosition, getNodes } = useReactFlow();
+    const { screenToFlowPosition, getNodes, fitView } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
         changes => {
@@ -775,6 +777,24 @@ function FlowContent() {
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
 
+    const failureCount = shapeResult?.failures?.length ?? 0;
+
+    const focusFailure = useCallback(
+        (failure: ShapeFailure) => {
+            const upstream = failure.upstream || [];
+            const edgeIds = edges
+                .filter(e => upstream.includes(e.source) && e.target === failure.nodeId)
+                .map(e => e.id);
+            setHighlightNodes(new Set([failure.nodeId, ...upstream]));
+            setHighlightEdges(new Set(edgeIds));
+            const target = nodes.find(n => n.id === failure.nodeId);
+            if (target) {
+                void fitView({ nodes: [target], padding: 0.4 });
+            }
+        },
+        [edges, nodes, fitView]
+    );
+
 
     return (
         <div style={{ display: "flex", height: "100vh" }}>
@@ -1061,18 +1081,47 @@ function FlowContent() {
                         }}
                     >
                         {shapeResult && shapeResult.ok && (
-                            <span style={{ color: "#64ffda" }}>
-                                Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
-                            </span>
+                            <div
+                                style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    padding: "4px 10px",
+                                    borderRadius: 999,
+                                    border: "1px solid #1f2a2f",
+                                    background: "linear-gradient(90deg, #0f2d2f, #0b3b2f)",
+                                    color: "#7fffd4",
+                                    fontWeight: 600,
+                                    fontSize: 12,
+                                    letterSpacing: "0.01em",
+                                    boxShadow: "0 0 0 1px rgba(100, 255, 218, 0.12)",
+                                }}
+                            >
+                                <span aria-hidden="true">✓</span>
+                                <span>All clear</span>
+                                <span style={{ color: "#a7f3d0", fontWeight: 500 }}>
+                                    ({Object.keys(shapeResult.shapes).length} nodes)
+                                </span>
+                            </div>
                         )}
-                        {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
-                            <ol style={{ margin: 0, paddingLeft: "16px", color: "#ff6b6b", lineHeight: 1.4 }}>
-                                {shapeResult.failures.map((f, idx) => (
-                                    <li key={`${f.nodeId}-${idx}`} style={{ marginBottom: 2 }}>
-                                        {friendlyError(f)}
-                                    </li>
-                                ))}
-                            </ol>
+                        {shapeResult && !shapeResult.ok && failureCount > 0 && (
+                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
+                                <button
+                                    onClick={() => setShowDiagnostics(open => !open)}
+                                    style={{
+                                        padding: "4px 8px",
+                                        borderRadius: 6,
+                                        border: "1px solid #3f3f46",
+                                        background: "#1f1f1f",
+                                        color: "#e6edf3",
+                                        cursor: "pointer",
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    {showDiagnostics ? "Hide diagnostics" : "View diagnostics"}
+                                </button>
+                            </div>
                         )}
                         <div style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <span>Selected nodes: {selectedNodeIds.length ? selectedNodeIds.join(", ") : "none"}</span>
@@ -1105,6 +1154,14 @@ function FlowContent() {
                             <Background />
                         </ReactFlow>
                     </div>
+                    {/* load DiagnosticsPanel */}
+                    {showDiagnostics && shapeResult && !shapeResult.ok && failureCount > 0 && (
+                        <DiagnosticsPanel
+                            failures={shapeResult.failures}
+                            onSelect={focusFailure}
+                            onClose={() => setShowDiagnostics(false)}
+                        />
+                    )}
                 </div>
             </div>
             {showLiveCode && (
