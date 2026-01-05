@@ -37,6 +37,14 @@ import { deleteModule, getModule, listModules, saveModule, type ModuleContract, 
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
 
+type OpenModule = {
+    module: SavedModule;
+    nodes: Node[];
+    edges: Edge[];
+    fromNodeId?: string;
+};
+
+
 let id = 0;
 const getId = () => `node-${id++}`;
 const syncIdFromNodes = (nodes: Node[]) => {
@@ -96,7 +104,13 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
-    const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    const [setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    // Here the stack is created ( actually an array which will act as stack)
+    const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
+    // Just defining the openModule system that if there is something in moduleStack then remove the top or else keep it null
+    const openModule = moduleStack.length
+    ? moduleStack[moduleStack.length - 1]
+    : null;
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
@@ -451,12 +465,12 @@ function FlowContent() {
                 alert("Saved module is empty. Try saving it again after selecting nodes.");
                 return;
             }
-            setOpenModule({
+            setModuleStack(stack => [...stack,{
                 module: mod,
                 nodes: applied.nodes,
                 edges: applied.edges,
                 fromNodeId: custom.detail?.nodeId,
-            });
+            }]);
             setShowModuleDiagram(false);
         };
         window.addEventListener("module-open", handler as EventListener);
@@ -1254,7 +1268,8 @@ function FlowContent() {
                                         });
                                         setModules(listModules());
                                         alert("Module saved");
-                                        setOpenModule(null);
+                                         // Removing the top element from the stack
+                                        setModuleStack(stack => stack.slice(0, -1));
                                     }}
                                     style={{
                                         padding: "6px 10px",
@@ -1268,8 +1283,9 @@ function FlowContent() {
                                 >
                                     Save
                                 </button>
+                                 {/* When closing the pop up as it is at the top thus remove the stack */}
                                 <button
-                                    onClick={() => setOpenModule(null)}
+                                    onClick={() => setModuleStack(stack => stack.slice(0, -1))}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1294,36 +1310,48 @@ function FlowContent() {
                                         instance.fitView({ padding: 0.2, includeHiddenNodes: true });
                                     }}
                                     onNodesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
-                                                : curr
-                                        )
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            const updated = {
+                                            ...top,
+                                            nodes: applyNodeChanges(changes, top.nodes),
+                                            };
+                                            return [...stack.slice(0, -1), updated];
+                                        })
                                     }
                                     onEdgesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
-                                                : curr
-                                        )
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            const updated = {
+                                            ...top,
+                                            edges: applyEdgeChanges(changes, top.edges),
+                                            };
+                                            return [...stack.slice(0, -1), updated];
+                                        })
                                     }
                                     onConnect={connection =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? {
-                                                    ...curr,
-                                                    edges: addEdge(
-                                                        {
-                                                            ...connection,
-                                                            type: "custom",
-                                                            data: { label: connection.source || "out" },
-                                                        },
-                                                        curr.edges
-                                                    ),
-                                                }
-                                                : curr
-                                        )
-                                    }
+                                        setModuleStack(stack => {
+                                            if (!stack.length) return stack;
+                                            const top = stack[stack.length - 1];
+                                            return [
+                                            ...stack.slice(0, -1),
+                                            {
+                                                ...top,
+                                                edges: addEdge(
+                                                {
+                                                    ...connection,
+                                                    type: "custom",
+                                                    data: { label: connection.source || "out" },
+                                                },
+                                                top.edges
+                                                ),
+                                            },
+                                            ];
+                                        })
+                                        }
+
                                     nodeTypes={nodeTypes}
                                     edgeTypes={edgeTypes}
                                     fitView
