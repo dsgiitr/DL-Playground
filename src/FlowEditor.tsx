@@ -69,6 +69,24 @@ const normalizeModuleRefNode = (node: Node): Node => {
 
 const normalizeModuleRefNodes = (nodes: Node[]) => nodes.map(normalizeModuleRefNode);
 
+const nextIncrementModuleVersion = (version: string) => {
+    const match = version.match(/(\d+)/);
+    if (!match) return "v2";
+    const next = parseInt(match[1], 10) + 1;
+    return `v${next}`;
+};
+
+const updateModuleRefData = (
+    node: Node,
+    moduleId: string,
+    updates: Partial<{ name: string; version: string; handles: ModuleHandles }>
+): Node => {
+    if (node.type !== "module_ref") return node;
+    const data = (node.data || {}) as { moduleId?: string };
+    if (data.moduleId !== moduleId) return node;
+    return { ...node, data: { ...node.data, ...updates } };
+};
+
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
@@ -113,6 +131,7 @@ function FlowContent() {
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [moduleNameInput, setModuleNameInput] = useState("");
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -483,6 +502,10 @@ function FlowContent() {
             moduleFlowRef.current.fitView({ padding: 0.2, includeHiddenNodes: true });
         }
     }, [openModule?.nodes, openModule?.edges]);
+
+    useEffect(() => {
+        setModuleNameInput(openModule?.module?.name || "");
+    }, [openModule?.module?.name]);
 
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
@@ -1239,9 +1262,22 @@ function FlowContent() {
                             }}
                         >
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span style={{ color: "#e6edf3", fontWeight: 700 }}>
-                                    Editing Module: {openModule.module.name} ({openModule.module.version})
-                                </span>
+                                <span style={{ color: "#9ca3af", fontSize: 12 }}>Editing Module</span>
+                                <input
+                                    value={moduleNameInput}
+                                    onChange={e => setModuleNameInput(e.target.value)}
+                                    placeholder="Module name"
+                                    style={{
+                                        background: "#0f172a",
+                                        color: "#e6edf3",
+                                        border: "1px solid #1f2937",
+                                        borderRadius: 6,
+                                        padding: "4px 8px",
+                                        fontWeight: 600,
+                                        minWidth: 160,
+                                    }}
+                                />
+                                <span style={{ color: "#9ca3af", fontSize: 12 }}>({openModule.module.version})</span>
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
@@ -1260,17 +1296,28 @@ function FlowContent() {
                                 </button>
                                 <button
                                     onClick={() => {
-                                        const updated = buildGraphIR(openModule.nodes, openModule.edges);
+                                        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+                                        const nextVersion = nextIncrementModuleVersion(openModule.module.version);
+                                        const nextName = moduleNameInput.trim() || openModule.module.name;
                                         saveModule({
                                             id: openModule.module.id,
-                                            name: openModule.module.name,
-                                            version: openModule.module.version,
-                                            graph: updated,
+                                            name: nextName,
+                                            version: nextVersion,
+                                            graph: updatedGraph,
                                             handles: openModule.module.handles,
                                             internalNodes: openModule.nodes,
                                             internalEdges: openModule.edges,
                                             description: openModule.module.description,
                                         });
+                                        setNodes(nds =>
+                                            nds.map(n =>
+                                                updateModuleRefData(n, openModule.module.id, {
+                                                    name: nextName,
+                                                    version: nextVersion,
+                                                    handles: openModule.module.handles,
+                                                })
+                                            )
+                                        );
                                         setModules(listModules());
                                         alert("Module saved");
                                         setOpenModule(null);
