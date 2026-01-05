@@ -8,10 +8,8 @@ import {
     useReactFlow,
     type DefaultEdgeOptions,
     type Edge,
-    type EdgeSelectionChange,
     type FitViewOptions,
     type Node,
-    type NodeSelectionChange,
     type OnConnect,
     type OnEdgesChange,
     type OnNodeDrag,
@@ -21,8 +19,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeViewer from "./components/CodeViewer.tsx";
-import DiagramView from "./components/DiagramView"; 
-import DiagnosticsPanel from "./components/DiagnosticsPanel";  // this is diagnostic error panel loaded from @DiagnosticsPanel.tsx
+import DiagramView from "./components/DiagramView";
+import DiagnosticsPanel from "./components/DiagnosticsPanel";
+import EditorHeader from "./components/HeaderUtils";
 import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
@@ -57,7 +56,7 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
     animated: true,
 };
 
-
+const TRACE_SEED_PRESETS = [42, 1337, 1234, 2020, 2021];
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
@@ -156,6 +155,8 @@ function FlowContent() {
     const [traceData, setTraceData] = useState<TraceResponse | null>(null);
     const [traceLoading, setTraceLoading] = useState(false);
     const [traceError, setTraceError] = useState<string | null>(null);
+    const [traceSeedPreset, setTraceSeedPreset] = useState("42");
+    const [traceSeedCustom, setTraceSeedCustom] = useState("");
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const historyIndexRef = useRef(0);
     const [canUndo, setCanUndo] = useState(false);
@@ -458,13 +459,6 @@ function FlowContent() {
 
     const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
     const selectedEdgeIds = useMemo(() => edges.filter(e => e.selected).map(e => e.id), [edges]);
-
-    useEffect(() => {
-        console.log({
-            selectedNodeIds,
-            selectedEdgeIds,
-        });
-    }, [selectedNodeIds, selectedEdgeIds]);
 
     useEffect(() => {
         const handler = (ev: Event) => {
@@ -868,219 +862,47 @@ function FlowContent() {
                 title="Drag to resize sidebar"
             />
             <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
-                <div
-                    style={{
-                        padding: "8px",
-                        display: "flex",
-                        gap: "12px",
-                        alignItems: "center",
-                        minHeight: "40px",
-                        justifyContent: "space-between",
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 5,
-                        background: "#1a1a1a"
+                {/* Selection summary is intentionally omitted; selection is shown via highlights. */}
+                <EditorHeader
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    canSaveModule={selectedNodeIds.length > 0}
+                    traceLoading={traceLoading}
+                    traceSeedOptions={[...TRACE_SEED_PRESETS.map(String), "custom"]}
+                    traceSeedPreset={traceSeedPreset}
+                    traceSeedCustom={traceSeedCustom}
+                    showCustomSeedInput={traceSeedPreset === "custom"}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    onTrace={handleTrace}
+                    onTraceSeedPresetChange={setTraceSeedPreset}
+                    onTraceSeedCustomChange={setTraceSeedCustom}
+                    onSaveModule={() => {
+                        const selectedIdsArr = selectedNodeIds;
+                        if (!selectedIdsArr.length) {
+                            alert("Select at least one node to save as a module.");
+                            return;
+                        }
+                        const suggestion = `Module ${modules.length + 1}`;
+                        setPendingModuleName(suggestion);
+                        setShowSaveModal(true);
                     }}
-                >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button
-                            className="nodrag"
-                            onClick={handleUndo}
-                            disabled={!canUndo}
-                            style={{
-                                padding: "6px 10px",
-                                background: canUndo ? "#333" : "#222",
-                                color: canUndo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canUndo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Undo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleRedo}
-                            disabled={!canRedo}
-                            style={{
-                                padding: "6px 10px",
-                                background: canRedo ? "#333" : "#222",
-                                color: canRedo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canRedo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Redo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleTrace}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Run forward trace (TorchLens backend required)"
-                        >
-                            {traceLoading ? "Tracing…" : "TorchLens Trace"}
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={() => {
-                                const selectedIdsArr = selectedNodeIds;
-                                if (!selectedIdsArr.length) {
-                                    alert("Select at least one node to save as a module.");
-                                    return;
-                                }
-                                const suggestion = `Module ${modules.length + 1}`;
-                                setPendingModuleName(suggestion);
-                                setShowSaveModal(true);
-                            }}
-                            disabled={!selectedNodeIds.length}
-                            style={{
-                                padding: "6px 10px",
-                                background: selectedNodeIds.length ? "#335" : "#222",
-                                color: selectedNodeIds.length ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: selectedNodeIds.length ? "pointer" : "not-allowed"
-                            }}
-                            title="Save selected nodes as a reusable module"
-                        >
-                            Save Module
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={triggerUpload}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Import GraphIR JSON"
-                        >
-                            Import JSON
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={() => setShowDiagram(true)}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Open paper-style diagram view"
-                        >
-                            Diagram View
-                        </button>
-                        <div style={{ position: "relative" }}>
-                            <button
-                                className="nodrag"
-                                onClick={() => setExportMenuOpen(open => !open)}
-                                style={{
-                                    padding: "6px 10px",
-                                    background: "#333",
-                                    color: "#fff",
-                                    border: "1px solid #444",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    minWidth: 110,
-                                    textAlign: "left"
-                                }}
-                                title="Export diagram"
-                            >
-                                Export ▾
-                            </button>
-                            {exportMenuOpen && (
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        top: "110%",
-                                        left: 0,
-                                        background: "#1a1a1a",
-                                        border: "1px solid #444",
-                                        borderRadius: 6,
-                                        boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
-                                        zIndex: 10,
-                                        minWidth: 150,
-                                        overflow: "hidden"
-                                    }}
-                                >
-                                    <button
-                                        onClick={() => exportDiagram("svg")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
-                                            textAlign: "left"
-                                        }}
-                                    >
-                                        Export as SVG
-                                    </button>
-                                    <button
-                                        onClick={() => exportDiagram("png")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
-                                            textAlign: "left"
-                                        }}
-                                    >
-                                        Export as PNG
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            downloadGraphJson();
-                                            setExportMenuOpen(false);
-                                        }}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: "#e6edf3",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            borderTop: "1px solid #333"
-                                        }}
-                                    >
-                                        Export JSON
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                            minHeight: "32px",
-                            maxHeight: "120px",
-                            overflowY: "auto",
-                            padding: "4px 0"
-                        }}
-                    >
-                        {shapeResult && shapeResult.ok && (
+                    onImportJson={triggerUpload}
+                    onDiagramView={() => setShowDiagram(true)}
+                    onExportToggle={() => setExportMenuOpen(open => !open)}
+                    onExportSvg={() => exportDiagram("svg")}
+                    onExportPng={() => exportDiagram("png")}
+                    onExportJson={() => {
+                        downloadGraphJson();
+                        setExportMenuOpen(false);
+                    }}
+                    exportMenuOpen={exportMenuOpen}
+                    exporting={!!exporting}
+                    showDiagnostics={showDiagnostics}
+                    failureCount={failureCount}
+                    onToggleDiagnostics={() => setShowDiagnostics(open => !open)}
+                    statusSlot={
+                        shapeResult && shapeResult.ok ? (
                             <div
                                 style={{
                                     display: "inline-flex",
@@ -1103,32 +925,12 @@ function FlowContent() {
                                     ({Object.keys(shapeResult.shapes).length} nodes)
                                 </span>
                             </div>
-                        )}
-                        {shapeResult && !shapeResult.ok && failureCount > 0 && (
-                            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
-                                <button
-                                    onClick={() => setShowDiagnostics(open => !open)}
-                                    style={{
-                                        padding: "4px 8px",
-                                        borderRadius: 6,
-                                        border: "1px solid #3f3f46",
-                                        background: "#1f1f1f",
-                                        color: "#e6edf3",
-                                        cursor: "pointer",
-                                        fontSize: 12,
-                                    }}
-                                >
-                                    {showDiagnostics ? "Hide diagnostics" : "View diagnostics"}
-                                </button>
-                            </div>
-                        )}
-                        <div style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <span>Selected nodes: {selectedNodeIds.length ? selectedNodeIds.join(", ") : "none"}</span>
-                            <span>Selected edges: {selectedEdgeIds.length ? selectedEdgeIds.join(", ") : "none"}</span>
-                        </div>
-                    </div>
-                </div>
+                        ) : shapeResult && !shapeResult.ok ? (
+                            <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
+                        ) : null
+                    }
+                    selectionSummary={null}
+                />
 
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: "0 0 0 0" }}>
