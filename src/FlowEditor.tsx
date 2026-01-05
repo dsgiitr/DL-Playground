@@ -60,6 +60,15 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
+const normalizeModuleRefNode = (node: Node): Node => {
+    if (node.type !== "module_ref" || !node.data || typeof node.data !== "object") return node;
+    const data = node.data as { handles?: ModuleHandles; contract?: ModuleHandles };
+    if (data.handles || !data.contract) return node;
+    return { ...node, data: { ...node.data, handles: data.contract } };
+};
+
+const normalizeModuleRefNodes = (nodes: Node[]) => nodes.map(normalizeModuleRefNode);
+
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
@@ -67,8 +76,9 @@ function FlowContent() {
             try {
                 const parsed: GraphIR = JSON.parse(savedGraph);
                 const restored = applyGraphIR(parsed);
-                syncIdFromNodes(restored.nodes);
-                return restored.nodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
+                const normalizedNodes = normalizeModuleRefNodes(restored.nodes);
+                syncIdFromNodes(normalizedNodes);
+                return normalizedNodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
             } catch (err) {
                 console.warn("Failed to load GraphIR, falling back to nodes/edges", err);
             }
@@ -78,8 +88,9 @@ function FlowContent() {
         const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
             n.type === "input" ? { ...n, type: "input_layer" } : n
         );
-        syncIdFromNodes(parsed);
-        return parsed;
+        const normalizedNodes = normalizeModuleRefNodes(parsed);
+        syncIdFromNodes(normalizedNodes);
+        return normalizedNodes;
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
@@ -439,8 +450,9 @@ function FlowContent() {
                 return;
             }
             const appliedRaw = applyGraphIR(mod.graph);
+            const normalizedNodes = normalizeModuleRefNodes(appliedRaw.nodes);
             const applied = {
-                nodes: appliedRaw.nodes.map(n => ({
+                nodes: normalizedNodes.map(n => ({
                     ...n,
                     selected: false,
                     data: { ...(n.data || {}), __highlight: undefined },
@@ -559,7 +571,7 @@ function FlowContent() {
                 try {
                     const parsed = JSON.parse(String(ev.target?.result)) as GraphIR;
                     const { nodes: newNodes, edges: newEdges } = applyGraphIR(parsed);
-                    setNodes(newNodes);
+                    setNodes(normalizeModuleRefNodes(newNodes));
                     setEdges(newEdges);
                 } catch (err) {
                     console.error("Failed to import graph", err);
