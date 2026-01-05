@@ -29,6 +29,11 @@ export default function Sidebar({
             window.location.reload();
         }
     };
+    
+    // add the open module editor function in the sidebar to wire up the opening of module for editing
+    const openModuleEditor = (moduleId: string) => {
+        window.dispatchEvent(new CustomEvent("module-open", { detail: { moduleId } }));
+    };
 
     const groups = useMemo(
         () =>
@@ -108,27 +113,51 @@ export default function Sidebar({
                                         }
                                         title={mod.description || `Module ${mod.name}`}
                                     >
-                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        {/* open the module from the sidebar, the moduleCard */}
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                                             <span style={{ fontWeight: 700 }}>{mod.name}</span>
-                                            <button
-                                                className="nodrag"
-                                                onClick={e => {
-                                                    e.stopPropagation();
-                                                    onDeleteModule(mod.id);
-                                                }}
-                                                style={{
-                                                    padding: "2px 6px",
-                                                    background: "#2b2b2b",
-                                                    border: "1px solid #555",
-                                                    color: "#ddd",
-                                                    borderRadius: 6,
-                                                    cursor: "pointer",
-                                                    fontSize: 10,
-                                                }}
-                                                title="Delete module"
-                                            >
-                                                Delete
-                                            </button>
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 70 }}>
+                                                <button
+                                                    className="nodrag"
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        onDeleteModule(mod.id);
+                                                    }}
+                                                    style={{
+                                                        padding: "4px 6px",
+                                                        background: "#2b2b2b",
+                                                        border: "1px solid #555",
+                                                        color: "#ddd",
+                                                        borderRadius: 6,
+                                                        cursor: "pointer",
+                                                        fontSize: 10,
+                                                        width: "100%",
+                                                    }}
+                                                    title="Delete module"
+                                                >
+                                                    Delete
+                                                </button>
+                                                <button
+                                                    className="nodrag"
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        openModuleEditor(mod.id);
+                                                    }}
+                                                    style={{
+                                                        padding: "4px 6px",
+                                                        background: "#1f8ecd",
+                                                        border: "1px solid #1f8ecd",
+                                                        color: "#fff",
+                                                        borderRadius: 6,
+                                                        cursor: "pointer",
+                                                        fontSize: 10,
+                                                        width: "100%",
+                                                    }}
+                                                    title="Open module for editing"
+                                                >
+                                                    Update
+                                                </button>
+                                            </div>
                                         </div>
                                         <span style={{ fontSize: 11, color: "#d0d0d0" }}>
                                             {mod.version} • {mod.handles.inputs.length} in / {mod.handles.outputs.length} out
