@@ -80,17 +80,17 @@ export function deleteModule(id: string) {
     persist(filtered);
 }
 
-export function saveModule(def: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string }): SavedModule {
+export function saveModule(moduleInput: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string }): SavedModule {
     const now = new Date().toISOString();
     // subgraph traveral: find custom 
     const next: SavedModule = {
-        ...def,
-        id: def.id || `mod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        ...moduleInput,
+        id: moduleInput.id || `mod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         createdAt: now,
         updatedAt: now,
         handles: {
-            inputs: dedupeHandles(def.handles.inputs || ["in"]),
-            outputs: dedupeHandles(def.handles.outputs || ["out"]),
+            inputs: dedupeHandles(moduleInput.handles.inputs || ["in"]),
+            outputs: dedupeHandles(moduleInput.handles.outputs || ["out"]),
         },
     };
 
