@@ -393,12 +393,12 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes, assignParent, getNodes]
     );
+    
     // Code to handle Repeat Blocks
-
     const onSelectionChange = useCallback(
-        (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
-            const selectedNodeIdsFromParam = new Set((params.nodes || []).map(n => n.id));
-            const selectedEdgeIdsFromParam = new Set((params.edges || []).map(e => e.id));
+        (params: { nodes: Node[]; edges: Edge[] }) => {
+            const selectedNodeIdsFromParam = new Set(params.nodes.map(n => n.id));
+            const selectedEdgeIdsFromParam = new Set(params.edges.map(e => e.id));
 
             setNodes(nds => {
                 return nds.map(n => {
