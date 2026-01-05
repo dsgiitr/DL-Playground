@@ -69,6 +69,8 @@ const normalizeModuleRefNode = (node: Node): Node => {
 
 const normalizeModuleRefNodes = (nodes: Node[]) => nodes.map(normalizeModuleRefNode);
 
+// this is used to sync and update the increment module version from v1 to v2 etc 
+
 const nextIncrementModuleVersion = (version: string) => {
     const match = version.match(/(\d+)/);
     if (!match) return "v2";
@@ -131,7 +133,7 @@ function FlowContent() {
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
-    const [moduleNameInput, setModuleNameInput] = useState("");
+    const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1261,6 +1263,7 @@ function FlowContent() {
                                 justifyContent: "space-between",
                             }}
                         >
+                            {/* editable module header to enter the updated module names  */}
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>Editing Module</span>
                                 <input
