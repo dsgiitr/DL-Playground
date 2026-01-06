@@ -9,6 +9,7 @@ export default function Sidebar({
     modules,
     onDeleteModule
 }: { onGenerateCode: () => void; codePanelOpen: boolean; onCollapse: () => void; modules: SavedModule[]; onDeleteModule: (id: string) => void }) {
+    const [searchQuery, setSearchQuery] = useState(""); //adding serach sidebar for quickly seraching layers
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
         Object.keys(NODE_GROUPS).reduce<Record<string, boolean>>((acc, key) => {
             acc[key] = false; // start collapsed
@@ -30,20 +31,30 @@ export default function Sidebar({
         }
     };
     
-    // add the open module editor function in the sidebar to wire up the opening of module for editing
     const openModuleEditor = (moduleId: string) => {
         window.dispatchEvent(new CustomEvent("module-open", { detail: { moduleId } }));
     };
 
-    const groups = useMemo(
-        () =>
-            Object.entries(NODE_GROUPS).map(([key, group]) => ({
-                key,
-                label: group.label,
-                nodes: group.nodes
-            })),
-        []
-    );
+    const groups = useMemo(() => {
+        const normalizedQuery = searchQuery.trim().toLowerCase();
+        const matchesQuery = (text?: string) => (text ?? "").toLowerCase().includes(normalizedQuery);
+        return Object.entries(NODE_GROUPS)
+            .map(([key, group]) => {
+                const nodeEntries = Object.entries(group.nodes).map(([type, def]) => {
+                    const label = typeof (def as { label?: string }).label === "string" ? (def as { label?: string }).label : type;
+                    return { type, label };
+                });
+                const filteredNodes = normalizedQuery
+                    ? nodeEntries.filter(node => matchesQuery(node.label) || matchesQuery(node.type) || matchesQuery(group.label))
+                    : nodeEntries;
+                return {
+                    key,
+                    label: group.label,
+                    nodes: filteredNodes,
+                };
+            })
+            .filter(group => group.nodes.length > 0);
+    }, [searchQuery]);
 
     const toggleGroup = (key: string) => {
         setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -52,6 +63,23 @@ export default function Sidebar({
     return (
         <aside style={{ background: "#484444", padding: "2vw", textTransform: "capitalize", height: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>
+                <div style={{ marginBottom: 12 }}>
+                    <input
+                        value={searchQuery}
+                        onChange={event => setSearchQuery(event.target.value)}
+                        placeholder="Search layers..."
+                        style={{
+                            width: "100%",
+                            boxSizing: "border-box",
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            border: "1px solid #555",
+                            background: "#2f2b2b",
+                            color: "#e6edf3",
+                            fontSize: 12,
+                        }}
+                    />
+                </div>
                 {modules.length > 0 && (
                     <div style={{ marginBottom: 12, border: "1px solid #666", borderRadius: 8, background: "#3d3a3a" }}>
                         <button
@@ -169,7 +197,8 @@ export default function Sidebar({
                     </div>
                 )}
                 {groups.map(({ key, label, nodes }) => {
-                    const open = !!openGroups[key];
+                    const isSearching = searchQuery.trim().length > 0;
+                    const open = isSearching || !!openGroups[key];
                     return (
                         <div key={key} style={{ marginBottom: 12, border: "1px solid #666", borderRadius: 8, background: "#3d3a3a" }}>
                             <button
@@ -198,9 +227,9 @@ export default function Sidebar({
                             </button>
                             {open && (
                                 <div style={{ padding: "6px 10px 10px" }}>
-                                    {Object.keys(nodes).map(type => (
+                                    {nodes.map(node => (
                                         <div
-                                            key={type}
+                                            key={node.type}
                                             style={{
                                                 padding: 8,
                                                 border: "1px solid #888",
@@ -211,9 +240,9 @@ export default function Sidebar({
                                                 color: "#fff"
                                             }}
                                             draggable
-                                            onDragStart={event => onDragStart(event, type)}
+                                            onDragStart={event => onDragStart(event, node.type)}
                                         >
-                                            {type.replace("_", " ")}
+                                            {node.label}
                                         </div>
                                     ))}
                                 </div>
@@ -221,6 +250,11 @@ export default function Sidebar({
                         </div>
                     );
                 })}
+                {searchQuery.trim() && groups.length === 0 && (
+                    <div style={{ color: "#9ca3af", fontSize: 12, padding: "6px 4px" }}>
+                        No layers match "{searchQuery.trim()}".
+                    </div>
+                )}
             </div>
             <button
                 onClick={onReset}
