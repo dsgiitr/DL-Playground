@@ -24,8 +24,10 @@ type Props = {
     exportMenuOpen: boolean;
     exporting: boolean;
     showDiagnostics: boolean;
+    showComputePanel: boolean;
     failureCount: number;
     onToggleDiagnostics: () => void;
+    onToggleComputePanel: () => void;
     statusSlot?: ReactNode;
     selectionSummary?: ReactNode;
 };
@@ -54,8 +56,10 @@ export default function EditorHeader({
     exportMenuOpen,
     exporting,
     showDiagnostics,
+    showComputePanel,
     failureCount,
     onToggleDiagnostics,
+    onToggleComputePanel,
     statusSlot,
     selectionSummary,
 }: Props) {
@@ -74,7 +78,7 @@ export default function EditorHeader({
                 background: "#1a1a1a",
             }}
         >
-            <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "nowrap" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <span style={{ color: "#6b7280", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                         History
@@ -158,6 +162,7 @@ export default function EditorHeader({
                                     borderRadius: 4,
                                     padding: "2px 6px",
                                     fontSize: 12,
+                                    maxWidth: 52,
                                 }}
                             >
                                 {traceSeedOptions.map(seed => (
@@ -330,9 +335,38 @@ export default function EditorHeader({
                     </div>
                 </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {statusSlot}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, minWidth: 260 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap", overflow: "hidden" }}>
+                    {statusSlot ? (
+                        <div
+                            style={{
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                display: "flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            {statusSlot}
+                        </div>
+                    ) : null}
+                    <button
+                        onClick={onToggleComputePanel}
+                        style={{
+                            padding: "4px 8px",
+                            borderRadius: 6,
+                            border: "1px solid #3f3f46",
+                            background: showComputePanel ? "#1f1f1f" : "#111318",
+                            color: "#e6edf3",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            flexShrink: 0,
+                        }}
+                    >
+                        {showComputePanel ? "Hide compute" : "View compute"}
+                    </button>
                     {failureCount > 0 && (
                         <button
                             onClick={onToggleDiagnostics}
@@ -344,6 +378,7 @@ export default function EditorHeader({
                                 color: "#e6edf3",
                                 cursor: "pointer",
                                 fontSize: 12,
+                                flexShrink: 0,
                             }}
                         >
                             {showDiagnostics ? "Hide diagnostics" : "View diagnostics"}

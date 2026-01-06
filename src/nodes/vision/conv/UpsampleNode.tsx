@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type UpsampleData = {
@@ -30,6 +31,10 @@ export class UpsampleNode {
             shape[shape.length - 2] = Math.floor(shape[shape.length - 2] * scale);
         }
         return shape;
+    }
+
+    static estimateCost(_data: UpsampleData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
     }
 
     static getInitCode(data: UpsampleData, name: string) {

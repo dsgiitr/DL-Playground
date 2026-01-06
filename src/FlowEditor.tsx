@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeViewer from "./components/CodeViewer.tsx";
 import DiagramView from "./components/DiagramView";
 import DiagnosticsPanel from "./components/DiagnosticsPanel";
+import ComputePanel from "./components/ComputePanel";
 import EditorHeader from "./components/HeaderUtils";
 import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
@@ -34,6 +35,8 @@ import { useRepeatSystem } from "./utils/repeatLogic";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
+import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
+import { estimateGraphCost } from "./utils/computeEstimator";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
 
@@ -130,7 +133,8 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
-    const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
+    const openModule = getActiveModule(moduleStack);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
@@ -151,6 +155,7 @@ function FlowContent() {
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [showDiagram, setShowDiagram] = useState(false);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
+    const [showComputePanel, setShowComputePanel] = useState(false);
     const [showTrace, setShowTrace] = useState(false);
     const [traceData, setTraceData] = useState<TraceResponse | null>(null);
     const [traceLoading, setTraceLoading] = useState(false);
@@ -487,12 +492,14 @@ function FlowContent() {
                 alert("Saved module is empty. Try saving it again after selecting nodes.");
                 return;
             }
-            setOpenModule({
-                module: mod,
-                nodes: applied.nodes,
-                edges: applied.edges,
-                fromNodeId: custom.detail?.nodeId,
-            });
+            setModuleStack(stack =>
+                pushModule(stack, {
+                    module: mod,
+                    nodes: applied.nodes,
+                    edges: applied.edges,
+                    fromNodeId: custom.detail?.nodeId,
+                })
+            );
             setShowModuleDiagram(false);
         };
         window.addEventListener("module-open", handler as EventListener);
@@ -536,7 +543,7 @@ function FlowContent() {
         );
         setModules(listModules());
         alert("Module saved");
-        setOpenModule(null);
+        setModuleStack(popModule);
     }, [openModule, moduleNameInput, setNodes]);
   
     // creates a brand‑new module from the edited nodes/edges
@@ -556,7 +563,7 @@ function FlowContent() {
         });
         setModules(listModules());
         alert("Module saved as new");
-        setOpenModule(null);
+        setModuleStack(popModule);
     }, [openModule, moduleNameInput]);
 
     const computeModuleHandles = useCallback(
@@ -772,6 +779,26 @@ function FlowContent() {
     }, [nodes, highlightNodes]);
 
     const failureCount = shapeResult?.failures?.length ?? 0;
+    const computeSummary = useMemo(
+        () => estimateGraphCost(nodes, edges, shapeResult, LAYER_REGISTRY),
+        [nodes, edges, shapeResult]
+    );
+
+    const toggleDiagnostics = useCallback(() => {
+        setShowDiagnostics(open => {
+            const next = !open;
+            if (next) setShowComputePanel(false);
+            return next;
+        });
+    }, []);
+
+    const toggleComputePanel = useCallback(() => {
+        setShowComputePanel(open => {
+            const next = !open;
+            if (next) setShowDiagnostics(false);
+            return next;
+        });
+    }, []);
 
     const focusFailure = useCallback(
         (failure: ShapeFailure) => {
@@ -899,8 +926,10 @@ function FlowContent() {
                     exportMenuOpen={exportMenuOpen}
                     exporting={!!exporting}
                     showDiagnostics={showDiagnostics}
+                    showComputePanel={showComputePanel}
                     failureCount={failureCount}
-                    onToggleDiagnostics={() => setShowDiagnostics(open => !open)}
+                    onToggleDiagnostics={toggleDiagnostics}
+                    onToggleComputePanel={toggleComputePanel}
                     statusSlot={
                         shapeResult && shapeResult.ok ? (
                             <div
@@ -962,6 +991,20 @@ function FlowContent() {
                             failures={shapeResult.failures}
                             onSelect={focusFailure}
                             onClose={() => setShowDiagnostics(false)}
+                        />
+                    )}
+                    {showComputePanel && (
+                        <ComputePanel
+                            summary={computeSummary}
+                            onSelect={node => {
+                                setHighlightNodes(new Set([node.nodeId]));
+                                setHighlightEdges(new Set());
+                                const target = nodes.find(n => n.id === node.nodeId);
+                                if (target) {
+                                    void fitView({ nodes: [target], padding: 0.4 });
+                                }
+                            }}
+                            onClose={() => setShowComputePanel(false)}
                         />
                     )}
                 </div>
@@ -1282,7 +1325,7 @@ function FlowContent() {
                                     </div>
                                 )}
                                 <button
-                                    onClick={() => setOpenModule(null)}
+                                    onClick={() => setModuleStack(popModule)}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1307,34 +1350,34 @@ function FlowContent() {
                                         instance.fitView({ padding: 0.2, includeHiddenNodes: true });
                                     }}
                                     onNodesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                nodes: applyNodeChanges(changes, current.nodes),
+                                            }))
                                         )
                                     }
                                     onEdgesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                edges: applyEdgeChanges(changes, current.edges),
+                                            }))
                                         )
                                     }
                                     onConnect={connection =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? {
-                                                    ...curr,
-                                                    edges: addEdge(
-                                                        {
-                                                            ...connection,
-                                                            type: "custom",
-                                                            data: { label: connection.source || "out" },
-                                                        },
-                                                        curr.edges
-                                                    ),
-                                                }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                edges: addEdge(
+                                                    {
+                                                        ...connection,
+                                                        type: "custom",
+                                                        data: { label: connection.source || "out" },
+                                                    },
+                                                    current.edges
+                                                ),
+                                            }))
                                         )
                                     }
                                     nodeTypes={nodeTypes}

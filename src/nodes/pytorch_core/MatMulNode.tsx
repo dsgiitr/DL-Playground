@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateMatMulCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type MatMulData = Record<string, never>;
@@ -24,6 +25,11 @@ export class MatMulNode {
         const m = a[a.length - 2];
         const n = b[b.length - 1];
         return [...batch, m, n];
+    }
+
+    static estimateCost(_data: MatMulData, inputShapes: number[][]) {
+        const [left, right] = inputShapes;
+        return estimateMatMulCost(left || [], right || []);
     }
 
     static getInitCode() {

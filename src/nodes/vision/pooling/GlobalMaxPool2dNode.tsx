@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimatePoolCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type GlobalPoolData = Record<string, never>;
@@ -17,6 +18,13 @@ export class GlobalMaxPool2dNode {
     static shapeCompute(_data: GlobalPoolData, inputShapes: number[][]) {
         const [n, c] = inputShapes[0];
         return [n, c, 1, 1];
+    }
+
+    static estimateCost(_data: GlobalPoolData, inputShapes: number[][], outputShape: number[]) {
+        const inputShape = inputShapes[0] || [];
+        const inH = toNumber(inputShape[2], 0);
+        const inW = toNumber(inputShape[3], 0);
+        return estimatePoolCost(outputShape, inH * inW);
     }
 
     static getInitCode(_data: GlobalPoolData, name: string) {
