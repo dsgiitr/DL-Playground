@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateConvCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type PointwiseData = {
@@ -31,6 +32,13 @@ export class PointwiseConv2dNode {
         const [batch, , h, w] = inputShapes[0];
         const outCh = getParamValue(this, data, "out_channels") as number;
         return [batch, outCh, h, w];
+    }
+
+    static estimateCost(data: PointwiseData, _inputShapes: number[][], outputShape: number[]) {
+        const inCh = toNumber(getParamValue(this, data, "in_channels"), 0);
+        const outCh = toNumber(getParamValue(this, data, "out_channels"), 0);
+        const bias = data.bias !== false;
+        return estimateConvCost(outputShape, inCh, outCh, 1, bias);
     }
 
     static getInitCode(data: PointwiseData, name: string) {

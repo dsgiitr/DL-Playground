@@ -43,6 +43,10 @@ export class TransposeNode {
         return perm.map(i => shape[i]);
     }
 
+    static estimateCost() {
+        return { params: 0, flops: 0 };
+    }
+
     static getInitCode() {
         return "# transpose handled in forward";
     }

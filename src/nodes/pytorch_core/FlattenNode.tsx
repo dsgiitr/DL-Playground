@@ -27,6 +27,10 @@ export class FlattenNode {
         return [batch, flat];
     }
 
+    static estimateCost() {
+        return { params: 0, flops: 0 };
+    }
+
     static getInitCode(_data: FlattenData, name: string) {
         return `self.${name} = nn.Flatten()`;
     }

@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type CreateData = { shape: string };
@@ -31,6 +32,10 @@ function makeConstant(label: string, fnName: "zeros" | "ones" | "rand") {
 
         static shapeCompute(data: CreateData) {
             return parseShape(data.shape || "") || [];
+        }
+
+        static estimateCost(_data: CreateData, _inputShapes: number[][], outputShape: number[]) {
+            return estimateElementwiseCost(outputShape);
         }
 
         static getInitCode() {

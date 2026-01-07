@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 
@@ -37,6 +38,10 @@ export class ConcatNode {
         const sum = inputShapes.reduce((acc, shp) => acc + shp[dim], 0);
         base[dim] = sum;
         return base;
+    }
+
+    static estimateCost(_data: ConcatData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
     }
 
     static getInitCode() {

@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type ClipData = { min?: number; max?: number };
@@ -24,6 +25,10 @@ export class ClipNode {
 
     static shapeCompute(_data: ClipData, inputShapes: number[][]) {
         return [...(inputShapes[0] || [])];
+    }
+
+    static estimateCost(_data: ClipData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
     }
 
     static getInitCode() {

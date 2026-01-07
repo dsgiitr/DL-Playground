@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { toNumber } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type NormData = {
@@ -33,6 +34,13 @@ export class BatchNorm2dNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(data: NormData, _inputShapes: number[][], _outputShape: number[]) {
+        const affine = data.affine !== false;
+        const channels = toNumber(getParamValue(this, data, "num_features"), 0);
+        const params = affine ? channels * 2 : 0;
+        return { params, flops: 0 };
+    }
+
     static getInitCode(data: NormData, name: string) {
         return buildInitString("nn.BatchNorm2d", name, BatchNorm2dNode.paramSchema, data);
     }
@@ -52,6 +60,7 @@ export class InstanceNorm2dNode {
 
     static shapeVerifier = BatchNorm2dNode.shapeVerifier;
     static shapeCompute = BatchNorm2dNode.shapeCompute;
+    static estimateCost = BatchNorm2dNode.estimateCost;
 
     static getInitCode(data: NormData, name: string) {
         return buildInitString("nn.InstanceNorm2d", name, InstanceNorm2dNode.paramSchema, data);
@@ -85,6 +94,12 @@ export class GroupNormNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(data: NormData, _inputShapes: number[][], _outputShape: number[]) {
+        const affine = data.affine !== false;
+        const channels = toNumber(getParamValue(this, data, "num_features"), 0);
+        const params = affine ? channels * 2 : 0;
+        return { params, flops: 0 };
+    }
     static getInitCode(data: NormData, name: string) {
         return buildInitString("nn.GroupNorm", name, GroupNormNode.paramSchema, data);
     }
@@ -116,6 +131,12 @@ export class LayerNormNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(data: NormData, _inputShapes: number[][], _outputShape: number[]) {
+        const affine = data.affine !== false;
+        const norm = toNumber(getParamValue(this, data, "normalized_shape"), 0);
+        const params = affine ? norm * 2 : 0;
+        return { params, flops: 0 };
+    }
     static getInitCode(data: NormData, name: string) {
         return buildInitString("nn.LayerNorm", name, LayerNormNode.paramSchema, data);
     }
@@ -135,6 +156,10 @@ export class RMSNormNode {
     static shapeVerifier = LayerNormNode.shapeVerifier;
     static shapeCompute = LayerNormNode.shapeCompute;
 
+    static estimateCost(data: NormData, _inputShapes: number[][], _outputShape: number[]) {
+        const norm = toNumber(getParamValue(this, data, "normalized_shape"), 0);
+        return { params: norm, flops: 0 };
+    }
     static getInitCode(data: NormData, name: string) {
         return buildInitString("nn.RMSNorm", name, RMSNormNode.paramSchema, data);
     }

@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateConvCost, estimateElementwiseCost } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type ResidualData = {
@@ -31,6 +32,20 @@ export class ResidualBlockNode {
             out_skip: shape
         };
     }
+
+    static estimateCost(data: ResidualData, _inputShapes: number[][], outputShape: number[]) {
+        const channels = getParamValue(this, data, "channels") as number;
+        const k = getParamValue(this, data, "kernel_size") as number;
+        const useBn = !!getParamValue(this, data, "use_bn");
+        const convCost = estimateConvCost(outputShape, channels, channels, k * k, true);
+        const elementOps = estimateElementwiseCost(outputShape, useBn ? 3 : 2);
+        const bnParams = useBn ? channels * 2 : 0;
+        return {
+            params: convCost.params + bnParams,
+            flops: convCost.flops + elementOps.flops
+        };
+    }
+
     static getInitCode(data: ResidualData, name: string) {
         const c = getParamValue(this, data, "channels") as number;
         const k = getParamValue(this, data, "kernel_size") ?? 3;

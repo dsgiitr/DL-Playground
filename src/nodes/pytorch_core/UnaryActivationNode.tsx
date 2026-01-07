@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type UnaryData = Record<string, never>;
@@ -19,6 +20,10 @@ export function makeUnaryActivation(label: string, initExpr: string, forwardExpr
 
         static shapeCompute(_data: UnaryData, inputShapes: number[][]) {
             return [...(inputShapes[0] || [])];
+        }
+
+        static estimateCost(_data: UnaryData, _inputShapes: number[][], outputShape: number[]) {
+            return estimateElementwiseCost(outputShape);
         }
 
         static getInitCode(_data: UnaryData, name: string) {

@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateConvCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type ConvTData = {
@@ -49,6 +50,15 @@ export class ConvTranspose2dNode {
         const op = getParamValue(this, data, "output_padding") as number;
         const computeDim = (dim: number) => (dim - 1) * s - 2 * p + d * (k - 1) + op + 1;
         return [batch, outCh, computeDim(h), computeDim(w)];
+    }
+
+    static estimateCost(data: ConvTData, _inputShapes: number[][], outputShape: number[]) {
+        const inCh = toNumber(getParamValue(this, data, "in_channels"), 0);
+        const outCh = toNumber(getParamValue(this, data, "out_channels"), 0);
+        const kernel = toNumber(getParamValue(this, data, "kernel_size"), 0);
+        const bias = data.bias !== false;
+        const kernelArea = kernel * kernel;
+        return estimateConvCost(outputShape, inCh, outCh, kernelArea, bias);
     }
 
     static getInitCode(data: ConvTData, name: string) {

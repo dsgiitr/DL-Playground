@@ -21,6 +21,10 @@ export class AccuracyNode {
         return []; // scalar metric
     }
 
+    static estimateCost() {
+        return { params: 0, flops: 0 };
+    }
+
     static getInitCode() {
         return "# accuracy is computed in forward";
     }

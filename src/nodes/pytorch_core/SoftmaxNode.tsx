@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateSoftmaxCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type SoftmaxData = { dim?: number };
@@ -25,6 +26,9 @@ export class SoftmaxNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(_data: SoftmaxData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateSoftmaxCost(outputShape, 3);
+    }
     static getInitCode(data: SoftmaxData, name: string) {
         const dim = getParamValue(SoftmaxNode.paramSchema, data, "dim");
         return `self.${name} = nn.Softmax(dim=${dim})`;
@@ -46,6 +50,9 @@ export class LogSoftmaxNode {
 
     static shapeVerifier = SoftmaxNode.shapeVerifier;
     static shapeCompute = SoftmaxNode.shapeCompute;
+    static estimateCost(_data: SoftmaxData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateSoftmaxCost(outputShape, 4);
+    }
     static getInitCode(data: SoftmaxData, name: string) {
         const dim = getParamValue(SoftmaxNode.paramSchema, data, "dim");
         return `self.${name} = nn.LogSoftmax(dim=${dim})`;
