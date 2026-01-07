@@ -36,6 +36,7 @@ import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, saveExistingModule, resolveModuleName, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
 import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
+import { buildShapeComparisons, compareTraceShapes } from "./utils/traceAnalysis";
 import { estimateGraphCost } from "./utils/computeEstimator";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
 import { runTorchLensTrace } from "./utils/traceService";
@@ -129,6 +130,10 @@ function FlowContent() {
     const [traceError, setTraceError] = useState<string | null>(null);
     const [traceSeedPreset, setTraceSeedPreset] = useState("42");
     const [traceSeedCustom, setTraceSeedCustom] = useState("");
+    const shapeComparisons = useMemo(
+        () => (traceData ? buildShapeComparisons(traceData, shapeResult, edges, nodes, LAYER_REGISTRY) : []),
+        [traceData, shapeResult, edges, nodes]
+    );
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const historyIndexRef = useRef(0);
     const [canUndo, setCanUndo] = useState(false);
@@ -208,7 +213,11 @@ function FlowContent() {
                 inputShapes: [[1, 3, 224, 224]],
                 code: generatedCode,
             });
-            setTraceData(resp);
+            const shapeWarnings = compareTraceShapes(resp, shapeResult, edges, nodes, LAYER_REGISTRY);
+            setTraceData({
+                ...resp,
+                warnings: [...(resp.warnings || []), ...shapeWarnings],
+            });
             setShowTrace(true);
         } catch (err) {
             setTraceError("Trace failed. Backend unavailable or returned error.");
@@ -950,6 +959,15 @@ function FlowContent() {
                                     void fitView({ nodes: [target], padding: 0.4 });
                                 }
                             }}
+                            onHover={nodeId => {
+                                if (!nodeId) {
+                                    setHighlightNodes(new Set());
+                                    setHighlightEdges(new Set());
+                                    return;
+                                }
+                                setHighlightNodes(new Set([nodeId]));
+                                setHighlightEdges(new Set());
+                            }}
                             onClose={() => setShowComputePanel(false)}
                         />
                     )}
@@ -1368,6 +1386,7 @@ function FlowContent() {
                     trace={traceData}
                     loading={traceLoading}
                     error={traceError}
+                    shapeComparisons={shapeComparisons}
                     onClose={() => setShowTrace(false)}
                     onSelect={ids => {
                         setHighlightNodes(new Set(ids));

@@ -35,9 +35,18 @@ export default function Sidebar({
         window.dispatchEvent(new CustomEvent("module-open", { detail: { moduleId } }));
     };
 
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const matchesQuery = (text?: string) => (text ?? "").toLowerCase().includes(normalizedQuery);
+    const filteredModules = useMemo(() => {
+        if (!normalizedQuery) return modules;
+        return modules.filter(mod =>
+            matchesQuery(mod.name) ||
+            matchesQuery(mod.version) ||
+            matchesQuery(mod.description)
+        );
+    }, [modules, normalizedQuery]);
+
     const groups = useMemo(() => {
-        const normalizedQuery = searchQuery.trim().toLowerCase();
-        const matchesQuery = (text?: string) => (text ?? "").toLowerCase().includes(normalizedQuery);
         return Object.entries(NODE_GROUPS)
             .map(([key, group]) => {
                 const nodeEntries = Object.entries(group.nodes).map(([type, def]) => {
@@ -54,7 +63,7 @@ export default function Sidebar({
                 };
             })
             .filter(group => group.nodes.length > 0);
-    }, [searchQuery]);
+    }, [normalizedQuery, matchesQuery]);
 
     const toggleGroup = (key: string) => {
         setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
@@ -112,9 +121,9 @@ export default function Sidebar({
                             </span>
                             <span>Custom Modules</span>
                         </button>
-                        {openGroups["custom_modules"] && (
+                        {(normalizedQuery ? true : openGroups["custom_modules"]) && (
                             <div style={{ padding: "6px 10px 10px" }}>
-                                {modules.map(mod => (
+                                {filteredModules.map(mod => (
                                     <div
                                         key={mod.id}
                                         style={{
@@ -192,6 +201,11 @@ export default function Sidebar({
                                         </span>
                                     </div>
                                 ))}
+                                {normalizedQuery && filteredModules.length === 0 && (
+                                    <div style={{ color: "#9ca3af", fontSize: 12, padding: "6px 4px" }}>
+                                        No modules match "{searchQuery.trim()}".
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

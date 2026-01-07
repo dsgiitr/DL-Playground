@@ -1,8 +1,10 @@
+import { useState } from "react";
 import type { ComputeSummary, NodeCompute } from "../utils/computeEstimator";
 
 type Props = {
     summary: ComputeSummary;
     onSelect: (node: NodeCompute) => void;
+    onHover: (nodeId: string | null) => void;
     onClose: () => void;
 };
 
@@ -21,7 +23,8 @@ const sortByCompute = (nodes: NodeCompute[]) =>
     [...nodes].sort((a, b) => (b.flops + b.params) - (a.flops + a.params));
 const isNonZeroCost = (node: NodeCompute) => node.params > 0 || node.flops > 0;
 
-export default function ComputePanel({ summary, onSelect, onClose }: Props) {
+export default function ComputePanel({ summary, onSelect, onHover, onClose }: Props) {
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
     const topNodes = sortByCompute(summary.nodes.filter(isNonZeroCost)).slice(0, 8);
     return (
         <div
@@ -122,12 +125,21 @@ export default function ComputePanel({ summary, onSelect, onClose }: Props) {
                                 onClick={() => onSelect(node)}
                                 style={{
                                     textAlign: "left",
-                                    border: "1px solid #1f2937",
-                                    background: "#14161c",
+                                    border: node.nodeId === hoveredId ? "1px solid #2563eb" : "1px solid #1f2937",
+                                    background: node.nodeId === hoveredId ? "#1f2937" : "#14161c",
                                     borderRadius: 8,
                                     padding: 8,
                                     color: "#e5e7eb",
                                     cursor: "pointer",
+                                    boxShadow: node.nodeId === hoveredId ? "0 0 0 1px rgba(37,99,235,0.3)" : "none",
+                                }}
+                                onMouseEnter={() => {
+                                    setHoveredId(node.nodeId);
+                                    onHover(node.nodeId);
+                                }}
+                                onMouseLeave={() => {
+                                    setHoveredId(null);
+                                    onHover(null);
                                 }}
                             >
                                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
