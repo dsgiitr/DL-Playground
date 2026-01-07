@@ -34,7 +34,7 @@ import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
-import { deleteModule, getModule, listModules, saveModule, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
+import { deleteModule, getModule, listModules, saveModule, saveExistingModule, resolveModuleName, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
 import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
 import { estimateGraphCost } from "./utils/computeEstimator";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
@@ -63,37 +63,6 @@ const TRACE_SEED_PRESETS = [42, 1337, 1234, 2020, 2021];
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
-const normalizeModuleRefNode = (node: Node): Node => {
-    if (node.type !== "module_ref" || !node.data || typeof node.data !== "object") return node;
-    const data = node.data as { handles?: ModuleHandles; contract?: ModuleHandles };
-    if (data.handles || !data.contract) return node;
-    return { ...node, data: { ...node.data, handles: data.contract } };
-};
-
-const normalizeModuleRefNodes = (nodes: Node[]) => nodes.map(normalizeModuleRefNode);
-
-// this is used to sync and update the increment module version from v1 to v2 etc 
-
-const nextIncrementModuleVersion = (version: string) => {
-    const match = version.match(/(\d+)/);
-    if (!match) return "v2";
-    const next = parseInt(match[1], 10) + 1;
-    return `v${next}`;
-};
-
-const updateModuleRefData = (
-    node: Node,
-    moduleId: string,
-    updates: Partial<{ name: string; version: string; handles: ModuleHandles }>
-): Node => {
-    if (node.type !== "module_ref") return node;
-    const data = (node.data || {}) as { moduleId?: string };
-    if (data.moduleId !== moduleId) return node;
-    return { ...node, data: { ...node.data, ...updates } };
-};
-
-// this saves the name of the module and hanldes empty name case 
-const resolveModuleName = (input: string, fallback: string) => input.trim() || fallback;
 
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
@@ -102,9 +71,8 @@ function FlowContent() {
             try {
                 const parsed: GraphIR = JSON.parse(savedGraph);
                 const restored = applyGraphIR(parsed);
-                const normalizedNodes = normalizeModuleRefNodes(restored.nodes);
-                syncIdFromNodes(normalizedNodes);
-                return normalizedNodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
+                syncIdFromNodes(restored.nodes);
+                return restored.nodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
             } catch (err) {
                 console.warn("Failed to load GraphIR, falling back to nodes/edges", err);
             }
@@ -114,9 +82,8 @@ function FlowContent() {
         const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
             n.type === "input" ? { ...n, type: "input_layer" } : n
         );
-        const normalizedNodes = normalizeModuleRefNodes(parsed);
-        syncIdFromNodes(normalizedNodes);
-        return normalizedNodes;
+        syncIdFromNodes(parsed);
+        return parsed;
     });
     const [edges, setEdges] = useState<Edge[]>(() => {
         const savedGraph = localStorage.getItem("graphIR");
@@ -479,9 +446,8 @@ function FlowContent() {
                 mod.internalNodes && mod.internalEdges
                     ? { nodes: mod.internalNodes, edges: mod.internalEdges }
                     : applyGraphIR(mod.graph);
-            const normalizedNodes = normalizeModuleRefNodes(appliedRaw.nodes);
             const applied = {
-                nodes: normalizedNodes.map(n => ({
+                nodes: appliedRaw.nodes.map(n => ({
                     ...n,
                     selected: false,
                     data: { ...(n.data || {}), __highlight: undefined },
@@ -517,34 +483,14 @@ function FlowContent() {
     }, [openModule?.module?.name]);
 
     // this is used when the save as existing module is selected 
-    const saveExistingModule = useCallback(() => {
+    const saveExistingModuleChanges = useCallback(() => {
         if (!openModule) return;
-        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
-        const nextVersion = nextIncrementModuleVersion(openModule.module.version);
-        const nextName = resolveModuleName(moduleNameInput, openModule.module.name);
-        saveModule({
-            id: openModule.module.id,
-            name: nextName,
-            version: nextVersion,
-            graph: updatedGraph,
-            handles: openModule.module.handles,
-            internalNodes: openModule.nodes,
-            internalEdges: openModule.edges,
-            description: openModule.module.description,
-        });
-        setNodes(nds =>
-            nds.map(n =>
-                updateModuleRefData(n, openModule.module.id, {
-                    name: nextName,
-                    version: nextVersion,
-                    handles: openModule.module.handles,
-                })
-            )
-        );
+        const result = saveExistingModule(openModule, moduleNameInput, nodes);
+        setNodes(result.updatedNodes);
         setModules(listModules());
         alert("Module saved");
         setModuleStack(popModule);
-    }, [openModule, moduleNameInput, setNodes]);
+    }, [openModule, moduleNameInput, nodes, setNodes]);
   
     // creates a brand‑new module from the edited nodes/edges
     const saveModuleAsNew = useCallback(() => {
@@ -658,7 +604,7 @@ function FlowContent() {
                 try {
                     const parsed = JSON.parse(String(ev.target?.result)) as GraphIR;
                     const { nodes: newNodes, edges: newEdges } = applyGraphIR(parsed);
-                    setNodes(normalizeModuleRefNodes(newNodes));
+                    setNodes(newNodes);
                     setEdges(newEdges);
                 } catch (err) {
                     console.error("Failed to import graph", err);
@@ -1289,7 +1235,7 @@ function FlowContent() {
                                         <button
                                             onClick={() => {
                                                 setShowModuleSaveMenu(false);
-                                                saveExistingModule();
+                                                saveExistingModuleChanges();
                                             }}
                                             style={{
                                                 padding: "6px 8px",

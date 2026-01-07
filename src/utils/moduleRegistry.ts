@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { GraphIR } from "../types/graph";
+import { buildGraphIR } from "./graphIR";
 
 export type ModuleHandles = {
     inputs: string[];
@@ -7,6 +8,32 @@ export type ModuleHandles = {
     // internal nodes 
     // internal edges 
     // external reference: [ids]
+};
+
+export type ModuleEditSession = {
+    module: SavedModule;
+    nodes: Node[];
+    edges: Edge[];
+};
+
+export const nextIncrementModuleVersion = (version: string) => {
+    const match = version.match(/(\d+)/);
+    if (!match) return "v2";
+    const next = parseInt(match[1], 10) + 1;
+    return `v${next}`;
+};
+
+export const resolveModuleName = (input: string, fallback: string) => input.trim() || fallback;
+
+export const updateModuleRefData = (
+    node: Node,
+    moduleId: string,
+    updates: Partial<{ name: string; version: string; handles: ModuleHandles }>
+) => {
+    if (node.type !== "module_ref") return node;
+    const data = (node.data || {}) as { moduleId?: string };
+    if (data.moduleId !== moduleId) return node;
+    return { ...node, data: { ...node.data, ...updates } };
 };
 
 export type SavedModule = {
@@ -26,12 +53,11 @@ const STORAGE_KEY = "customModules";
 
 type RawSavedModule = Omit<SavedModule, "handles"> & {
     handles?: ModuleHandles;
-    contract?: ModuleHandles;
 };
 
 function normalizeModule(mod: RawSavedModule): SavedModule {
-    const { handles, contract, ...rest } = mod;
-    const resolved = handles || contract || { inputs: ["in"], outputs: ["out"] };
+    const { handles, ...rest } = mod;
+    const resolved = handles || { inputs: ["in"], outputs: ["out"] };
     return {
         ...(rest as Omit<SavedModule, "handles">),
         handles: {
@@ -108,3 +134,27 @@ export function saveModule(moduleInput: Omit<SavedModule, "id" | "createdAt" | "
     persist(merged);
     return next;
 }
+
+export const saveExistingModule = (session: ModuleEditSession, nameInput: string, graphNodes: Node[]) => {
+    const updatedGraph = buildGraphIR(session.nodes, session.edges);
+    const nextVersion = nextIncrementModuleVersion(session.module.version);
+    const nextName = resolveModuleName(nameInput, session.module.name);
+    const saved = saveModule({
+        id: session.module.id,
+        name: nextName,
+        version: nextVersion,
+        graph: updatedGraph,
+        handles: session.module.handles,
+        internalNodes: session.nodes,
+        internalEdges: session.edges,
+        description: session.module.description,
+    });
+    const updatedNodes = graphNodes.map(node =>
+        updateModuleRefData(node, session.module.id, {
+            name: nextName,
+            version: nextVersion,
+            handles: session.module.handles,
+        })
+    );
+    return { saved, updatedNodes, nextName, nextVersion };
+};
