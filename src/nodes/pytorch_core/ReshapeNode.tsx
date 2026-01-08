@@ -53,6 +53,10 @@ export class ReshapeNode {
         return dims;
     }
 
+    static estimateCost() {
+        return { params: 0, flops: 0 };
+    }
+
     static getInitCode() {
         return "# reshape handled in forward";
     }

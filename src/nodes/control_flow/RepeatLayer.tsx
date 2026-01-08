@@ -3,6 +3,7 @@ import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/B
 // import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 import { Handle, NodeResizeControl, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import { compileGraphToScript } from "../../utils/codeCompile";
+import { estimateGraphCost } from "../../utils/computeEstimator";
 import { verifyShapes } from "../../utils/shape_verifier";
 
 type ResizableNodeProps = NodeProps<Node<LayerData>> & {
@@ -127,6 +128,53 @@ export class RepeatLayerNode {
         }
         return inputShapes[0];
     }
+
+    static estimateCost(data: RepeatLayerData, inputShapes: number[][], _outputShape: number[], context?: { registry?: Record<string, any> }) {
+        const registry = context?.registry;
+        if (!registry) return { params: 0, flops: 0 };
+        if (!data?.internalNodes?.length) return { params: 0, flops: 0 };
+        const loopInputShape = inputShapes[0];
+        if (!loopInputShape?.length) return { params: 0, flops: 0 };
+
+        const internalIds = new Set(data.internalNodes.map(n => n.id));
+        const edgesToCheck = (data.internalEdges || []).map(e => ({ ...e }));
+        const inputEdges = edgesToCheck.filter(e => !internalIds.has(e.source));
+        if (inputEdges.length === 0) return { params: 0, flops: 0 };
+
+        const MOCK_INPUT_ID = "__LOOP_ENTRY__";
+        const mockDims = loopInputShape.map((size, idx) => ({
+            label: `D${idx}`,
+            size: size.toString(),
+            type: "inferred"
+        }));
+        const mockInputNode: Node = {
+            id: MOCK_INPUT_ID,
+            type: "input_layer",
+            position: { x: 0, y: 0 },
+            data: { label: "Loop Start", dims: mockDims }
+        };
+
+        inputEdges.forEach(e => {
+            e.source = MOCK_INPUT_ID;
+        });
+
+        const nodesToVerify = [...data.internalNodes, mockInputNode];
+        const edgesToVerify = edgesToCheck.filter(e =>
+            (internalIds.has(e.source) || e.source === MOCK_INPUT_ID) &&
+            internalIds.has(e.target)
+        );
+
+        const shapeResult = verifyShapes(nodesToVerify, edgesToVerify, registry);
+        if (!shapeResult.ok) return { params: 0, flops: 0 };
+
+        const internalCost = estimateGraphCost(data.internalNodes, edgesToVerify, shapeResult, registry);
+        const repetitions = Math.max(1, data.repetitions || 1);
+        return {
+            params: internalCost.totalParams,
+            flops: internalCost.totalFlops * repetitions
+        };
+    }
+
     static getInitCode(data: RepeatLayerData, name: string) {
         if (!data.internalNodes || data.internalNodes.length === 0) {
             return `#Empty Loop`;
