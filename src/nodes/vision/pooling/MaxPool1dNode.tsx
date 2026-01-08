@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimatePoolCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type PoolData = { kernel_size: number; stride?: number };
@@ -30,6 +31,11 @@ export class MaxPool1dNode {
         const dilation = 1;
         const outL = Math.floor((l + 2 * padding - dilation * (k - 1) - 1) / s + 1);
         return [n, c, outL];
+    }
+
+    static estimateCost(data: PoolData, _inputShapes: number[][], outputShape: number[]) {
+        const k = toNumber(getParamValue(this, data, "kernel_size"), 0);
+        return estimatePoolCost(outputShape, k);
     }
 
     static getInitCode(data: PoolData, name: string) {

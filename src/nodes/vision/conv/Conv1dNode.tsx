@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateConvCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type Conv1dData = {
@@ -50,6 +51,14 @@ export class Conv1dNode {
         const dilation = 1;
         const outL = Math.floor((length + 2 * padding - dilation * (kernel - 1) - 1) / stride + 1);
         return [batch, outCh, outL];
+    }
+
+    static estimateCost(data: Conv1dData, _inputShapes: number[][], outputShape: number[]) {
+        const inCh = toNumber(getParamValue(this, data, "in_channels"), 0);
+        const outCh = toNumber(getParamValue(this, data, "out_channels"), 0);
+        const kernel = toNumber(getParamValue(this, data, "kernel_size"), 0);
+        const bias = data.bias !== false;
+        return estimateConvCost(outputShape, inCh, outCh, kernel, bias);
     }
 
     static getInitCode(data: Conv1dData, name: string) {

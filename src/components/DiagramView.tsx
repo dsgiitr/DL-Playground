@@ -31,6 +31,23 @@ type LayoutResult = {
     edges: DiagramEdge[];
 };
 
+type DiagramTheme = {
+    background: string;
+    edge: string;
+    text: string;
+    subtitle: string;
+    fills: {
+        input: string;
+        output: string;
+        block: string;
+        activation: string;
+        merge: string;
+        flatten: string;
+        other: string;
+    };
+    stroke: string;
+};
+
 const paperTheme: DiagramTheme = {
     background: "#f8f9fb",
     edge: "#1f2937",
