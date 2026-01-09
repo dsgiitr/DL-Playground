@@ -31,7 +31,7 @@ import type { TraceResponse } from "./types/trace";
 import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
-import { generateMainCode } from "./utils/codeCompile";
+import { recursiveCodeGenerator } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
@@ -167,7 +167,7 @@ function FlowContent() {
     // const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
     const generated = useMemo(() => {
         const { rootNodes, rootEdges } = getRootGraph(nodes, edges);
-        return generateMainCode(rootNodes, rootEdges);
+        return recursiveCodeGenerator(rootNodes, rootEdges);
     }, [nodes, edges]);
     const generatedCode = generated.code;
 
