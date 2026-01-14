@@ -35,7 +35,11 @@ import { MSELossNode } from "./losses/MSELossNode";
 import { CrossEntropyLossNode } from "./losses/CrossEntropyLossNode";
 import { BCELossNode } from "./losses/BCELossNode";
 import { AccuracyNode } from "./metrics/AccuracyNode";
-import { ZerosNode, OnesNode, RandNode } from "./pytorch_core/ConstantTensorNodes";
+import {
+  ZerosNode,
+  OnesNode,
+  RandNode,
+} from "./pytorch_core/ConstantTensorNodes";
 import { RepeatNode } from "./pytorch_core/RepeatNode";
 import { makeElementwiseBinary } from "./pytorch_core/ElementwiseBinaryNode";
 import { makeUnaryElementwise } from "./pytorch_core/UnaryElementwiseNode";
@@ -45,196 +49,224 @@ import { ClipNode } from "./pytorch_core/ClipNode";
 import { makeReduction } from "./pytorch_core/ReductionNode";
 import { RepeatLayerNode } from "./control_flow/RepeatLayer";
 import {
-    ReLUNode,
-    LeakyReLUNode,
-    GELUNode,
-    ELUNode,
-    SELUNode,
-    TanhNode,
-    SigmoidNode,
-    SoftplusNode,
-    SoftsignNode,
-    HardSwishNode,
-    HardSigmoidNode,
+  ReLUNode,
+  LeakyReLUNode,
+  GELUNode,
+  ELUNode,
+  SELUNode,
+  TanhNode,
+  SigmoidNode,
+  SoftplusNode,
+  SoftsignNode,
+  HardSwishNode,
+  HardSigmoidNode,
 } from "./pytorch_core/activations";
 import { SoftmaxNode, LogSoftmaxNode } from "./pytorch_core/SoftmaxNode";
-import { ProdNode, MaxNode, MinNode, ArgMaxNode, ArgMinNode } from "./pytorch_core/ArgExtremaNodes";
 import {
-    BatchNorm2dNode,
-    InstanceNorm2dNode,
-    GroupNormNode,
-    LayerNormNode,
-    RMSNormNode,
+  ProdNode,
+  MaxNode,
+  MinNode,
+  ArgMaxNode,
+  ArgMinNode,
+} from "./pytorch_core/ArgExtremaNodes";
+import {
+  BatchNorm2dNode,
+  InstanceNorm2dNode,
+  GroupNormNode,
+  LayerNormNode,
+  RMSNormNode,
 } from "./pytorch_core/NormNodes";
-import { DropoutNode, SpatialDropout2dNode, AlphaDropoutNode, StochasticDepthNode } from "./pytorch_core/RegNodes";
+import {
+  DropoutNode,
+  SpatialDropout2dNode,
+  AlphaDropoutNode,
+  StochasticDepthNode,
+} from "./pytorch_core/RegNodes";
+import { DualOutputConvNode } from "./vision/blocks/DualOutputConv";
 import { ModuleRefNode } from "./ModuleRefNode";
 
 export type NodeGroup = {
-    label: string;
-    nodes: Record<string, any>;
+  label: string;
+  nodes: Record<string, any>;
 };
 
 // Node catalog grouped by modality/usage. This keeps the registry modular and
 // mirrors the folder layout so it is easy to extend.
 export const NODE_GROUPS: Record<string, NodeGroup> = {
-    inputs: {
-        label: "Inputs",
-        nodes: { input_layer: InputNode },
-    },
-    torch_ops: {
-        label: "Torch Ops",
-        nodes: (() => {
-            const SubNode = makeElementwiseBinary("Sub", "-");
-            const MulNode = makeElementwiseBinary("Mul", "*");
-            const DivNode = makeElementwiseBinary("Div", "/");
-            const ExpNode = makeUnaryElementwise("Exp", input => `torch.exp(${input})`);
-            const LogNode = makeUnaryElementwise("Log", input => `torch.log(${input})`);
-            const SqrtNode = makeUnaryElementwise("Sqrt", input => `torch.sqrt(${input})`);
-            const SumNode = makeReduction("Sum", "sum");
-            const MeanNode = makeReduction("Mean", "mean");
+  inputs: {
+    label: "Inputs",
+    nodes: { input_layer: InputNode },
+  },
+  torch_ops: {
+    label: "Torch Ops",
+    nodes: (() => {
+      const SubNode = makeElementwiseBinary("Sub", "-");
+      const MulNode = makeElementwiseBinary("Mul", "*");
+      const DivNode = makeElementwiseBinary("Div", "/");
+      const ExpNode = makeUnaryElementwise(
+        "Exp",
+        (input) => `torch.exp(${input})`
+      );
+      const LogNode = makeUnaryElementwise(
+        "Log",
+        (input) => `torch.log(${input})`
+      );
+      const SqrtNode = makeUnaryElementwise(
+        "Sqrt",
+        (input) => `torch.sqrt(${input})`
+      );
+      const SumNode = makeReduction("Sum", "sum");
+      const MeanNode = makeReduction("Mean", "mean");
 
-            return {
-                add_layer: AddNode,
-                concat_layer: ConcatNode,
-                sub_layer: SubNode,
-                mul_layer: MulNode,
-                div_layer: DivNode,
-                exp_layer: ExpNode,
-                log_layer: LogNode,
-                sqrt_layer: SqrtNode,
-                pow_layer: PowNode,
-                clip_layer: ClipNode,
-                matmul_layer: MatMulNode,
-                sum_layer: SumNode,
-                mean_layer: MeanNode,
-                prod_layer: ProdNode,
-                max_layer: MaxNode,
-                min_layer: MinNode,
-                argmax_layer: ArgMaxNode,
-                argmin_layer: ArgMinNode,
-                repeat_layer: RepeatNode,
-            };
-        })(),
+      return {
+        add_layer: AddNode,
+        concat_layer: ConcatNode,
+        sub_layer: SubNode,
+        mul_layer: MulNode,
+        div_layer: DivNode,
+        exp_layer: ExpNode,
+        log_layer: LogNode,
+        sqrt_layer: SqrtNode,
+        pow_layer: PowNode,
+        clip_layer: ClipNode,
+        matmul_layer: MatMulNode,
+        sum_layer: SumNode,
+        mean_layer: MeanNode,
+        prod_layer: ProdNode,
+        max_layer: MaxNode,
+        min_layer: MinNode,
+        argmax_layer: ArgMaxNode,
+        argmin_layer: ArgMinNode,
+        repeat_layer: RepeatNode,
+      };
+    })(),
+  },
+  tensor_shape: {
+    label: "Tensor Shape",
+    nodes: {
+      reshape_layer: ReshapeNode,
+      transpose_layer: TransposeNode,
+      flatten_layer: FlattenNode,
     },
-    tensor_shape: {
-        label: "Tensor Shape",
-        nodes: { reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode },
+  },
+  tensor_create: {
+    label: "Tensor Creation",
+    nodes: {
+      zeros_layer: ZerosNode,
+      ones_layer: OnesNode,
+      rand_layer: RandNode,
     },
-    tensor_create: {
-        label: "Tensor Creation",
-        nodes: { zeros_layer: ZerosNode, ones_layer: OnesNode, rand_layer: RandNode },
+  },
+  activations: {
+    label: "Activations",
+    nodes: {
+      relu_layer: ReLUNode,
+      leakyrelu_layer: LeakyReLUNode,
+      gelu_layer: GELUNode,
+      elu_layer: ELUNode,
+      selu_layer: SELUNode,
+      tanh_layer: TanhNode,
+      sigmoid_layer: SigmoidNode,
+      softplus_layer: SoftplusNode,
+      softsign_layer: SoftsignNode,
+      hardswish_layer: HardSwishNode,
+      hardsigmoid_layer: HardSigmoidNode,
+      softmax_layer: SoftmaxNode,
+      logsoftmax_layer: LogSoftmaxNode,
     },
-    activations: {
-        label: "Activations",
-        nodes: {
-            relu_layer: ReLUNode,
-            leakyrelu_layer: LeakyReLUNode,
-            gelu_layer: GELUNode,
-            elu_layer: ELUNode,
-            selu_layer: SELUNode,
-            tanh_layer: TanhNode,
-            sigmoid_layer: SigmoidNode,
-            softplus_layer: SoftplusNode,
-            softsign_layer: SoftsignNode,
-            hardswish_layer: HardSwishNode,
-            hardsigmoid_layer: HardSigmoidNode,
-            softmax_layer: SoftmaxNode,
-            logsoftmax_layer: LogSoftmaxNode,
-        },
+  },
+  normalization: {
+    label: "Normalization",
+    nodes: {
+      batchnorm2d_layer: BatchNorm2dNode,
+      instancenorm2d_layer: InstanceNorm2dNode,
+      groupnorm_layer: GroupNormNode,
+      layernorm_layer: LayerNormNode,
+      rmsnorm_layer: RMSNormNode,
     },
-    normalization: {
-        label: "Normalization",
-        nodes: {
-            batchnorm2d_layer: BatchNorm2dNode,
-            instancenorm2d_layer: InstanceNorm2dNode,
-            groupnorm_layer: GroupNormNode,
-            layernorm_layer: LayerNormNode,
-            rmsnorm_layer: RMSNormNode,
-        },
+  },
+  regularization: {
+    label: "Regularization",
+    nodes: {
+      dropout_layer: DropoutNode,
+      spatialdropout2d_layer: SpatialDropout2dNode,
+      alphadropout_layer: AlphaDropoutNode,
+      stochasticdepth_layer: StochasticDepthNode,
     },
-    regularization: {
-        label: "Regularization",
-        nodes: {
-            dropout_layer: DropoutNode,
-            spatialdropout2d_layer: SpatialDropout2dNode,
-            alphadropout_layer: AlphaDropoutNode,
-            stochasticdepth_layer: StochasticDepthNode,
-        },
+  },
+  dense: {
+    label: "Linear / Dense",
+    nodes: { linear_layer: LinearLayerNode },
+  },
+  vision_conv: {
+    label: "Vision - Convolution",
+    nodes: {
+      conv1d_layer: Conv1dNode,
+      conv2d_layer: Conv2dNode,
+      conv3d_layer: Conv3dNode,
+      depthwiseconv2d_layer: DepthwiseConv2dNode,
+      pointwiseconv2d_layer: PointwiseConv2dNode,
+      convtranspose2d_layer: ConvTranspose2dNode,
+      upsample_layer: UpsampleNode,
+      residual_block: ResidualBlockNode,
+      dual_output_conv: DualOutputConvNode,
     },
-    dense: {
-        label: "Linear / Dense",
-        nodes: { linear_layer: LinearLayerNode },
+  },
+  vision_pool: {
+    label: "Vision - Pooling",
+    nodes: {
+      maxpool1d_layer: MaxPool1dNode,
+      maxpool2d_layer: MaxPool2dNode,
+      maxpool3d_layer: MaxPool3dNode,
+      avgpool1d_layer: AvgPool1dNode,
+      avgpool2d_layer: AvgPool2dNode,
+      avgpool3d_layer: AvgPool3dNode,
+      adaptiveavgpool2d_layer: AdaptiveAvgPool2dNode,
+      adaptivemaxpool2d_layer: AdaptiveMaxPool2dNode,
+      globalavgpool2d_layer: GlobalAvgPool2dNode,
+      globalmaxpool2d_layer: GlobalMaxPool2dNode,
     },
-    vision_conv: {
-        label: "Vision - Convolution",
-        nodes: {
-            conv1d_layer: Conv1dNode,
-            conv2d_layer: Conv2dNode,
-            conv3d_layer: Conv3dNode,
-            depthwiseconv2d_layer: DepthwiseConv2dNode,
-            pointwiseconv2d_layer: PointwiseConv2dNode,
-            convtranspose2d_layer: ConvTranspose2dNode,
-            upsample_layer: UpsampleNode,
-            residual_block: ResidualBlockNode,
-        },
+  },
+  sequence: {
+    label: "Sequence / Attention",
+    nodes: {
+      embedding_layer: EmbeddingNode,
+      rnn_layer: RNNNode,
+      lstm_layer: LSTMNode,
+      gru_layer: GRUNode,
+      multihead_attention_layer: MultiheadAttentionNode,
+      positional_encoding_layer: PositionalEncodingNode,
     },
-    vision_pool: {
-        label: "Vision - Pooling",
-        nodes: {
-            maxpool1d_layer: MaxPool1dNode,
-            maxpool2d_layer: MaxPool2dNode,
-            maxpool3d_layer: MaxPool3dNode,
-            avgpool1d_layer: AvgPool1dNode,
-            avgpool2d_layer: AvgPool2dNode,
-            avgpool3d_layer: AvgPool3dNode,
-            adaptiveavgpool2d_layer: AdaptiveAvgPool2dNode,
-            adaptivemaxpool2d_layer: AdaptiveMaxPool2dNode,
-            globalavgpool2d_layer: GlobalAvgPool2dNode,
-            globalmaxpool2d_layer: GlobalMaxPool2dNode,
-        },
+  },
+  losses: {
+    label: "Losses",
+    nodes: {
+      mse_loss: MSELossNode,
+      cross_entropy_loss: CrossEntropyLossNode,
+      bce_loss: BCELossNode,
     },
-    sequence: {
-        label: "Sequence / Attention",
-        nodes: {
-            embedding_layer: EmbeddingNode,
-            rnn_layer: RNNNode,
-            lstm_layer: LSTMNode,
-            gru_layer: GRUNode,
-            multihead_attention_layer: MultiheadAttentionNode,
-            positional_encoding_layer: PositionalEncodingNode,
-        },
+  },
+  metrics: {
+    label: "Metrics",
+    nodes: {
+      accuracy_metric: AccuracyNode,
     },
-    losses: {
-        label: "Losses",
-        nodes: {
-            mse_loss: MSELossNode,
-            cross_entropy_loss: CrossEntropyLossNode,
-            bce_loss: BCELossNode,
-        },
+  },
+  control: {
+    label: "Control Flow",
+    nodes: {
+      repeat_layer: RepeatLayerNode,
     },
-    metrics: {
-        label: "Metrics",
-        nodes: {
-            accuracy_metric: AccuracyNode,
-        },
-    },
-    control: {
-        label: "Control Flow",
-        nodes: {
-            repeat_layer: RepeatLayerNode,
-        },
-    },
+  },
 };
 
-Object.values(NODE_GROUPS).forEach(group => {
-    Object.entries(group.nodes).forEach(([key, Class]) => {
-        registerLayer(key, Class as LayerDefinition<any>);
-    });
-});
+export const LAYER_REGISTRY: Record<
+  string,
+  LayerDefinition<any>
+> = Object.values(NODE_GROUPS).reduce((acc, group) => {
+  Object.assign(acc, group.nodes as Record<string, LayerDefinition<any>>);
+  return acc;
+}, {} as Record<string, LayerDefinition<any>>);
 
-// 2. Register Special Nodes (like ModuleRef)
-registerLayer("module_ref", ModuleRefNode);
-
-// 3. Re-export the populated registry for convenience
-console.log(LAYER_REGISTRY);
-export { LAYER_REGISTRY };
+// Register ModuleRefNode after building the main registry
+Object.assign(LAYER_REGISTRY, { module_ref: ModuleRefNode });

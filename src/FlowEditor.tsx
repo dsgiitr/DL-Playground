@@ -8,8 +8,10 @@ import {
     useReactFlow,
     type DefaultEdgeOptions,
     type Edge,
+    type EdgeSelectionChange,
     type FitViewOptions,
     type Node,
+    type NodeSelectionChange,
     type OnConnect,
     type OnEdgesChange,
     type OnNodeDrag,
@@ -18,98 +20,92 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CodeViewer from "./components/CodeViewer.tsx";
-import DiagramView from "./components/DiagramView";
-import DiagnosticsPanel from "./components/DiagnosticsPanel";
-import ComputePanel from "./components/ComputePanel";
-import EditorHeader from "./components/HeaderUtils";
-import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
+import { nodeTypes } from "./types/nodeTypes";
+import {
+  verifyShapes,
+  type ShapeResult,
+  type ShapeFailure,
+} from "./utils/shape_verifier";
+import { generateMainCode } from "./utils/codeCompile.ts";
+import CodeViewer from "./components/CodeViewer.tsx";
+import DiagramView from "./components/DiagramView";
+import TraceView from "./components/TraceView";
 import type { GraphIR } from "./types/graph";
-import { LAYER_REGISTRY, nodeTypes } from "./types/nodeTypes";
+import { LAYER_REGISTRY } from "./types/nodeTypes";
 import type { TraceResponse } from "./types/trace";
-import { exportDiagramDataUrl } from "./utils/diagramExport";
-import { useRepeatSystem } from "./utils/repeatLogic";
-// import { generatePyTorchCode } from "./utils/dummy_generator.ts";
-import { generateMainCode } from "./utils/codeCompile";
-import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
-import { deleteModule, getModule, listModules, saveModule, saveExistingModule, resolveModuleName, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
-import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
-import { buildShapeComparisons, compareTraceShapes } from "./utils/traceAnalysis";
-import { estimateGraphCost } from "./utils/computeEstimator";
-import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
-import { runTorchLensTrace } from "./utils/traceService";
+import { getModule, listModules, saveModule, deleteModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
 
 let id = 0;
 const getId = () => `node-${id++}`;
 const syncIdFromNodes = (nodes: Node[]) => {
-    const maxId = nodes.reduce((max, n) => {
-        const match = /^node-(\d+)$/.exec(n.id);
-        if (!match) return max;
-        const num = parseInt(match[1], 10);
-        return Number.isFinite(num) ? Math.max(max, num) : max;
-    }, -1);
-    id = Math.max(id, maxId + 1);
+  const maxId = nodes.reduce((max, n) => {
+    const match = /^node-(\d+)$/.exec(n.id);
+    if (!match) return max;
+    const num = parseInt(match[1], 10);
+    return Number.isFinite(num) ? Math.max(max, num) : max;
+  }, -1);
+  id = Math.max(id, maxId + 1);
 };
 const fitViewOptions: FitViewOptions = {
-    padding: 0.2,
+  padding: 0.2,
 };
 
 const defaultEdgeOptions: DefaultEdgeOptions = {
-    animated: true,
+  animated: true,
 };
 
-const TRACE_SEED_PRESETS = [42, 1337, 1234, 2020, 2021];
+const onNodeDrag: OnNodeDrag = (_, node) => {
+  console.log("drag event", node.data);
+};
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
 
-
 function FlowContent() {
-    const [nodes, setNodes] = useState<Node[]>(() => {
-        const savedGraph = localStorage.getItem("graphIR");
-        if (savedGraph) {
-            try {
-                const parsed: GraphIR = JSON.parse(savedGraph);
-                const restored = applyGraphIR(parsed);
-                syncIdFromNodes(restored.nodes);
-                return restored.nodes.map(n => (n.type === "input" ? { ...n, type: "input_layer" } : n));
-            } catch (err) {
-                console.warn("Failed to load GraphIR, falling back to nodes/edges", err);
-            }
-        }
-        const saved = localStorage.getItem("nodes");
-        if (!saved) return [];
-        const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
-            n.type === "input" ? { ...n, type: "input_layer" } : n
+  const [nodes, setNodes] = useState<Node[]>(() => {
+    const savedGraph = localStorage.getItem("graphIR");
+    if (savedGraph) {
+      try {
+        const parsed: GraphIR = JSON.parse(savedGraph);
+        const restored = applyGraphIR(parsed);
+        syncIdFromNodes(restored.nodes);
+        return restored.nodes.map((n) =>
+          n.type === "input" ? { ...n, type: "input_layer" } : n
         );
-        syncIdFromNodes(parsed);
-        return parsed;
-    });
-    const [edges, setEdges] = useState<Edge[]>(() => {
-        const savedGraph = localStorage.getItem("graphIR");
-        if (savedGraph) {
-            try {
-                const parsed: GraphIR = JSON.parse(savedGraph);
-                const restored = applyGraphIR(parsed);
-                return restored.edges;
-            } catch (err) {
-                console.warn("Failed to load GraphIR edges, falling back to edges", err);
-            }
-        }
-        const saved = localStorage.getItem("edges");
-        return saved ? JSON.parse(saved) : [];
-    });
-    const [modules, setModules] = useState<SavedModule[]>(() => listModules());
-    const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
-    const openModule = getActiveModule(moduleStack);
-    const [showModuleDiagram, setShowModuleDiagram] = useState(false);
-    const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
-    const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
-    const [showSaveModal, setShowSaveModal] = useState(false);
-    const [pendingModuleName, setPendingModuleName] = useState("");
-    const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
-    const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
+      } catch (err) {
+        console.warn(
+          "Failed to load GraphIR, falling back to nodes/edges",
+          err
+        );
+      }
+    }
+    const saved = localStorage.getItem("nodes");
+    if (!saved) return [];
+    const parsed: Node[] = JSON.parse(saved).map((n: Node) =>
+      n.type === "input" ? { ...n, type: "input_layer" } : n
+    );
+    syncIdFromNodes(parsed);
+    return parsed;
+  });
+  const [edges, setEdges] = useState<Edge[]>(() => {
+    const savedGraph = localStorage.getItem("graphIR");
+    if (savedGraph) {
+      try {
+        const parsed: GraphIR = JSON.parse(savedGraph);
+        const restored = applyGraphIR(parsed);
+        return restored.edges;
+      } catch (err) {
+        console.warn(
+          "Failed to load GraphIR edges, falling back to edges",
+          err
+        );
+      }
+    }
+    const saved = localStorage.getItem("edges");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -122,25 +118,17 @@ function FlowContent() {
     const [exporting, setExporting] = useState<"png" | "svg" | null>(null);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [showDiagram, setShowDiagram] = useState(false);
-    const [showDiagnostics, setShowDiagnostics] = useState(false);
-    const [showComputePanel, setShowComputePanel] = useState(false);
     const [showTrace, setShowTrace] = useState(false);
     const [traceData, setTraceData] = useState<TraceResponse | null>(null);
     const [traceLoading, setTraceLoading] = useState(false);
     const [traceError, setTraceError] = useState<string | null>(null);
-    const [traceSeedPreset, setTraceSeedPreset] = useState("42");
-    const [traceSeedCustom, setTraceSeedCustom] = useState("");
-    const shapeComparisons = useMemo(
-        () => (traceData ? buildShapeComparisons(traceData, shapeResult, edges, nodes, LAYER_REGISTRY) : []),
-        [traceData, shapeResult, edges, nodes]
-    );
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const historyIndexRef = useRef(0);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-    const { screenToFlowPosition, getNodes, fitView } = useReactFlow();
+    const { screenToFlowPosition } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
         changes => {
@@ -169,189 +157,201 @@ function FlowContent() {
                     ...connection,
                     type: "custom",
                     data: {
-                        label: labelBase
+                        label: labelBase,
+                        sourceHandle: connection.sourceHandle || undefined,
+                        targetHandle: connection.targetHandle || undefined,
                     }
                 },
                 eds
             );
         });
     }, [setEdges]);
-    // Temporary swap to validate behaviour before debugging
-    // const generated = useMemo(() => generatePyTorchCode(nodes, edges), [nodes, edges]);
-    const generated = useMemo(() => {
-        const { rootNodes, rootEdges } = getRootGraph(nodes, edges);
-        return generateMainCode(rootNodes, rootEdges);
-    }, [nodes, edges]);
+
+    const generated = useMemo(() => generateMainCode(nodes, edges), [nodes, edges]);
     const generatedCode = generated.code;
 
-    const onGenerateCode = useCallback(() => {
-        setShowLiveCode(val => !val);
-    }, []);
+  const onGenerateCode = useCallback(() => {
+    setShowLiveCode((val) => !val);
+  }, []);
 
-    const onDownloadCode = useCallback(() => {
-        const blob = new Blob([generatedCode], { type: "text/x-python" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "generated_model.py";
-        a.click();
-        URL.revokeObjectURL(url);
-    }, [generatedCode]);
+  const onDownloadCode = useCallback(() => {
+    const blob = new Blob([generatedCode], { type: "text/x-python" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "generated_model.py";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [generatedCode]);
 
-    const onDragOver = (event: React.DragEvent) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-    };
+  const onDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
 
-    const handleTrace = useCallback(async () => {
-        setTraceLoading(true);
-        setTraceError(null);
-        try {
-            const graph = buildGraphIR(nodes, edges);
-            const resp = await runTorchLensTrace({
-                graph,
-                inputShapes: [[1, 3, 224, 224]],
-                code: generatedCode,
-            });
-            const shapeWarnings = compareTraceShapes(resp, shapeResult, edges, nodes, LAYER_REGISTRY);
-            setTraceData({
-                ...resp,
-                warnings: [...(resp.warnings || []), ...shapeWarnings],
-            });
-            setShowTrace(true);
-        } catch (err) {
-            setTraceError("Trace failed. Backend unavailable or returned error.");
-            console.error("Trace failed", err);
-        } finally {
-            setTraceLoading(false);
-        }
-    }, [nodes, edges, generatedCode]);
+  const handleTrace = useCallback(async () => {
+    setTraceLoading(true);
+    setTraceError(null);
+    try {
+      const graph = buildGraphIR(nodes, edges);
+      const resp = await runTorchLensTrace({
+        graph,
+        inputShapes: [[1, 3, 224, 224]],
+        code: generatedCode,
+      });
+      setTraceData(resp);
+      setShowTrace(true);
+    } catch (err) {
+      setTraceError("Trace failed. Backend unavailable or returned error.");
+      console.error("Trace failed", err);
+    } finally {
+      setTraceLoading(false);
+    }
+  }, [nodes, edges, generatedCode]);
 
-    const deleteEdgeById = useCallback((edgeId: string) => {
-        setEdges(eds => eds.filter(e => e.id !== edgeId));
-    }, [setEdges]);
+  const deleteEdgeById = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+    },
+    [setEdges]
+  );
 
-    // Attach helper callbacks to edges so custom edge UI can remove them cleanly.
-    const edgesWithHandlers = useMemo(
-        () =>
-            edges.map(e => ({
-                ...e,
-                data: {
-                    ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
-                    onDelete: deleteEdgeById,
-                },
-            })),
-        [edges, deleteEdgeById]
+  // Attach helper callbacks to edges so custom edge UI can remove them cleanly.
+  const edgesWithHandlers = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        data: {
+          ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
+          onDelete: deleteEdgeById,
+        },
+      })),
+    [edges, deleteEdgeById]
+  );
+
+  const cloneSnapshot = useCallback((n: Node[], e: Edge[]) => {
+    const copyNodes = n.map((node) => ({
+      ...node,
+      data: node.data ? { ...node.data } : {},
+      position: { ...node.position },
+    }));
+    const copyEdges = e.map((edge) => ({
+      ...edge,
+      data: edge.data ? { ...edge.data } : {},
+    }));
+    return { nodes: copyNodes, edges: copyEdges };
+  }, []);
+
+  const applySnapshot = useCallback(
+    (snapshot: { nodes: Node[]; edges: Edge[] }) => {
+      isRestoring.current = true;
+      setNodes(snapshot.nodes);
+      setEdges(snapshot.edges);
+      syncIdFromNodes(snapshot.nodes);
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    const targetIndex = Math.max(0, historyIndexRef.current - 1);
+    historyIndexRef.current = targetIndex;
+    const snapshot = historyRef.current[targetIndex];
+    applySnapshot(cloneSnapshot(snapshot.nodes, snapshot.edges));
+    setCanUndo(targetIndex > 0);
+    setCanRedo(targetIndex < historyRef.current.length - 1);
+  }, [canUndo, applySnapshot, cloneSnapshot]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    const targetIndex = Math.min(
+      historyRef.current.length - 1,
+      historyIndexRef.current + 1
     );
+    historyIndexRef.current = targetIndex;
+    const snapshot = historyRef.current[targetIndex];
+    applySnapshot(cloneSnapshot(snapshot.nodes, snapshot.edges));
+    setCanUndo(targetIndex > 0);
+    setCanRedo(targetIndex < historyRef.current.length - 1);
+  }, [canRedo, applySnapshot, cloneSnapshot]);
 
-    const cloneSnapshot = useCallback((n: Node[], e: Edge[]) => {
-        const copyNodes = n.map(node => ({
-            ...node,
-            data: node.data ? { ...node.data } : {},
-            position: { ...node.position }
-        }));
-        const copyEdges = e.map(edge => ({ ...edge, data: edge.data ? { ...edge.data } : {} }));
-        return { nodes: copyNodes, edges: copyEdges };
-    }, []);
+  // Sidebar resize
+  useEffect(() => {
+    if (!dragSidebar) return;
+    const onMove = (ev: MouseEvent) => {
+      const newWidth = Math.min(400, Math.max(160, ev.clientX));
+      setSidebarWidth(newWidth);
+    };
+    const onUp = () => setDragSidebar(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragSidebar]);
 
-    const applySnapshot = useCallback((snapshot: { nodes: Node[]; edges: Edge[] }) => {
-        isRestoring.current = true;
-        setNodes(snapshot.nodes);
-        setEdges(snapshot.edges);
-        syncIdFromNodes(snapshot.nodes);
-    }, []);
+  // Code panel resize
+  useEffect(() => {
+    if (!dragCodePanel) return;
+    const onMove = (ev: MouseEvent) => {
+      const newWidth = Math.min(
+        700,
+        Math.max(260, window.innerWidth - ev.clientX)
+      );
+      setCodePanelWidth(newWidth);
+    };
+    const onUp = () => setDragCodePanel(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragCodePanel]);
 
-    const handleUndo = useCallback(() => {
-        if (!canUndo) return;
-        const targetIndex = Math.max(0, historyIndexRef.current - 1);
-        historyIndexRef.current = targetIndex;
-        const snapshot = historyRef.current[targetIndex];
-        applySnapshot(cloneSnapshot(snapshot.nodes, snapshot.edges));
-        setCanUndo(targetIndex > 0);
-        setCanRedo(targetIndex < historyRef.current.length - 1);
-    }, [canUndo, applySnapshot, cloneSnapshot]);
+  useEffect(() => {
+    if (!historyRef.current.length) {
+      historyRef.current = [cloneSnapshot(nodes, edges)];
+      historyIndexRef.current = 0;
+      syncIdFromNodes(nodes);
+      setCanUndo(false);
+      setCanRedo(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleRedo = useCallback(() => {
-        if (!canRedo) return;
-        const targetIndex = Math.min(historyRef.current.length - 1, historyIndexRef.current + 1);
-        historyIndexRef.current = targetIndex;
-        const snapshot = historyRef.current[targetIndex];
-        applySnapshot(cloneSnapshot(snapshot.nodes, snapshot.edges));
-        setCanUndo(targetIndex > 0);
-        setCanRedo(targetIndex < historyRef.current.length - 1);
-    }, [canRedo, applySnapshot, cloneSnapshot]);
+  useEffect(() => {
+    const graph = buildGraphIR(nodes, edges);
+    localStorage.setItem("graphIR", JSON.stringify(graph));
+    localStorage.setItem("nodes", JSON.stringify(nodes));
+    localStorage.setItem("edges", JSON.stringify(edges));
+    const restoring = isRestoring.current;
+    const skipping = skipHistory.current;
+    isRestoring.current = false;
+    skipHistory.current = false;
 
-    // Sidebar resize
-    useEffect(() => {
-        if (!dragSidebar) return;
-        const onMove = (ev: MouseEvent) => {
-            const newWidth = Math.min(400, Math.max(160, ev.clientX));
-            setSidebarWidth(newWidth);
-        };
-        const onUp = () => setDragSidebar(false);
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-        return () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-    }, [dragSidebar]);
+    if (!restoring && !skipping) {
+      const trimmed = historyRef.current.slice(0, historyIndexRef.current + 1);
+      trimmed.push(cloneSnapshot(nodes, edges));
+      const limited =
+        trimmed.length > 50 ? trimmed.slice(trimmed.length - 50) : trimmed;
+      historyRef.current = limited;
+      historyIndexRef.current = limited.length - 1;
+    }
+    const canUndoNow = historyIndexRef.current > 0;
+    const canRedoNow = historyIndexRef.current < historyRef.current.length - 1;
+    setCanUndo(canUndoNow);
+    setCanRedo(canRedoNow);
+    syncIdFromNodes(nodes);
+  }, [nodes, edges, cloneSnapshot]);
 
-    // Code panel resize
-    useEffect(() => {
-        if (!dragCodePanel) return;
-        const onMove = (ev: MouseEvent) => {
-            const newWidth = Math.min(700, Math.max(260, window.innerWidth - ev.clientX));
-            setCodePanelWidth(newWidth);
-        };
-        const onUp = () => setDragCodePanel(false);
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
-        return () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-        };
-    }, [dragCodePanel]);
-
-    useEffect(() => {
-        if (!historyRef.current.length) {
-            historyRef.current = [cloneSnapshot(nodes, edges)];
-            historyIndexRef.current = 0;
-            syncIdFromNodes(nodes);
-            setCanUndo(false);
-            setCanRedo(false);
-        }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        const graph = buildGraphIR(nodes, edges);
-        localStorage.setItem("graphIR", JSON.stringify(graph));
-        localStorage.setItem("nodes", JSON.stringify(nodes));
-        localStorage.setItem("edges", JSON.stringify(edges));
-        const restoring = isRestoring.current;
-        const skipping = skipHistory.current;
-        isRestoring.current = false;
-        skipHistory.current = false;
-
-        if (!restoring && !skipping) {
-            const trimmed = historyRef.current.slice(0, historyIndexRef.current + 1);
-            trimmed.push(cloneSnapshot(nodes, edges));
-            const limited = trimmed.length > 50 ? trimmed.slice(trimmed.length - 50) : trimmed;
-            historyRef.current = limited;
-            historyIndexRef.current = limited.length - 1;
-        }
-        const canUndoNow = historyIndexRef.current > 0;
-        const canRedoNow = historyIndexRef.current < historyRef.current.length - 1;
-        setCanUndo(canUndoNow);
-        setCanRedo(canRedoNow);
-        syncIdFromNodes(nodes);
-    }, [nodes, edges, cloneSnapshot]);
-
-    // Drop orphaned edges that reference nodes no longer in the graph.
-    useEffect(() => {
-        const nodeIds = new Set(nodes.map(n => n.id));
-        setEdges(eds => eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)));
-    }, [nodes]);
+  // Drop orphaned edges that reference nodes no longer in the graph.
+  useEffect(() => {
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    setEdges((eds) =>
+      eds.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+    );
+  }, [nodes]);
 
     const handleSelectionTargets = useCallback(
         (targets: { nodeIds: string[]; edgeIds: string[] }) => {
@@ -360,35 +360,23 @@ function FlowContent() {
         },
         []
     );
-    const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
-    const onDrop = useCallback(
-        (event: React.DragEvent) => {
-            event.preventDefault();
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
 
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: Record<string, unknown> | null = null;
-            if (moduleMetaRaw) {
-                try {
-                    moduleMeta = JSON.parse(moduleMetaRaw);
-                } catch (err) {
-                    console.warn("Failed to parse module metadata", err);
-                }
-            }
+      const type = event.dataTransfer.getData("application/reactflow");
+      if (!type) return;
 
-            const position = screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
 
             const newNode: Node = {
                 id: getId(),
                 type: type,
                 position,
-                // width: 150,
-                // height: 50,
                 data: moduleMeta
                     ? {
                         ...moduleMeta,
@@ -396,213 +384,54 @@ function FlowContent() {
                     }
                     : {},
             };
-            const finalNode = assignParent(newNode, getNodes())
 
-            setNodes(nds => [...nds, finalNode]);
+            setNodes(nds => nds.concat(newNode));
         },
-        [screenToFlowPosition, setNodes, assignParent, getNodes]
-    );
-    
-    // Code to handle Repeat Blocks
-    const onSelectionChange = useCallback(
-        (params: { nodes: Node[]; edges: Edge[] }) => {
-            const selectedNodeIdsFromParam = new Set(params.nodes.map(n => n.id));
-            const selectedEdgeIdsFromParam = new Set(params.edges.map(e => e.id));
-
-            setNodes(nds => {
-                return nds.map(n => {
-                    const isSelected = selectedNodeIdsFromParam.has(n.id);
-                    return {
-                        ...n,
-                        selected: isSelected,
-                        data: { ...(n.data || {}), __highlight: isSelected ? true : undefined },
-                    };
-                });
-            });
-
-            setEdges(eds => {
-                return eds.map(e => {
-                    return {
-                        ...e,
-                        selected: selectedEdgeIdsFromParam.has(e.id),
-                    };
-                });
-            });
-        },
-        []
-    );
-    const clearSelection = useCallback(() => {
-        setHighlightNodes(new Set());
-        setHighlightEdges(new Set());
-        setNodes(nds => nds.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })));
-        setEdges(eds => eds.map(e => ({ ...e, selected: false })));
-    }, [setNodes, setEdges]);
-
-    const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
-    const selectedEdgeIds = useMemo(() => edges.filter(e => e.selected).map(e => e.id), [edges]);
-
-    useEffect(() => {
-        const handler = (ev: Event) => {
-            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string }>;
-            const moduleId = custom.detail?.moduleId;
-            if (!moduleId) return;
-            const mod = getModule(moduleId);
-            if (!mod) {
-                alert("Module not found");
-                return;
-            }
-            const appliedRaw =
-                mod.internalNodes && mod.internalEdges
-                    ? { nodes: mod.internalNodes, edges: mod.internalEdges }
-                    : applyGraphIR(mod.graph);
-            const applied = {
-                nodes: appliedRaw.nodes.map(n => ({
-                    ...n,
-                    selected: false,
-                    data: { ...(n.data || {}), __highlight: undefined },
-                })),
-                edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
-            };
-            if (!applied.nodes.length) {
-                alert("Saved module is empty. Try saving it again after selecting nodes.");
-                return;
-            }
-            setModuleStack(stack =>
-                pushModule(stack, {
-                    module: mod,
-                    nodes: applied.nodes,
-                    edges: applied.edges,
-                    fromNodeId: custom.detail?.nodeId,
-                })
-            );
-            setShowModuleDiagram(false);
-        };
-        window.addEventListener("module-open", handler as EventListener);
-        return () => window.removeEventListener("module-open", handler as EventListener);
-    }, []);
-
-    useEffect(() => {
-        if (openModule?.nodes?.length && moduleFlowRef.current) {
-            moduleFlowRef.current.fitView({ padding: 0.2, includeHiddenNodes: true });
-        }
-    }, [openModule?.nodes, openModule?.edges]);
-
-    useEffect(() => {
-        setModuleNameInput(openModule?.module?.name || "");
-    }, [openModule?.module?.name]);
-
-    // this is used when the save as existing module is selected 
-    const saveExistingModuleChanges = useCallback(() => {
-        if (!openModule) return;
-        const result = saveExistingModule(openModule, moduleNameInput, nodes);
-        setNodes(result.updatedNodes);
-        setModules(listModules());
-        alert("Module saved");
-        setModuleStack(popModule);
-    }, [openModule, moduleNameInput, nodes, setNodes]);
-  
-    // creates a brand‑new module from the edited nodes/edges
-    const saveModuleAsNew = useCallback(() => {
-        if (!openModule) return;
-        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
-        const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
-        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
-        saveModule({
-            name: newName,
-            version: "v1",
-            graph: updatedGraph,
-            handles: openModule.module.handles,
-            internalNodes: openModule.nodes,
-            internalEdges: openModule.edges,
-            description: openModule.module.description,
-        });
-        setModules(listModules());
-        alert("Module saved as new");
-        setModuleStack(popModule);
-    }, [openModule, moduleNameInput]);
-
-    const computeModuleHandles = useCallback(
-        (selectedIds: Set<string>): ModuleHandles => {
-            const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
-            const outgoing = edges.filter(e => selectedIds.has(e.source) && !selectedIds.has(e.target));
-            return {
-                inputs: dedupe(incoming.map(e => e.targetHandle || "in")),
-                outputs: dedupe(outgoing.map(e => e.sourceHandle || "out")),
-            };
-        },
-        [edges]
+        [screenToFlowPosition, setNodes]
     );
 
-    const handleSaveModule = useCallback(() => {
-        const selectedIdsArr = selectedNodeIds;
-        if (!selectedIdsArr.length) {
-            setShowSaveModal(false);
-            return;
-        }
-        const selectedIds = new Set(selectedIdsArr);
-        const selectedNodes = nodes.filter(n => selectedIds.has(n.id));
-        const internalEdges = edges.filter(e => selectedIds.has(e.source) && selectedIds.has(e.target));
-        if (!selectedNodes.length) {
-            setShowSaveModal(false);
-            return;
-        }
-        const name = pendingModuleName.trim();
-        if (!name) {
-            alert("Enter a module name.");
-            return;
-        }
-        const handles = computeModuleHandles(selectedIds);
-        const moduleGraph = buildGraphIR(selectedNodes, internalEdges);
-        saveModule({
-            name,
-            version: "v1",
-            graph: moduleGraph,
-            handles,
-            internalNodes: selectedNodes,
-            internalEdges,
-            description: `Saved from ${selectedNodes.length} node(s)`,
-        });
-        setModules(listModules());
-        setShowSaveModal(false);
-    }, [nodes, edges, computeModuleHandles, selectedNodeIds, pendingModuleName]);
+  const graphSnapshot = useMemo<GraphIR>(
+    () => buildGraphIR(nodes, edges),
+    [nodes, edges]
+  );
 
-    const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
+  const exportDiagram = useCallback(
+    async (format: "png" | "svg") => {
+      try {
+        setExporting(format);
+        const { dataUrl } = await exportDiagramDataUrl(graphSnapshot, format);
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `model-diagram-${Date.now()}.${format}`;
+        link.click();
+      } catch (err) {
+        console.error("Export failed", err);
+        alert("Failed to export diagram. Check console for details.");
+      } finally {
+        setExporting(null);
+        setExportMenuOpen(false);
+      }
+    },
+    [graphSnapshot]
+  );
 
-    const exportDiagram = useCallback(
-        async (format: "png" | "svg") => {
-            try {
-                setExporting(format);
-                const { dataUrl } = await exportDiagramDataUrl(graphSnapshot, format);
-                const link = document.createElement("a");
-                link.href = dataUrl;
-                link.download = `model-diagram-${Date.now()}.${format}`;
-                link.click();
-            } catch (err) {
-                console.error("Export failed", err);
-                alert("Failed to export diagram. Check console for details.");
-            } finally {
-                setExporting(null);
-                setExportMenuOpen(false);
-            }
-        },
-        [graphSnapshot]
-    );
+  const downloadGraphJson = useCallback(() => {
+    const blob = new Blob([JSON.stringify(graphSnapshot, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `graph-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [graphSnapshot]);
 
-    const downloadGraphJson = useCallback(() => {
-        const blob = new Blob([JSON.stringify(graphSnapshot, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `graph-${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }, [graphSnapshot]);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
-    const uploadInputRef = useRef<HTMLInputElement | null>(null);
-
-    const triggerUpload = useCallback(() => {
-        if (uploadInputRef.current) uploadInputRef.current.click();
-    }, []);
+  const triggerUpload = useCallback(() => {
+    if (uploadInputRef.current) uploadInputRef.current.click();
+  }, []);
 
     const onUploadGraph = useCallback(
         (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -625,44 +454,30 @@ function FlowContent() {
         },
         [setNodes, setEdges]
     );
-    const verificationResult = useMemo(() => {
-        return verifyShapes(nodes, edges, LAYER_REGISTRY);
-    }, [nodes, edges]);
     useEffect(() => {
+        const result = verifyShapes(nodes, edges);
         setShapeResult(prev => {
-            const prevStr = JSON.stringify(prev);
-            const nextStr = JSON.stringify(verificationResult);
-            return prevStr === nextStr ? prev : verificationResult
+            if (JSON.stringify(prev) === JSON.stringify(result)) return prev;
+            return result;
         })
-        if (!verificationResult.ok) {
-            console.warn("Shape validation Failures:", verificationResult.failures);
+        if (!result.ok) {
+            console.warn("Shape validation failures:", result.failures);
         }
-    }, [verificationResult]);
-
-    useEffect(() => {
-        if (!verificationResult.shapes) return;
+        if (!shapeResult || !shapeResult.shapes) return;
+        skipHistory.current = true;
         setNodes(currentNodes => {
-
-            const deepEqual = (a: any, b: any): boolean => {
-                if (a === b) return true;
-                if (!Array.isArray(a) || !Array.isArray(b)) return false;
-                if (a.length != b.length) return false;
-                for (let i = 0; i < a.length; i++) {
-                    if (Array.isArray(a[i]) && Array.isArray(b[i])) {
-                        if (!deepEqual(a[i], b[i])) return false;
-                    } else if (a[i] !== b[i]) {
-                        return false;
-                    }
-                }
-                return true
-            }
             let hasChanges = false;
             const nextNodes = currentNodes.map(n => {
-                const shapeEntry = verificationResult.shapes[n.id];
+                const shapeEntry = result.shapes[n.id];
                 const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
                 const currentShapeArray =
                     n.data && typeof n.data === "object" ? (n.data as { __shape?: number[] }).__shape : undefined;
-                const isSame = deepEqual(currentShapeArray, newShapeArray)
+                const isSame = (() => {
+                    if (currentShapeArray === newShapeArray) return true;
+                    if (!currentShapeArray || !newShapeArray) return false;
+                    if (currentShapeArray.length !== newShapeArray.length) return false;
+                    return currentShapeArray.every((val, index) => val === newShapeArray[index]);
+                })();
                 if (isSame) return n;
                 hasChanges = true;
                 return {
@@ -673,104 +488,109 @@ function FlowContent() {
             })
             return hasChanges ? nextNodes : currentNodes;
         })
-    }, [verificationResult, setNodes]);
+    }, [nodes, edges, setNodes, shapeResult]);
+    // useEffect(() => {
+    //     const result = verifyShapes(nodes, edges);
+    //     setShapeResult(result);
+    //     if (!result.ok) {
+    //         console.warn("Shape validation failures:", result.failures);
+    //     }
+    // }, [nodes, edges]);
 
-    const friendlyError = useCallback((failure: ShapeFailure) => {
-        const label = failure.label || failure.nodeType || failure.nodeId;
-        const inputs =
-            failure.inputShapes && failure.inputShapes.length
-                ? ` | inputs: ${failure.inputShapes.map(s => `[${s.join(",")}]`).join(", ")}`
-                : "";
-        const upstream = failure.upstream && failure.upstream.length ? ` | from: ${failure.upstream.join(", ")}` : "";
-        const hint = ` | fix: adjust ${label} params or ensure upstream nodes output the expected shape`;
-        return `${label}: ${failure.error}${inputs}${upstream}${hint}`;
-    }, []);
+    // useEffect(() => {
+    //     if (!shapeResult || !shapeResult.shapes) return;
+    //     skipHistory.current = true;
+    //     setNodes(prev => {
+    //         let changed = false;
+    //         const next = prev.map(n => {
+    //             const newShape = shapeResult.shapes[n.id];
+    //             if (!newShape) return n;
+    //             const oldShape = (n.data as any).__shape as number[] | undefined;
+    //             const same =
+    //                 Array.isArray(oldShape) &&
+    //                 Array.isArray(newShape) &&
+    //                 oldShape.length === newShape.length &&
+    //                 oldShape.every((v, i) => v === newShape[i]);
+    //             if (same) return n;
+    //             changed = true;
+    //             return { ...n, data: { ...n.data, __shape: newShape } };
+    //         });
+    //         return changed ? next : prev;
+    //     });
+    // }, [shapeResult, setNodes]);
 
-    const decoratedEdges = useMemo(() => {
-        if (!shapeResult || shapeResult.ok) return edgesWithHandlers;
-        const failMap = new Map<string, ShapeFailure[]>();
-        shapeResult.failures.forEach(f => {
-            (f.upstream || []).forEach(src => {
-                const key = `${src}->${f.nodeId}`;
-                const arr = failMap.get(key) || [];
-                arr.push(f);
-                failMap.set(key, arr);
-            });
-        });
-        return edgesWithHandlers.map(e => {
-            const key = `${e.source}->${e.target}`;
-            const errs = failMap.get(key);
-            if (!errs || !errs.length) return e;
-            const existingData = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
-            return {
-                ...e,
-                type: "custom",
-                data: {
-                    ...existingData,
-                    error: errs.map(friendlyError).join("\n"),
-                },
-            };
-        });
-    }, [edgesWithHandlers, shapeResult, friendlyError]);
+  const friendlyError = useCallback((failure: ShapeFailure) => {
+    const label = failure.label || failure.nodeType || failure.nodeId;
+    const inputs =
+      failure.inputShapes && failure.inputShapes.length
+        ? ` | inputs: ${failure.inputShapes
+            .map((s) => `[${s.join(",")}]`)
+            .join(", ")}`
+        : "";
+    const upstream =
+      failure.upstream && failure.upstream.length
+        ? ` | from: ${failure.upstream.join(", ")}`
+        : "";
+    const hint = ` | fix: adjust ${label} params or ensure upstream nodes output the expected shape`;
+    return `${label}: ${failure.error}${inputs}${upstream}${hint}`;
+  }, []);
 
-    const highlightedEdges = useMemo(() => {
-        if (!highlightEdges.size) return decoratedEdges;
-        return decoratedEdges.map(e => {
-            if (!highlightEdges.has(e.id)) return e;
-            const existingData = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
-            return {
-                ...e,
-                data: {
-                    ...existingData,
-                    highlight: true
-                }
-            };
-        });
-    }, [decoratedEdges, highlightEdges]);
-
-    const nodesForFlow = useMemo(() => {
-        if (!highlightNodes.size) return nodes;
-        return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
-    }, [nodes, highlightNodes]);
-
-    const failureCount = shapeResult?.failures?.length ?? 0;
-    const computeSummary = useMemo(
-        () => estimateGraphCost(nodes, edges, shapeResult, LAYER_REGISTRY),
-        [nodes, edges, shapeResult]
-    );
-
-    const toggleDiagnostics = useCallback(() => {
-        setShowDiagnostics(open => {
-            const next = !open;
-            if (next) setShowComputePanel(false);
-            return next;
-        });
-    }, []);
-
-    const toggleComputePanel = useCallback(() => {
-        setShowComputePanel(open => {
-            const next = !open;
-            if (next) setShowDiagnostics(false);
-            return next;
-        });
-    }, []);
-
-    const focusFailure = useCallback(
-        (failure: ShapeFailure) => {
-            const upstream = failure.upstream || [];
-            const edgeIds = edges
-                .filter(e => upstream.includes(e.source) && e.target === failure.nodeId)
-                .map(e => e.id);
-            setHighlightNodes(new Set([failure.nodeId, ...upstream]));
-            setHighlightEdges(new Set(edgeIds));
-            const target = nodes.find(n => n.id === failure.nodeId);
-            if (target) {
-                void fitView({ nodes: [target], padding: 0.4 });
-            }
+  const decoratedEdges = useMemo(() => {
+    if (!shapeResult || shapeResult.ok) return edgesWithHandlers;
+    const failMap = new Map<string, ShapeFailure[]>();
+    shapeResult.failures.forEach((f) => {
+      (f.upstream || []).forEach((src) => {
+        const key = `${src}->${f.nodeId}`;
+        const arr = failMap.get(key) || [];
+        arr.push(f);
+        failMap.set(key, arr);
+      });
+    });
+    return edgesWithHandlers.map((e) => {
+      const key = `${e.source}->${e.target}`;
+      const errs = failMap.get(key);
+      if (!errs || !errs.length) return e;
+      const existingData =
+        e.data && typeof e.data === "object"
+          ? (e.data as Record<string, unknown>)
+          : {};
+      return {
+        ...e,
+        type: "custom",
+        data: {
+          ...existingData,
+          error: errs.map(friendlyError).join("\n"),
         },
-        [edges, nodes, fitView]
-    );
+      };
+    });
+  }, [edgesWithHandlers, shapeResult, friendlyError]);
 
+  const highlightedEdges = useMemo(() => {
+    if (!highlightEdges.size) return decoratedEdges;
+    return decoratedEdges.map((e) => {
+      if (!highlightEdges.has(e.id)) return e;
+      const existingData =
+        e.data && typeof e.data === "object"
+          ? (e.data as Record<string, unknown>)
+          : {};
+      return {
+        ...e,
+        data: {
+          ...existingData,
+          highlight: true,
+        },
+      };
+    });
+  }, [decoratedEdges, highlightEdges]);
+
+  const nodesForFlow = useMemo(() => {
+    if (!highlightNodes.size) return nodes;
+    return nodes.map((n) =>
+      highlightNodes.has(n.id)
+        ? { ...n, data: { ...(n.data || {}), __highlight: true } }
+        : n
+    );
+  }, [nodes, highlightNodes]);
 
     return (
         <div style={{ display: "flex", height: "100vh" }}>
@@ -844,77 +664,238 @@ function FlowContent() {
                 title="Drag to resize sidebar"
             />
             <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
-                {/* Selection summary is intentionally omitted; selection is shown via highlights. */}
-                <EditorHeader
-                    canUndo={canUndo}
-                    canRedo={canRedo}
-                    canSaveModule={selectedNodeIds.length > 0}
-                    traceLoading={traceLoading}
-                    traceSeedOptions={[...TRACE_SEED_PRESETS.map(String), "custom"]}
-                    traceSeedPreset={traceSeedPreset}
-                    traceSeedCustom={traceSeedCustom}
-                    showCustomSeedInput={traceSeedPreset === "custom"}
-                    onUndo={handleUndo}
-                    onRedo={handleRedo}
-                    onTrace={handleTrace}
-                    onTraceSeedPresetChange={setTraceSeedPreset}
-                    onTraceSeedCustomChange={setTraceSeedCustom}
-                    onSaveModule={() => {
-                        const selectedIdsArr = selectedNodeIds;
-                        if (!selectedIdsArr.length) {
-                            alert("Select at least one node to save as a module.");
-                            return;
-                        }
-                        const suggestion = `Module ${modules.length + 1}`;
-                        setPendingModuleName(suggestion);
-                        setShowSaveModal(true);
+                <div
+                    style={{
+                        padding: "8px",
+                        display: "flex",
+                        gap: "12px",
+                        alignItems: "center",
+                        minHeight: "40px",
+                        justifyContent: "space-between",
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 5,
+                        background: "#1a1a1a"
                     }}
-                    onImportJson={triggerUpload}
-                    onDiagramView={() => setShowDiagram(true)}
-                    onExportToggle={() => setExportMenuOpen(open => !open)}
-                    onExportSvg={() => exportDiagram("svg")}
-                    onExportPng={() => exportDiagram("png")}
-                    onExportJson={() => {
-                        downloadGraphJson();
-                        setExportMenuOpen(false);
-                    }}
-                    exportMenuOpen={exportMenuOpen}
-                    exporting={!!exporting}
-                    showDiagnostics={showDiagnostics}
-                    showComputePanel={showComputePanel}
-                    failureCount={failureCount}
-                    onToggleDiagnostics={toggleDiagnostics}
-                    onToggleComputePanel={toggleComputePanel}
-                    statusSlot={
-                        shapeResult && shapeResult.ok ? (
-                            <div
+                >
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                            className="nodrag"
+                            onClick={handleUndo}
+                            disabled={!canUndo}
+                            style={{
+                                padding: "6px 10px",
+                                background: canUndo ? "#333" : "#222",
+                                color: canUndo ? "#fff" : "#666",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: canUndo ? "pointer" : "not-allowed"
+                            }}
+                        >
+                            Undo
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={handleRedo}
+                            disabled={!canRedo}
+                            style={{
+                                padding: "6px 10px",
+                                background: canRedo ? "#333" : "#222",
+                                color: canRedo ? "#fff" : "#666",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: canRedo ? "pointer" : "not-allowed"
+                            }}
+                        >
+                            Redo
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={handleTrace}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Run forward trace (TorchLens backend required)"
+                        >
+                            {traceLoading ? "Tracing…" : "TorchLens Trace"}
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={() => {
+                                const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+                                if (!selectedIdsArr.length) {
+                                    alert("Select at least one node to save as a module.");
+                                    return;
+                                }
+                                const suggestion = `Module ${modules.length + 1}`;
+                                setPendingModuleName(suggestion);
+                                setShowSaveModal(true);
+                            }}
+                            disabled={!selectedNodeIds.length && !selection.nodeIds.length}
+                            style={{
+                                padding: "6px 10px",
+                                background: selectedNodeIds.length || selection.nodeIds.length ? "#335" : "#222",
+                                color: selectedNodeIds.length || selection.nodeIds.length ? "#fff" : "#666",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: selectedNodeIds.length || selection.nodeIds.length ? "pointer" : "not-allowed"
+                            }}
+                            title="Save selected nodes as a reusable module"
+                        >
+                            Save Module
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={triggerUpload}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Import GraphIR JSON"
+                        >
+                            Import JSON
+                        </button>
+                        <button
+                            className="nodrag"
+                            onClick={() => setShowDiagram(true)}
+                            style={{
+                                padding: "6px 10px",
+                                background: "#333",
+                                color: "#fff",
+                                border: "1px solid #444",
+                                borderRadius: 6,
+                                cursor: "pointer"
+                            }}
+                            title="Open paper-style diagram view"
+                        >
+                            Diagram View
+                        </button>
+                        <div style={{ position: "relative" }}>
+                            <button
+                                className="nodrag"
+                                onClick={() => setExportMenuOpen(open => !open)}
                                 style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "4px 10px",
-                                    borderRadius: 999,
-                                    border: "1px solid #1f2a2f",
-                                    background: "linear-gradient(90deg, #0f2d2f, #0b3b2f)",
-                                    color: "#7fffd4",
-                                    fontWeight: 600,
-                                    fontSize: 12,
-                                    letterSpacing: "0.01em",
-                                    boxShadow: "0 0 0 1px rgba(100, 255, 218, 0.12)",
+                                    padding: "6px 10px",
+                                    background: "#333",
+                                    color: "#fff",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    minWidth: 110,
+                                    textAlign: "left"
                                 }}
+                                title="Export diagram"
                             >
-                                <span aria-hidden="true">✓</span>
-                                <span>All clear</span>
-                                <span style={{ color: "#a7f3d0", fontWeight: 500 }}>
-                                    ({Object.keys(shapeResult.shapes).length} nodes)
-                                </span>
-                            </div>
-                        ) : shapeResult && !shapeResult.ok ? (
-                            <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
-                        ) : null
-                    }
-                    selectionSummary={null}
-                />
+                                Export ▾
+                            </button>
+                            {exportMenuOpen && (
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: "110%",
+                                        left: 0,
+                                        background: "#1a1a1a",
+                                        border: "1px solid #444",
+                                        borderRadius: 6,
+                                        boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
+                                        zIndex: 10,
+                                        minWidth: 150,
+                                        overflow: "hidden"
+                                    }}
+                                >
+                                    <button
+                                        onClick={() => exportDiagram("svg")}
+                                        disabled={!!exporting}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: exporting ? "#777" : "#e6edf3",
+                                            cursor: exporting ? "not-allowed" : "pointer",
+                                            textAlign: "left"
+                                    }}
+                                >
+                                    Export as SVG
+                                </button>
+                                <button
+                                    onClick={() => exportDiagram("png")}
+                                        disabled={!!exporting}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: exporting ? "#777" : "#e6edf3",
+                                            cursor: exporting ? "not-allowed" : "pointer",
+                                        textAlign: "left"
+                                    }}
+                                >
+                                    Export as PNG
+                                </button>
+                                    <button
+                                        onClick={() => {
+                                            downloadGraphJson();
+                                            setExportMenuOpen(false);
+                                        }}
+                                        style={{
+                                            padding: "8px 12px",
+                                            width: "100%",
+                                            background: "transparent",
+                                            border: "none",
+                                            color: "#e6edf3",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                            borderTop: "1px solid #333"
+                                        }}
+                                    >
+                                        Export JSON
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+            <div
+                style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                            gap: "4px",
+                            minHeight: "32px",
+                            maxHeight: "120px",
+                            overflowY: "auto",
+                            padding: "4px 0"
+                        }}
+                    >
+                        {shapeResult && shapeResult.ok && (
+                            <span style={{ color: "#64ffda" }}>
+                                Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
+                            </span>
+                        )}
+                        {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
+                            <ol style={{ margin: 0, paddingLeft: "16px", color: "#ff6b6b", lineHeight: 1.4 }}>
+                                {shapeResult.failures.map((f, idx) => (
+                                    <li key={`${f.nodeId}-${idx}`} style={{ marginBottom: 2 }}>
+                                        {friendlyError(f)}
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                        <div style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>Selected nodes: {selectedNodeIds.length ? selectedNodeIds.join(", ") : "none"}</span>
+                            <span>Selected edges: {selectedEdgeIds.length ? selectedEdgeIds.join(", ") : "none"}</span>
+                        </div>
+                    </div>
+                </div>
 
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: "0 0 0 0" }}>
@@ -924,7 +905,7 @@ function FlowContent() {
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
-                            onNodeDragStop={onNodeDragStop}
+                            onNodeDrag={onNodeDrag}
                             nodeTypes={nodeTypes}
                             edgeTypes={edgeTypes}
                             fitView
@@ -940,37 +921,6 @@ function FlowContent() {
                             <Background />
                         </ReactFlow>
                     </div>
-                    {/* load DiagnosticsPanel */}
-                    {showDiagnostics && shapeResult && !shapeResult.ok && failureCount > 0 && (
-                        <DiagnosticsPanel
-                            failures={shapeResult.failures}
-                            onSelect={focusFailure}
-                            onClose={() => setShowDiagnostics(false)}
-                        />
-                    )}
-                    {showComputePanel && (
-                        <ComputePanel
-                            summary={computeSummary}
-                            onSelect={node => {
-                                setHighlightNodes(new Set([node.nodeId]));
-                                setHighlightEdges(new Set());
-                                const target = nodes.find(n => n.id === node.nodeId);
-                                if (target) {
-                                    void fitView({ nodes: [target], padding: 0.4 });
-                                }
-                            }}
-                            onHover={nodeId => {
-                                if (!nodeId) {
-                                    setHighlightNodes(new Set());
-                                    setHighlightEdges(new Set());
-                                    return;
-                                }
-                                setHighlightNodes(new Set([nodeId]));
-                                setHighlightEdges(new Set());
-                            }}
-                            onClose={() => setShowComputePanel(false)}
-                        />
-                    )}
                 </div>
             </div>
             {showLiveCode && (
@@ -1183,27 +1133,13 @@ function FlowContent() {
                                 justifyContent: "space-between",
                             }}
                         >
-                            {/* editable module header to enter the updated module names  */}
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span style={{ color: "#9ca3af", fontSize: 12 }}>Editing Module</span>
-                                <input
-                                    value={moduleNameInput}
-                                    onChange={e => setModuleNameInput(e.target.value)}
-                                    placeholder="Module name"
-                                    style={{
-                                        background: "#0f172a",
-                                        color: "#e6edf3",
-                                        border: "1px solid #1f2937",
-                                        borderRadius: 6,
-                                        padding: "4px 8px",
-                                        fontWeight: 600,
-                                        minWidth: 160,
-                                    }}
-                                />
-                                <span style={{ color: "#9ca3af", fontSize: 12 }}>({openModule.module.version})</span>
+                                <span style={{ color: "#e6edf3", fontWeight: 700 }}>
+                                    Editing Module: {openModule.module.name} ({openModule.module.version})
+                                </span>
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
                             </div>
-                            <div style={{ display: "flex", gap: 8, position: "relative" }}>
+                            <div style={{ display: "flex", gap: 8 }}>
                                 <button
                                     onClick={() => setShowModuleDiagram(true)}
                                     style={{
@@ -1218,7 +1154,20 @@ function FlowContent() {
                                     Diagram View
                                 </button>
                                 <button
-                                    onClick={() => setShowModuleSaveMenu(open => !open)}
+                                    onClick={() => {
+                                        const updated = buildGraphIR(openModule.nodes, openModule.edges);
+                                        saveModule({
+                                            id: openModule.module.id,
+                                            name: openModule.module.name,
+                                            version: openModule.module.version,
+                                            graph: updated,
+                                            contract: openModule.module.contract,
+                                            description: openModule.module.description,
+                                        });
+                                        setModules(listModules());
+                                        alert("Module saved");
+                                        setOpenModule(null);
+                                    }}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1229,67 +1178,10 @@ function FlowContent() {
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Save ▾
+                                    Save
                                 </button>
-                                {/* this shows the saving dropdown */}
-                                {showModuleSaveMenu && (
-                                    <div
-                                        style={{
-                                            position: "absolute",
-                                            right: 0,
-                                            top: "100%",
-                                            marginTop: 6,
-                                            background: "#111827",
-                                            border: "1px solid #1f2937",
-                                            borderRadius: 8,
-                                            padding: 6,
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            gap: 6,
-                                            minWidth: 160,
-                                            zIndex: 5,
-                                        }}
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowModuleSaveMenu(false);
-                                                saveExistingModuleChanges();
-                                            }}
-                                            style={{
-                                                padding: "6px 8px",
-                                                borderRadius: 6,
-                                                border: "1px solid #334155",
-                                                background: "#1f2937",
-                                                color: "#e6edf3",
-                                                cursor: "pointer",
-                                                textAlign: "left",
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            Save changes
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setShowModuleSaveMenu(false);
-                                                saveModuleAsNew();
-                                            }}
-                                            style={{
-                                                padding: "6px 8px",
-                                                borderRadius: 6,
-                                                border: "1px solid #334155",
-                                                background: "#0f172a",
-                                                color: "#e6edf3",
-                                                cursor: "pointer",
-                                                textAlign: "left",
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            Save as new module
-                                        </button>
-                                    </div>
-                                )}
                                 <button
-                                    onClick={() => setModuleStack(popModule)}
+                                    onClick={() => setOpenModule(null)}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1314,34 +1206,34 @@ function FlowContent() {
                                         instance.fitView({ padding: 0.2, includeHiddenNodes: true });
                                     }}
                                     onNodesChange={changes =>
-                                        setModuleStack(stack =>
-                                            updateActiveModule(stack, current => ({
-                                                ...current,
-                                                nodes: applyNodeChanges(changes, current.nodes),
-                                            }))
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
+                                                : curr
                                         )
                                     }
                                     onEdgesChange={changes =>
-                                        setModuleStack(stack =>
-                                            updateActiveModule(stack, current => ({
-                                                ...current,
-                                                edges: applyEdgeChanges(changes, current.edges),
-                                            }))
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
+                                                : curr
                                         )
                                     }
                                     onConnect={connection =>
-                                        setModuleStack(stack =>
-                                            updateActiveModule(stack, current => ({
-                                                ...current,
-                                                edges: addEdge(
-                                                    {
-                                                        ...connection,
-                                                        type: "custom",
-                                                        data: { label: connection.source || "out" },
-                                                    },
-                                                    current.edges
-                                                ),
-                                            }))
+                                        setOpenModule(curr =>
+                                            curr
+                                                ? {
+                                                      ...curr,
+                                                      edges: addEdge(
+                                                          {
+                                                              ...connection,
+                                                              type: "custom",
+                                                              data: { label: connection.source || "out" },
+                                                          },
+                                                          curr.edges
+                                                      ),
+                                                  }
+                                                : curr
                                         )
                                     }
                                     nodeTypes={nodeTypes}
@@ -1386,7 +1278,6 @@ function FlowContent() {
                     trace={traceData}
                     loading={traceLoading}
                     error={traceError}
-                    shapeComparisons={shapeComparisons}
                     onClose={() => setShowTrace(false)}
                     onSelect={ids => {
                         setHighlightNodes(new Set(ids));
@@ -1399,9 +1290,9 @@ function FlowContent() {
 }
 
 export default function Flow() {
-    return (
-        <ReactFlowProvider>
-            <FlowContent />
-        </ReactFlowProvider>
-    );
+  return (
+    <ReactFlowProvider>
+      <FlowContent />
+    </ReactFlowProvider>
+  );
 }
