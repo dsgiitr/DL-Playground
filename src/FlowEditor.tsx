@@ -106,7 +106,9 @@ function FlowContent() {
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSaveCopyModal, setShowSaveCopyModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [pendingModuleCopyName, setPendingModuleCopyName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
     const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
 
@@ -503,23 +505,11 @@ function FlowContent() {
     // creates a brand‑new module from the edited nodes/edges
     const saveModuleAsNew = useCallback(() => {
         if (!openModule) return;
-        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
         const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
-        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
-        saveModule({
-            name: newName,
-            version: "v1",
-            graph: updatedGraph,
-            handles: openModule.module.handles,
-            internalNodes: openModule.nodes,
-            internalEdges: openModule.edges,
-            description: openModule.module.description,
-        });
-        setModules(listModules());
-        alert("Module saved as new");
-        setModuleStack(popModule);
+        setPendingModuleCopyName(baseName)
+        setShowSaveCopyModal(true);
     }, [openModule, moduleNameInput]);
-
+    
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
             const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
@@ -531,7 +521,28 @@ function FlowContent() {
         },
         [edges]
     );
-
+    const handleReturnCopyModule = () => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const name = pendingModuleCopyName.trim();
+        if (!name) {
+            alert("Enter a module name.");
+            return;
+        }
+        saveModule({
+            name: name,
+            version: "v1",
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setModules(listModules());
+        alert("Module saved as new");
+        setShowSaveCopyModal(false);
+        setModuleStack(popModule);
+    }
     const handleSaveModule = useCallback(() => {
         const selectedIdsArr = selectedNodeIds;
         if (!selectedIdsArr.length) {
@@ -1134,6 +1145,97 @@ return (
                             </button>
                             <button
                                 onClick={handleSaveModule}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#1f8ecd",
+                                    color: "#fff",
+                                    border: "1px solid #1f8ecd",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showSaveCopyModal && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.55)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 70,
+                        padding: 16,
+                    }}
+                >
+                    <div
+                        style={{
+                            background: "#0f1115",
+                            border: "1px solid #222",
+                            borderRadius: 10,
+                            width: 360,
+                            padding: 16,
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Copy Module</span>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#888",
+                                    cursor: "pointer",
+                                    fontSize: 18,
+                                    lineHeight: 1,
+                                }}
+                                title="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                            Copy Module name
+                            <input
+                                autoFocus
+                                value={pendingModuleCopyName}
+                                onChange={e => setPendingModuleCopyName(e.target.value)}
+                                style={{
+                                    background: "#111",
+                                    border: "1px solid #333",
+                                    borderRadius: 6,
+                                    padding: "8px 10px",
+                                    color: "#e6edf3",
+                                    fontSize: 14,
+                                }}
+                            />
+                        </label>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#333",
+                                    color: "#e6edf3",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleReturnCopyModule}
                                 style={{
                                     padding: "8px 12px",
                                     background: "#1f8ecd",
