@@ -20,6 +20,10 @@ function parsePerm(raw: string): number[] | null {
 
 export class TransposeNode {
     static label = "Transpose";
+    static handles = {
+        targets: ["in", "shape"],
+        sources: ["out"],
+    };
     static paramSchema: Record<string, FieldSpec> = {
         perm: { required: true, type: "text", label: "Perm (comma)", defaultValue: "0,2,3,1" },
     };
@@ -51,9 +55,24 @@ export class TransposeNode {
         return "# transpose handled in forward";
     }
 
-    static getForwardCode(data: TransposeData, _name: string, inputs: Array<string>, outputs: Array<string>) {
+    static getForwardCode(
+        data: TransposeData,
+        _name: string,
+        inputs: Array<string>,
+        outputs: Array<string>
+    ) {
         const out = outputs[0] || "x";
         const inputVar = inputs[0] || "x";
+        const shapeVar = inputs[1]; // optional runtime shape dict
+
+        // Case 1: runtime shape-driven transpose
+        if (shapeVar) {
+            return `
+_perm = list(range(len(${shapeVar}["dims"])))
+_perm.reverse()
+${out} = ${inputVar}.permute(*_perm)
+`;
+        }
         const perm = data.perm || "";
         return `${out} = ${inputVar}.permute(${perm})`;
     }

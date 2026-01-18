@@ -3,6 +3,8 @@ import { registerLayer, LAYER_REGISTRY } from "../utils/layerRegistry";
 import { AddNode } from "./pytorch_core/AddNode";
 import { ConcatNode } from "./pytorch_core/ConcatNode";
 import { FlattenNode } from "./pytorch_core/FlattenNode";
+import {TensorShapeNode} from "./pytorch_core/TensorShapeNode";
+import {ViewNode} from "./pytorch_core/ViewNode"
 import { ReshapeNode } from "./pytorch_core/ReshapeNode";
 import { TransposeNode } from "./pytorch_core/TransposeNode";
 import { LinearLayerNode } from "./dense/LinearLayer";
@@ -118,7 +120,7 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
     },
     tensor_shape: {
         label: "Tensor Shape",
-        nodes: { reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode },
+        nodes: { tensor_shape: TensorShapeNode, reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode, view_layer:ViewNode },
     },
     tensor_create: {
         label: "Tensor Creation",
