@@ -656,7 +656,7 @@ function FlowContent() {
             }
         }
 
-        const contract = computeContract(selectedIds);
+        // const contract = computeContract(selectedIds);
         const sanitizedName = sanitizeIdent(resolveModuleName(name, ""));
         const existingNames = modules.map(m => sanitizeIdent(resolveModuleName(m.name, ""))); // This might have redundant sanitization.
         if (existingNames.includes(sanitizedName)) {
@@ -1806,7 +1806,7 @@ export default function Flow() {
         </ReactFlowProvider>
     );
 }
-function computeContract(selectedIds: Set<string>) {
-    throw new Error("Function not implemented.");
-}
+// function computeContract(selectedIds: Set<string>) {
+//     throw new Error("Function not implemented.");
+// }
 
