@@ -1,12 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo, useState, type ComponentType } from "react";
-import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { getModule, type ModuleContract } from "../utils/moduleRegistry";
+import { Handle, Position, useReactFlow, type NodeProps, type Node } from "@xyflow/react";
+import { getModule } from "../utils/moduleRegistry";
 import { type LayerDefinition, type FieldType, ParamsList } from "../node_gen/BaseClass";
-import type { ComponentType } from "react";
-import { Handle, Position, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 //import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";  //LayerData was unused
-import type { LayerDefinition } from "../node_gen/BaseClass";
 import type { ModuleHandles } from "../utils/moduleRegistry";
 
 export type ModuleRefData = {
@@ -133,8 +130,8 @@ const ModuleRefComponent: ComponentType<NodeProps<ModuleRefNodeType>> = ({ id, d
                     </span>
                 )}
             </div>
-            
-            {renderList.length > 0 && <div style={{borderBottom: '1px solid #333', margin: '6px 0'}} />}
+
+            {renderList.length > 0 && <div style={{ borderBottom: '1px solid #333', margin: '6px 0' }} />}
 
             <ParamsList
                 renderKeys={renderList}
