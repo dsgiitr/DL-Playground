@@ -25,6 +25,7 @@ import { GlobalMaxPool2dNode } from "./vision/pooling/GlobalMaxPool2dNode";
 import { MaxPool3dNode } from "./vision/pooling/MaxPool3dNode";
 import { AvgPool3dNode } from "./vision/pooling/AvgPool3dNode";
 import { ResidualBlockNode } from "./vision/blocks/ResidualBlock";
+import { DualOutputConvNode } from "./vision/blocks/DualOutputConv";
 import { EmbeddingNode } from "./sequence/EmbeddingNode";
 import { RNNNode } from "./sequence/RNNNode";
 import { LSTMNode } from "./sequence/LSTMNode";
