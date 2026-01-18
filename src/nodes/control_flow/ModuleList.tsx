@@ -119,11 +119,41 @@ export class ModuleListNode {
         return { ok: true as const };
     }
 
-    static shapeCompute(data: ModuleListData, inputShapes: number[][]) {
-        // Optimistic: Return input shape if undefined, or result of 1st pass logic if we had access to it.
-        // Without full simulation, passing the input shape is the safest UI placeholder.
-        if (!inputShapes || inputShapes.length === 0 || !inputShapes[0]) return [[]];
-        return inputShapes[0];
+    static shapeCompute(data: ModuleListData, inputShapes: number[][], registry?: Record<string, any>) {
+        if (!inputShapes || !inputShapes[0] || !registry) {
+            return inputShapes && inputShapes.length > 0 ? [inputShapes[0]] : [[]];
+        }
+        let currentShape = inputShapes[0]
+        const N = data.repetitions || 1;
+        const MAX_SIM_STEPS = 10;
+        for (let i = 0; i < Math.min(N, MAX_SIM_STEPS); i++) {
+            const MOCK_ID = `__COMPUTE_ITER_${i}__`;
+            const mockDims = currentShape.map((size, idx) => ({
+                label: `D${idx}`, size: size.toString(), type: "inferred"
+            }));
+            const mockInputNode: Node = {
+                id: MOCK_ID, type: "input_layer", position: { x: 0, y: 0 },
+                data: { label: `Sim In`, dims: mockDims }
+            }
+            const internalIds = new Set(data.internalNodes.map(n => n.id));
+            const edges = data.internalEdges.map(e => !internalIds.has(e.source) ? { ...e, source: MOCK_ID } : e);
+            const nodes = [...data.internalNodes, mockInputNode];
+            const edgesFiltered = edges.filter(e =>
+                (internalIds.has(e.source) || e.source === MOCK_ID) && internalIds.has(e.target)
+            )
+            const result = verifyShapes(nodes, edgesFiltered, registry);
+            if (!result.ok) {
+                return [currentShape];
+            }
+            const outputEdge = data.internalEdges.find(e => !internalIds.has(e.target));
+            if (!outputEdge) return [currentShape];
+            const outputShape = result.shapes[outputEdge.source]?.defaultShape;
+            if (!outputEdge) return [currentShape];
+            const isStable = outputShape.length === currentShape.length && outputShape.every((v, k) => v === currentShape[k]);
+            currentShape = outputShape;
+            if (isStable) break;
+        }
+        return currentShape;
     }
 
     // --- CODE GENERATION ---
