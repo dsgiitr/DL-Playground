@@ -32,6 +32,7 @@ import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { recursiveCodeGenerator } from "./utils/codeCompile";
+import { generateMainCode, sanitizeIdent } from "./utils/codeCompile";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
 import { deleteModule, getModule, listModules, saveModule, saveExistingModule, resolveModuleName, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
 import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
@@ -103,12 +104,19 @@ function FlowContent() {
     const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
     const openModule = getActiveModule(moduleStack);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
+    const mainFlowRef = useRef<ReactFlowInstance | null>(null);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSaveCopyModal, setShowSaveCopyModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [pendingVariables, setPendingVariables] = useState<Record<string, FieldSpec>>({});
+    const [paramToVariableMap, setParamToVariableMap] = useState<Record<string, string>>({});
+    const [pendingModuleCopyName, setPendingModuleCopyName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
     const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
+
+    const [moduleNameWarning, setModuleNameWarning] = useState(false);
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -361,46 +369,82 @@ function FlowContent() {
     );
     const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
-    const onDrop = useCallback(
-        (event: React.DragEvent) => {
-            event.preventDefault();
+    const onMainDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        if (!mainFlowRef.current) return;
 
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: Record<string, unknown> | null = null;
-            if (moduleMetaRaw) {
-                try {
-                    moduleMeta = JSON.parse(moduleMetaRaw);
-                } catch (err) {
-                    console.warn("Failed to parse module metadata", err);
-                }
+        const type = event.dataTransfer.getData("application/reactflow");
+        if (!type) return;
+        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+        let moduleMeta: Record<string, unknown> | null = null;
+
+        if (moduleMetaRaw) {
+            try {
+            moduleMeta = JSON.parse(moduleMetaRaw);
+            } catch (err) {
+                console.warn("Failed to parse module metadata", err);
             }
+        }
 
-            const position = screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
+        const position = mainFlowRef.current.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
 
-            const newNode: Node = {
-                id: getId(),
-                type: type,
-                position,
-                // width: 150,
-                // height: 50,
-                data: moduleMeta
-                    ? {
-                        ...moduleMeta,
-                        label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
-                    }
-                    : {},
-            };
-            const finalNode = assignParent(newNode, getNodes())
+        setNodes(nds => [
+            ...nds,
+            {
+        id: getId(),
+            type,
+            position,
+            data: moduleMeta
+            ? { ...moduleMeta, label: moduleMeta.name ?? "Module" }
+            : {},
+            },
+        ]);     
+}, []);
 
-            setNodes(nds => [...nds, finalNode]);
-        },
-        [screenToFlowPosition, setNodes, assignParent, getNodes]
-    );
+const onModuleDrop = useCallback((event: React.DragEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!moduleFlowRef.current) return;
+
+  const type = event.dataTransfer.getData("application/reactflow");
+  if (!type) return;
+
+  const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+  let moduleMeta = null;
+
+  try {
+    if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
+  } catch {}
+
+  const position = moduleFlowRef.current.screenToFlowPosition({
+    x: event.clientX,
+    y: event.clientY,
+  });
+
+  const newNode: Node = {
+    id: getId(),
+    type: type,
+    position,
+    data: moduleMeta
+        ? {
+            ...moduleMeta,
+            label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module"
+        }
+      : {},
+  };
+
+  setModuleStack(stack =>
+    updateActiveModule(stack, current => ({
+      ...current,
+      nodes: [...current.nodes, newNode],
+    }))
+  );
+}, []);
+
     
     // Code to handle Repeat Blocks
     const onSelectionChange = useCallback(
@@ -442,7 +486,7 @@ function FlowContent() {
 
     useEffect(() => {
         const handler = (ev: Event) => {
-            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string }>;
+            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string, data?: ModuleRefData }>;
             const moduleId = custom.detail?.moduleId;
             if (!moduleId) return;
             const mod = getModule(moduleId);
@@ -450,21 +494,39 @@ function FlowContent() {
                 alert("Module not found");
                 return;
             }
+
+            const moduleRefData = custom.detail?.data || {};
+            const { nodes: rawNodes, edges: rawEdges } = applyGraphIR(mod.graph);
+
+            const nodesWithVars = rawNodes.map(n => {
+                let nodeData = n.data || {};
+                if (mod.variableMap) {
+                    for (const varName in mod.variableMap) {
+                        const targets = mod.variableMap[varName];
+                        for (const target of targets) {
+                            if (target.nodeId === n.id) {
+                                if (moduleRefData[varName] !== undefined) {
+                                    nodeData = { ...nodeData, [target.paramName]: moduleRefData[varName] };
+                                }
+                            }
+                        }
+                    }
+                }
+                return { ...n, data: nodeData, selected: false };
+            });
+
+
             const appliedRaw =
                 mod.internalNodes && mod.internalEdges
                     ? { nodes: mod.internalNodes, edges: mod.internalEdges }
                     : applyGraphIR(mod.graph);
             const applied = {
-                nodes: appliedRaw.nodes.map(n => ({
-                    ...n,
-                    selected: false,
-                    data: { ...(n.data || {}), __highlight: undefined },
-                })),
-                edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
+                nodes: nodesWithVars.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })),
+                edges: rawEdges.map(e => ({ ...e, selected: false })),
             };
+
             if (!applied.nodes.length) {
-                alert("Saved module is empty. Try saving it again after selecting nodes.");
-                return;
+                alert("Saved module is empty. You can now add new things and save changes.");
             }
             setModuleStack(stack =>
                 pushModule(stack, {
@@ -490,36 +552,45 @@ function FlowContent() {
         setModuleNameInput(openModule?.module?.name || "");
     }, [openModule?.module?.name]);
 
+    // This useEffect is responsible for resetting the module name warning whenever the modal is closed or the pendingModuleName changes.                                                    │
+    useEffect(() => {
+        setModuleNameWarning(false);
+    }, [showSaveModal, pendingModuleName, moduleNameInput, openModule]);
+
     // this is used when the save as existing module is selected 
     const saveExistingModuleChanges = useCallback(() => {
+        setModuleNameWarning(false); // Clear previous warnings
         if (!openModule) return;
-        const result = saveExistingModule(openModule, moduleNameInput, nodes);
+
+        const name = moduleNameInput.trim();
+        if (!name) {
+            alert("Enter a module name.");
+            return;
+        }
+
+        const sanitizedName = sanitizeIdent(resolveModuleName(name, ""));
+        const existingNamesExcludingCurrent = modules.filter(m => m.id !== openModule.module.id).map(m => sanitizeIdent(resolveModuleName(m.name, ""))); // Sanitization might be redundant
+
+        if (existingNamesExcludingCurrent.includes(sanitizedName)) {
+            setModuleNameWarning(true);
+            return;
+        }
+
+        const result = saveExistingModule(openModule, sanitizedName, nodes);
         setNodes(result.updatedNodes);
         setModules(listModules());
         alert("Module saved");
         setModuleStack(popModule);
-    }, [openModule, moduleNameInput, nodes, setNodes]);
+    }, [openModule, moduleNameInput, nodes, setNodes, modules]);
   
     // creates a brand‑new module from the edited nodes/edges
     const saveModuleAsNew = useCallback(() => {
         if (!openModule) return;
-        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
         const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
-        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
-        saveModule({
-            name: newName,
-            version: "v1",
-            graph: updatedGraph,
-            handles: openModule.module.handles,
-            internalNodes: openModule.nodes,
-            internalEdges: openModule.edges,
-            description: openModule.module.description,
-        });
-        setModules(listModules());
-        alert("Module saved as new");
-        setModuleStack(popModule);
+        setPendingModuleCopyName(baseName)
+        setShowSaveCopyModal(true);
     }, [openModule, moduleNameInput]);
-
+    
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
             const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
@@ -531,7 +602,28 @@ function FlowContent() {
         },
         [edges]
     );
-
+    const handleReturnCopyModule = () => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const name = pendingModuleCopyName.trim();
+        if (!name) {
+            alert("Enter a module name.");
+            return;
+        }
+        saveModule({
+            name: name,
+            version: "v1",
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setModules(listModules());
+        alert("Module saved as new");
+        setShowSaveCopyModal(false);
+        setModuleStack(popModule);
+    }
     const handleSaveModule = useCallback(() => {
         const selectedIdsArr = selectedNodeIds;
         if (!selectedIdsArr.length) {
@@ -550,20 +642,43 @@ function FlowContent() {
             alert("Enter a module name.");
             return;
         }
+
+        const variableMap: Record<string, Array<{ nodeId: string; paramName: string }>> = {};
+        for (const paramKey in paramToVariableMap) {
+            const varName = paramToVariableMap[paramKey];
+            if (varName) {
+                if (!variableMap[varName]) {
+                    variableMap[varName] = [];
+                }
+                const [nodeId, paramName] = paramKey.split("::");
+                variableMap[varName].push({ nodeId, paramName });
+            }
+        }
+
+        const contract = computeContract(selectedIds);
+        const sanitizedName = sanitizeIdent(resolveModuleName(name, ""));
+        const existingNames = modules.map(m => sanitizeIdent(resolveModuleName(m.name, ""))); // This might have redundant sanitization.
+        if (existingNames.includes(sanitizedName)) {
+            setModuleNameWarning(true);
+            return;
+        }
+
         const handles = computeModuleHandles(selectedIds);
         const moduleGraph = buildGraphIR(selectedNodes, internalEdges);
         saveModule({
-            name,
+            name: sanitizedName,
             version: "v1",
             graph: moduleGraph,
             handles,
             internalNodes: selectedNodes,
             internalEdges,
             description: `Saved from ${selectedNodes.length} node(s)`,
+            variableSchema: pendingVariables,
+            variableMap,
         });
         setModules(listModules());
         setShowSaveModal(false);
-    }, [nodes, edges, computeModuleHandles, selectedNodeIds, pendingModuleName]);
+    }, [nodes, edges, computeModuleHandles, selectedNodeIds, pendingModuleName, modules]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
@@ -732,6 +847,20 @@ function FlowContent() {
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
 
+    const selectedNodes = useMemo(() => nodes.filter(n => selectedNodeIds.includes(n.id)), [nodes, selectedNodeIds]);
+
+    const promotableParams = useMemo(() => {
+        return selectedNodes.flatMap(node => {
+            const layerDef = LAYER_REGISTRY[node.type!];
+            if (!layerDef) return [];
+            return Object.keys(layerDef.paramSchema).map(paramName => ({
+                nodeId: node.id,
+                nodeLabel: layerDef.label,
+                paramName,
+                spec: layerDef.paramSchema[paramName],
+            }));
+        });
+    }, [selectedNodes]);
     const failureCount = shapeResult?.failures?.length ?? 0;
     const computeSummary = useMemo(
         () => estimateGraphCost(nodes, edges, shapeResult, LAYER_REGISTRY),
@@ -771,9 +900,15 @@ function FlowContent() {
     );
 
 
-return (
-        <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
-
+    return (    
+        <div style={{ display: "flex", height: "100vh" }}>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                onChange={onUploadGraph}
+            />
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
@@ -787,6 +922,7 @@ return (
                     borderRight: "1px solid #222"
                 }}
             >
+                
                 {sidebarCollapsed ? (
                     <button
                         onClick={() => setSidebarCollapsed(false)}
@@ -926,13 +1062,14 @@ return (
                             edgeTypes={edgeTypes}
                             fitView
                             fitViewOptions={fitViewOptions}
-                            onDrop={onDrop}
+                            onDrop={onMainDrop}
                             onDragOver={onDragOver}
                             onSelectionChange={onSelectionChange}
                             onPaneClick={clearSelection}
                             multiSelectionKeyCode="Shift"
                             selectionOnDrag
                             defaultEdgeOptions={defaultEdgeOptions}
+                            onInit={rf => {mainFlowRef.current = rf as any;}}
                         >
                             <Background />
                         </ReactFlow>
@@ -945,6 +1082,82 @@ return (
                             onClose={() => setShowDiagnostics(false)}
                         />
                     )}
+                    {moduleNameWarning && ( // This component is displayed when a module with the same name already exists and we expect the user to select a new name.
+                        <div
+                            onClick={() => setModuleNameWarning(false)}
+                            style={{
+                                position: "fixed",
+                                inset: 0,
+                                background: "rgba(0,0,0,0.45)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                zIndex: 1000
+                            }}
+                        >
+                            <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    background: "#1f2937",
+                                    color: "#e5e7eb",
+                                    padding: "20px 22px",
+                                    borderRadius: "12px",
+                                    width: "360px",
+                                    boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+                                    animation: "popupFade 0.2s ease-out",
+                                    border: "1px solid #374151",
+                                    position: "relative"
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        height: "4px",
+                                        background: "linear-gradient(90deg, #ef4444, #dc2626)",
+                                        borderTopLeftRadius: "12px",
+                                        borderTopRightRadius: "12px"
+                                    }}
+                                />
+
+                                <div style={{ fontWeight: 600, fontSize: "16px", marginBottom: "6px" }}>
+                                    Duplicate Module Name
+                                </div>
+
+                                <div style={{ fontSize: "14px", lineHeight: 1.5, color: "#9ca3af" }}>
+                                    A module with this name already exists. Please choose a different name to continue.
+                                </div>
+
+                                <div
+                                    style={{
+                                        marginTop: "16px",
+                                        fontSize: "12px",
+                                        color: "#6b7280"
+                                    }}
+                                >
+                                    Click outside to dismiss
+                                </div>
+                            </div>
+
+                            <style>
+                                {`
+                                    @keyframes popupFade {
+                                        from {
+                                            opacity: 0;
+                                            transform: scale(0.96);
+                                        }
+                                        to {
+                                            opacity: 1;
+                                            transform: scale(1);
+                                        }
+                                    }
+                                `}
+                            </style>
+                        </div>
+                    )}
+
                     {showComputePanel && (
                         <ComputePanel
                             summary={computeSummary}
@@ -1077,7 +1290,9 @@ return (
                             background: "#0f1115",
                             border: "1px solid #222",
                             borderRadius: 10,
-                            width: 360,
+                            minWidth: 420,
+                            maxWidth: 560,
+                            maxHeight: "80vh",
                             padding: 16,
                             boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
                             display: "flex",
@@ -1085,7 +1300,7 @@ return (
                             gap: 12,
                         }}
                     >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
                             <span style={{ color: "#e6edf3", fontWeight: 700 }}>Save Module</span>
                             <button
                                 onClick={() => setShowSaveModal(false)}
@@ -1102,7 +1317,7 @@ return (
                                 ×
                             </button>
                         </div>
-                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
                             Module name
                             <input
                                 autoFocus
@@ -1118,7 +1333,86 @@ return (
                                 }}
                             />
                         </label>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                        <div style={{ borderTop: "1px solid #333", paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+                            <div style={{flexShrink: 0}}>
+                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px" }}>Module Variables</h3>
+                                {Object.entries(pendingVariables).map(([varName, spec]) => (
+                                    <div key={varName} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                        <input
+                                            type="text"
+                                            value={varName}
+                                            // onChange={e => handleRenameVariable(varName, e.target.value)}
+                                            style={{
+                                                background: "#111",
+                                                border: "1px solid #333",
+                                                borderRadius: 4,
+                                                padding: "4px 6px",
+                                                color: "#e6edf3",
+                                                fontSize: 12,
+                                            }}
+                                        />
+                                        <span style={{color: '#888', fontSize: 12}}>{spec.type}</span>
+                                        <button onClick={() => {
+                                            const newVars = { ...pendingVariables };
+                                            delete newVars[varName];
+                                            setPendingVariables(newVars);
+                                            // also remove from mappings
+                                            const newMap = { ...paramToVariableMap };
+                                            for (const key in newMap) {
+                                                if (newMap[key] === varName) {
+                                                    delete newMap[key];
+                                                }
+                                            }
+                                            setParamToVariableMap(newMap);
+                                        }} style={{marginLeft: 'auto', background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10}}>Delete</button>
+                                    </div>
+                                ))}
+                                <button onClick={() => {
+                                    const newVarName = `var${Object.keys(pendingVariables).length + 1}`;
+                                    setPendingVariables({ ...pendingVariables, [newVarName]: { type: 'number', required: true } });
+                                }} style={{ background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10, padding: '4px 8px' }}>Add Variable</button>
+                            </div>
+                            <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
+                                <div style={{ overflowY: "auto", paddingRight: 10 }}>
+                                    {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
+                                        const key = `${nodeId}::${paramName}`;
+                                        const assignedVar = paramToVariableMap[key];
+                                        return (
+                                            <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                                                <span style={{ color: "#e6edf3", fontSize: 12, flex: 1 }}>{nodeLabel}: {spec.label || paramName}</span>
+                                                <select
+                                                    value={assignedVar || ""}
+                                                    onChange={e => {
+                                                        const newVar = e.target.value;
+                                                        setParamToVariableMap(map => ({...map, [key]: newVar}));
+                                                        // if this is the first time a var is used, adopt the spec
+                                                        if (newVar && !pendingVariables[newVar]) {
+                                                            setPendingVariables(vars => ({...vars, [newVar]: spec}));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        background: "#111",
+                                                        border: "1px solid #333",
+                                                        borderRadius: 4,
+                                                        padding: "4px 6px",
+                                                        color: "#e6edf3",
+                                                        fontSize: 12,
+                                                    }}
+                                                >
+                                                    <option value="">Not Linked</option>
+                                                    {Object.keys(pendingVariables).map(varName => (
+                                                         <option key={varName} value={varName}>{varName}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4, flexShrink: 0 }}>
                             <button
                                 onClick={() => setShowSaveModal(false)}
                                 style={{
@@ -1150,17 +1444,17 @@ return (
                     </div>
                 </div>
             )}
-            {openModule && (
+            {showSaveCopyModal && (
                 <div
                     style={{
                         position: "fixed",
                         inset: 0,
-                        background: "rgba(0,0,0,0.6)",
+                        background: "rgba(0,0,0,0.55)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 30,
-                        padding: 20,
+                        zIndex: 70,
+                        padding: 16,
                     }}
                 >
                     <div
@@ -1168,13 +1462,121 @@ return (
                             background: "#0f1115",
                             border: "1px solid #222",
                             borderRadius: 10,
-                            width: "92vw",
+                            width: 360,
+                            padding: 16,
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Copy Module</span>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#888",
+                                    cursor: "pointer",
+                                    fontSize: 18,
+                                    lineHeight: 1,
+                                }}
+                                title="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                            Copy Module name
+                            <input
+                                autoFocus
+                                value={pendingModuleCopyName}
+                                onChange={e => setPendingModuleCopyName(e.target.value)}
+                                style={{
+                                    background: "#111",
+                                    border: "1px solid #333",
+                                    borderRadius: 6,
+                                    padding: "8px 10px",
+                                    color: "#e6edf3",
+                                    fontSize: 14,
+                                }}
+                            />
+                        </label>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#333",
+                                    color: "#e6edf3",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleReturnCopyModule}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#1f8ecd",
+                                    color: "#fff",
+                                    border: "1px solid #1f8ecd",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {openModule && (
+                <>
+                    <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "20vw",
+                        height: "100vh",
+                        zIndex: 29,
+                        pointerEvents: "none",
+                    }}
+                    />
+
+                    <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        right: 0,
+                        width: "80vw",
+                        height: "100vh",
+                        zIndex: 30,
+                        padding: 20,
+                        pointerEvents: "auto",
+                    }}
+                    >
+
+                        <div
+                        onDrop={onModuleDrop}
+                        onDragOver={onDragOver}
+                        style={{
+                            background: "#0f1115",
+                            border: "1px solid #222",
+                            borderRadius: 10,
+                            width: "80vw",
                             height: "92vh",
                             display: "flex",
                             flexDirection: "column",
-                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            boxShadow: "0 25px 60px rgba(0,0,0,0.45)",
+                            pointerEvents: "auto",
                         }}
-                    >
+                        >
                         <div
                             style={{
                                 padding: "10px 12px",
@@ -1359,7 +1761,8 @@ return (
                             </ReactFlowProvider>
                         </div>
                     </div>
-                </div>
+                    </div>
+                </>
             )}
             {openModule && showModuleDiagram && (
                 <div
