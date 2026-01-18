@@ -40,6 +40,8 @@ import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape
 import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
 import { buildShapeComparisons, compareTraceShapes } from "./utils/traceAnalysis";
 import { runTorchLensTrace } from "./utils/traceService";
+import type { ModuleRefData } from "./nodes/ModuleRefNode";
+import type { FieldSpec } from "./node_gen/BaseClass";
 
 let id = 0;
 const getId = () => `node-${id++}`;
@@ -1804,3 +1806,7 @@ export default function Flow() {
         </ReactFlowProvider>
     );
 }
+function computeContract(selectedIds: Set<string>) {
+    throw new Error("Function not implemented.");
+}
+
