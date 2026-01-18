@@ -4,9 +4,6 @@ import { Handle, NodeResizeControl, Position, useReactFlow, type Edge, type Node
 import { compileGraphToScript } from "../../utils/codeCompile";
 import { verifyShapes } from "../../utils/shape_verifier";
 
-// ==========================================
-// 1. Data Types
-// ==========================================
 
 type ResizableNodeProps = NodeProps<Node<LayerData>> & {
     width?: number;
@@ -19,9 +16,6 @@ type ModuleListData = {
     internalEdges: Edge[];
 }
 
-// ==========================================
-// 2. The Logic Class
-// ==========================================
 
 export class ModuleListNode {
     static label = "Module List (Stack)";
@@ -56,8 +50,6 @@ export class ModuleListNode {
 
         const virtualEdges: Edge[] = [];
 
-        // Connect Virtual Input -> Entry Nodes
-        // We use a special handle ID 'in-internal' effectively representing the left wall
         entries.forEach((node, i) => {
             virtualEdges.push({
                 id: `_implicit_in_${i}`,
@@ -156,9 +148,6 @@ export class ModuleListNode {
         return { ok: true as const };
     }
 
-    // node-0 = input, node-1 = module_list, node-2 = linear
-
-    // --- SHAPE COMPUTE ---
     static shapeCompute(data: ModuleListData, inputShapes: number[][], registry?: Record<string, any>) {
         if (!inputShapes || !inputShapes[0] || !registry) return inputShapes?.[0] ? [inputShapes[0]] : [[]];
 
@@ -264,10 +253,6 @@ export class ModuleListNode {
     static Component = createModuleListComponent(ModuleListNode.label, ModuleListNode.paramSchema);
 }
 
-// ==========================================
-// 3. The UI Component (Slot Style)
-// ==========================================
-
 export function createModuleListComponent(
     label: string,
     paramSchema: Record<string, FieldSpec>,
@@ -303,7 +288,6 @@ export function createModuleListComponent(
         const renderWidth = width ?? DEFAULT_W;
         const renderHeight = height ?? DEFAULT_H;
 
-        // --- STYLES ---
         const accentColor = selected ? "#fbbf24" : "#665"; // Amber
         const bgStyle: React.CSSProperties = isEmpty
             ? {
