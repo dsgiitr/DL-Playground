@@ -12,7 +12,6 @@ import {
     type Node,
     type OnConnect,
     type OnEdgesChange,
-    type OnNodeDrag,
     type OnNodesChange,
     type ReactFlowInstance,
 } from "@xyflow/react";
@@ -772,24 +771,20 @@ function FlowContent() {
     );
 
 
-    return (
-        <div style={{ display: "flex", height: "100vh" }}>
-            <input
-                ref={uploadInputRef}
-                type="file"
-                accept="application/json"
-                style={{ display: "none" }}
-                onChange={onUploadGraph}
-            />
+return (
+        <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
+
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
+                    flexShrink: 0,
                     transition: dragSidebar ? "none" : "width 0.15s",
                     background: "#484444",
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    position: "relative"
+                    position: "relative",
+                    borderRight: "1px solid #222"
                 }}
             >
                 {sidebarCollapsed ? (
@@ -833,11 +828,13 @@ function FlowContent() {
                     />
                 )}
             </div>
+
             <div
                 onMouseDown={() => setDragSidebar(true)}
                 style={{
                     width: 6,
                     cursor: "col-resize",
+                    flexShrink: 0,
                     background: dragSidebar ? "#64ffda55" : "#2a2a2a",
                     borderRight: "1px solid #222"
                 }}
@@ -973,6 +970,7 @@ function FlowContent() {
                     )}
                 </div>
             </div>
+
             {showLiveCode && (
                 <>
                     <div
@@ -980,15 +978,18 @@ function FlowContent() {
                         style={{
                             width: 6,
                             cursor: "col-resize",
+                            flexShrink: 0,
                             background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
                             borderLeft: "1px solid #222"
                         }}
                         title="Drag to resize code panel"
                     />
+
                     <div
                         style={{
                             width: codePanelWidth,
-                            height: "100vh",
+                            flexShrink: 0,
+                            height: "100%",
                             background: "#0f1115",
                             borderLeft: "1px solid #222",
                             display: "flex",
@@ -1005,7 +1006,8 @@ function FlowContent() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
-                                background: "#12141a"
+                                background: "#12141a",
+                                flexShrink: 0
                             }}
                         >
                             <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
@@ -1037,8 +1039,8 @@ function FlowContent() {
                             style={{
                                 flex: 1,
                                 margin: 0,
-                                padding: 16,
-                                overflow: "auto",
+                                padding: 4,
+                                overflow: "hidden",
                                 background: "#0b0d10",
                                 color: "#d4d4d4",
                                 fontSize: 13,
