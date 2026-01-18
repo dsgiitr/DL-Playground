@@ -103,10 +103,13 @@ function FlowContent() {
     const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
     const openModule = getActiveModule(moduleStack);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
+    const mainFlowRef = useRef<ReactFlowInstance | null>(null);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSaveCopyModal, setShowSaveCopyModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [pendingModuleCopyName, setPendingModuleCopyName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
     const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
 
@@ -361,46 +364,82 @@ function FlowContent() {
     );
     const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
-    const onDrop = useCallback(
-        (event: React.DragEvent) => {
-            event.preventDefault();
+    const onMainDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        if (!mainFlowRef.current) return;
 
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: Record<string, unknown> | null = null;
-            if (moduleMetaRaw) {
-                try {
-                    moduleMeta = JSON.parse(moduleMetaRaw);
-                } catch (err) {
-                    console.warn("Failed to parse module metadata", err);
-                }
+        const type = event.dataTransfer.getData("application/reactflow");
+        if (!type) return;
+        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+        let moduleMeta: Record<string, unknown> | null = null;
+
+        if (moduleMetaRaw) {
+            try {
+            moduleMeta = JSON.parse(moduleMetaRaw);
+            } catch (err) {
+                console.warn("Failed to parse module metadata", err);
             }
+        }
 
-            const position = screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
+        const position = mainFlowRef.current.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
 
-            const newNode: Node = {
-                id: getId(),
-                type: type,
-                position,
-                // width: 150,
-                // height: 50,
-                data: moduleMeta
-                    ? {
-                        ...moduleMeta,
-                        label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
-                    }
-                    : {},
-            };
-            const finalNode = assignParent(newNode, getNodes())
+        setNodes(nds => [
+            ...nds,
+            {
+        id: getId(),
+            type,
+            position,
+            data: moduleMeta
+            ? { ...moduleMeta, label: moduleMeta.name ?? "Module" }
+            : {},
+            },
+        ]);     
+}, []);
 
-            setNodes(nds => [...nds, finalNode]);
-        },
-        [screenToFlowPosition, setNodes, assignParent, getNodes]
-    );
+const onModuleDrop = useCallback((event: React.DragEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!moduleFlowRef.current) return;
+
+  const type = event.dataTransfer.getData("application/reactflow");
+  if (!type) return;
+
+  const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+  let moduleMeta = null;
+
+  try {
+    if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
+  } catch {}
+
+  const position = moduleFlowRef.current.screenToFlowPosition({
+    x: event.clientX,
+    y: event.clientY,
+  });
+
+  const newNode: Node = {
+    id: getId(),
+    type: type,
+    position,
+    data: moduleMeta
+        ? {
+            ...moduleMeta,
+            label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module"
+        }
+      : {},
+  };
+
+  setModuleStack(stack =>
+    updateActiveModule(stack, current => ({
+      ...current,
+      nodes: [...current.nodes, newNode],
+    }))
+  );
+}, []);
+
     
     // Code to handle Repeat Blocks
     const onSelectionChange = useCallback(
@@ -463,8 +502,7 @@ function FlowContent() {
                 edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
             };
             if (!applied.nodes.length) {
-                alert("Saved module is empty. Try saving it again after selecting nodes.");
-                return;
+                alert("Saved module is empty. You can now add new things and save changes.");
             }
             setModuleStack(stack =>
                 pushModule(stack, {
@@ -503,23 +541,11 @@ function FlowContent() {
     // creates a brand‑new module from the edited nodes/edges
     const saveModuleAsNew = useCallback(() => {
         if (!openModule) return;
-        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
         const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
-        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
-        saveModule({
-            name: newName,
-            version: "v1",
-            graph: updatedGraph,
-            handles: openModule.module.handles,
-            internalNodes: openModule.nodes,
-            internalEdges: openModule.edges,
-            description: openModule.module.description,
-        });
-        setModules(listModules());
-        alert("Module saved as new");
-        setModuleStack(popModule);
+        setPendingModuleCopyName(baseName)
+        setShowSaveCopyModal(true);
     }, [openModule, moduleNameInput]);
-
+    
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
             const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
@@ -531,7 +557,28 @@ function FlowContent() {
         },
         [edges]
     );
-
+    const handleReturnCopyModule = () => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const name = pendingModuleCopyName.trim();
+        if (!name) {
+            alert("Enter a module name.");
+            return;
+        }
+        saveModule({
+            name: name,
+            version: "v1",
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setModules(listModules());
+        alert("Module saved as new");
+        setShowSaveCopyModal(false);
+        setModuleStack(popModule);
+    }
     const handleSaveModule = useCallback(() => {
         const selectedIdsArr = selectedNodeIds;
         if (!selectedIdsArr.length) {
@@ -771,9 +818,15 @@ function FlowContent() {
     );
 
 
-return (
-        <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
-
+    return (    
+        <div style={{ display: "flex", height: "100vh" }}>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                onChange={onUploadGraph}
+            />
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
@@ -926,13 +979,14 @@ return (
                             edgeTypes={edgeTypes}
                             fitView
                             fitViewOptions={fitViewOptions}
-                            onDrop={onDrop}
+                            onDrop={onMainDrop}
                             onDragOver={onDragOver}
                             onSelectionChange={onSelectionChange}
                             onPaneClick={clearSelection}
                             multiSelectionKeyCode="Shift"
                             selectionOnDrag
                             defaultEdgeOptions={defaultEdgeOptions}
+                            onInit={rf => {mainFlowRef.current = rf as any;}}
                         >
                             <Background />
                         </ReactFlow>
@@ -1150,17 +1204,17 @@ return (
                     </div>
                 </div>
             )}
-            {openModule && (
+            {showSaveCopyModal && (
                 <div
                     style={{
                         position: "fixed",
                         inset: 0,
-                        background: "rgba(0,0,0,0.6)",
+                        background: "rgba(0,0,0,0.55)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        zIndex: 30,
-                        padding: 20,
+                        zIndex: 70,
+                        padding: 16,
                     }}
                 >
                     <div
@@ -1168,13 +1222,121 @@ return (
                             background: "#0f1115",
                             border: "1px solid #222",
                             borderRadius: 10,
-                            width: "92vw",
+                            width: 360,
+                            padding: 16,
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                        }}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Copy Module</span>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    color: "#888",
+                                    cursor: "pointer",
+                                    fontSize: 18,
+                                    lineHeight: 1,
+                                }}
+                                title="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                            Copy Module name
+                            <input
+                                autoFocus
+                                value={pendingModuleCopyName}
+                                onChange={e => setPendingModuleCopyName(e.target.value)}
+                                style={{
+                                    background: "#111",
+                                    border: "1px solid #333",
+                                    borderRadius: 6,
+                                    padding: "8px 10px",
+                                    color: "#e6edf3",
+                                    fontSize: 14,
+                                }}
+                            />
+                        </label>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                            <button
+                                onClick={() => setShowSaveCopyModal(false)}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#333",
+                                    color: "#e6edf3",
+                                    border: "1px solid #444",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={handleReturnCopyModule}
+                                style={{
+                                    padding: "8px 12px",
+                                    background: "#1f8ecd",
+                                    color: "#fff",
+                                    border: "1px solid #1f8ecd",
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    fontWeight: 600,
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {openModule && (
+                <>
+                    <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "20vw",
+                        height: "100vh",
+                        zIndex: 29,
+                        pointerEvents: "none",
+                    }}
+                    />
+
+                    <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        right: 0,
+                        width: "80vw",
+                        height: "100vh",
+                        zIndex: 30,
+                        padding: 20,
+                        pointerEvents: "auto",
+                    }}
+                    >
+
+                        <div
+                        onDrop={onModuleDrop}
+                        onDragOver={onDragOver}
+                        style={{
+                            background: "#0f1115",
+                            border: "1px solid #222",
+                            borderRadius: 10,
+                            width: "80vw",
                             height: "92vh",
                             display: "flex",
                             flexDirection: "column",
-                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            boxShadow: "0 25px 60px rgba(0,0,0,0.45)",
+                            pointerEvents: "auto",
                         }}
-                    >
+                        >
                         <div
                             style={{
                                 padding: "10px 12px",
@@ -1359,7 +1521,8 @@ return (
                             </ReactFlowProvider>
                         </div>
                     </div>
-                </div>
+                    </div>
+                </>
             )}
             {openModule && showModuleDiagram && (
                 <div
