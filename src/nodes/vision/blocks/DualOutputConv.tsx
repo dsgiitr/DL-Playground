@@ -130,6 +130,11 @@ export class DualOutputConvNode {
   static Component = createLayerComponent<DualOutputConvData>(
     DualOutputConvNode.label,
     DualOutputConvNode.paramSchema,
-    { handleSchema: DualOutputConvNode.handleSchema },
+    {
+      handles: {
+        targets: ["in"],
+        sources: ["conv_out", "flat_out"],
+      },
+    },
   );
 }
