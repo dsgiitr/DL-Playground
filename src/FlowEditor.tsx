@@ -343,7 +343,7 @@ function FlowContent() {
         },
         []
     );
-    const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
+    const { onNodeDragStart, onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
     const onDrop = useCallback(
         (event: React.DragEvent) => {
@@ -1001,6 +1001,7 @@ function FlowContent() {
                             onConnect={onConnect}
                             onNodeDrag={onNodeDrag}
                             onNodeDragStop={onNodeDragStop}
+                            onNodeDragStart={onNodeDragStart}
                             nodeTypes={nodeTypes}
                             edgeTypes={edgeTypes}
                             fitView

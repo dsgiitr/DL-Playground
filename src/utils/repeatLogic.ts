@@ -1,9 +1,12 @@
 import { type Edge, type Node } from "@xyflow/react";
-import { useCallback, useEffect, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 
 // Add any new control flow nodes here.
 const CONTAINER_TYPES = new Set(["repeat_layer", "module_list"]);
-
+const CONTAINER_CAPACITIES: Record<string, number> = {
+    module_list: 1,
+    repeat_layer: 999,
+};
 // 1. Calculate Absolute Position (Recursive)
 // climbs the tree to find the true screen coordinates.
 const getAbsolutePosition = (node: Node, nodes: Node[]): { x: number; y: number } => {
@@ -63,11 +66,15 @@ export function useRepeatSystem(
     nodes: Node[],
     edges: Edge[],
     setNodes: Dispatch<SetStateAction<Node[]>>,
-    getNodes: () => Node[]
+    getNodes: () => Node[],
 ) {
     // 1. PARENT ASSIGNMENT LOGIC
+    const dragStartRef = useRef<Node | null>(null);
+    const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+        dragStartRef.current = JSON.parse(JSON.stringify(node));
+    }, []);
 
-    const assignParent = useCallback((node: Node, currentNodes: Node[]): Node => {
+    const findBestParent = useCallback((node: Node, currentNodes: Node[]): Node | undefined => {
         // A. Calculate the Dragged Node's Absolute Geometry
         const nodeAbsPos = getAbsolutePosition(node, currentNodes);
         const nodeWidth = node.measured?.width ?? node.width ?? 0;
@@ -107,64 +114,101 @@ export function useRepeatSystem(
         // C. Select the Best Parent (The "Smallest Fit" Rule)
         // If we are over both "Outer Layer" and "Inner Layer", "Inner" is smaller.
         // We pick "Inner".
-        let targetParent: Node | undefined = undefined;
+        if (candidates.length === 0) return undefined;
 
-        if (candidates.length > 0) {
-            targetParent = candidates.sort((a, b) => {
-                const areaA = (a.measured?.width ?? 0) * (a.measured?.height ?? 0);
-                const areaB = (b.measured?.width ?? 0) * (b.measured?.height ?? 0);
-                return areaA - areaB; // Ascending sort: Smallest area first
-            })[0];
-        }
-
-        // D. Return Updated Node
-        if (targetParent) {
-            const parentAbs = getAbsolutePosition(targetParent, currentNodes);
-            return {
-                ...node,
-                parentId: targetParent.id,
-                extent: "parent", // Constrain movement to parent bounds
-                position: {
-                    x: nodeAbsPos.x - parentAbs.x, // Convert to Relative Coordinate
-                    y: nodeAbsPos.y - parentAbs.y,
-                },
-            };
-        } else {
-            // Detach if no parent found (dropped on canvas)
-            return {
-                ...node,
-                parentId: undefined,
-                extent: undefined,
-                position: { ...nodeAbsPos }, // Convert back to Absolute
-            };
-        }
+        return candidates.sort((a, b) => {
+            const areaA = (a.measured?.width ?? 0) * (a.measured?.height ?? 0);
+            const areaB = (b.measured?.width ?? 0) * (b.measured?.height ?? 0);
+            return areaA - areaB; // Ascending sort: Smallest area first
+        })[0];
     }, []);
+    const assignParent = useCallback(
+        (node: Node, currentNodes: Node[]): Node => {
+            const targetParent = findBestParent(node, currentNodes);
 
+            if (targetParent) {
+                // 1. Check Capacity for new drops
+                const maxCap = CONTAINER_CAPACITIES[targetParent.type || ""] || 999;
+                const existingChildren = currentNodes.filter(n => n.parentId === targetParent.id);
+
+                if (existingChildren.length >= maxCap) {
+                    // Capacity full: Drop as orphan on canvas instead
+                    return {
+                        ...node,
+                        parentId: undefined,
+                        extent: undefined,
+                        // Position is already absolute for new drops
+                    };
+                }
+
+                // 2. Adopt Child
+                const parentAbs = getAbsolutePosition(targetParent, currentNodes);
+                // Ensure input node position is treated as absolute
+                const nodeAbs = node.parentId ? getAbsolutePosition(node, currentNodes) : node.position;
+
+                return {
+                    ...node,
+                    parentId: targetParent.id,
+                    extent: "parent",
+                    position: {
+                        x: nodeAbs.x - parentAbs.x,
+                        y: nodeAbs.y - parentAbs.y,
+                    },
+                };
+            }
+
+            return { ...node, parentId: undefined, extent: undefined };
+        },
+        [findBestParent],
+    );
     // 2. DRAG LOGIC
     const onNodeDragStop = useCallback(
         (_event: React.MouseEvent, node: Node) => {
             // We must use getNodes() here to ensure we have the latest positions
             // of ALL nodes, not just the one being dragged.
             const currentNodes = getNodes();
-
+            const targetParent = findBestParent(node, currentNodes);
             setNodes(nds => {
-                const processedNode = assignParent(node, currentNodes);
-
-                // Optimization: Don't update if parent/pos hasn't effectively changed
-                const originalNode = nds.find(n => n.id === node.id);
-                if (
-                    originalNode &&
-                    originalNode.parentId === processedNode.parentId &&
-                    Math.abs(originalNode.position.x - processedNode.position.x) < 0.1 &&
-                    Math.abs(originalNode.position.y - processedNode.position.y) < 0.1
-                ) {
+                if (!targetParent) {
+                    const nodeAbsPos = getAbsolutePosition(node, currentNodes);
+                    return nds.map(n =>
+                        n.id === node.id
+                            ? {
+                                  ...n,
+                                  parentId: undefined,
+                                  extent: undefined,
+                                  position: nodeAbsPos,
+                              }
+                            : n,
+                    );
+                }
+                const maxCap = CONTAINER_CAPACITIES[targetParent.type || ""] || 999;
+                const existingChildren = currentNodes.filter(n => n.parentId === targetParent.id && n.id !== node.id);
+                if (existingChildren.length >= maxCap) {
+                    console.warn(
+                        `Parent ${targetParent.id} is full (${existingChildren.length}/${maxCap}). Reverting.`,
+                    );
+                    if (dragStartRef.current && dragStartRef.current.id === node.id) {
+                        return nds.map(n => (n.id === node.id ? dragStartRef.current! : n));
+                    }
                     return nds;
                 }
-
-                return nds.map(n => (n.id === node.id ? processedNode : n));
+                const parentAbs = getAbsolutePosition(targetParent, currentNodes);
+                const nodeAbsPos = getAbsolutePosition(node, currentNodes);
+                const newNode: Node = {
+                    ...node,
+                    parentId: targetParent.id,
+                    extent: "parent",
+                    position: {
+                        x: nodeAbsPos.x - parentAbs.x,
+                        y: nodeAbsPos.y - parentAbs.y,
+                    },
+                };
+                return nds.map(n => (n.id === node.id ? newNode : n));
             });
+            dragStartRef.current = null;
         },
-        [getNodes, setNodes, assignParent]
+        [getNodes, setNodes, findBestParent],
     );
 
     // 3. SYNC LOGIC (Handles internal graph data for compilation)
@@ -229,5 +273,5 @@ export function useRepeatSystem(
         }
     }, [nodes, edges, setNodes]);
 
-    return { onNodeDragStop, assignParent };
+    return { onNodeDragStop, onNodeDragStart, assignParent };
 }
