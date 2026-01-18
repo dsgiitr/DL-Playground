@@ -103,6 +103,7 @@ function FlowContent() {
     const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
     const openModule = getActiveModule(moduleStack);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
+    const mainFlowRef = useRef<ReactFlowInstance | null>(null);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
@@ -363,46 +364,82 @@ function FlowContent() {
     );
     const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
 
-    const onDrop = useCallback(
-        (event: React.DragEvent) => {
-            event.preventDefault();
+    const onMainDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        if (!mainFlowRef.current) return;
 
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: Record<string, unknown> | null = null;
-            if (moduleMetaRaw) {
-                try {
-                    moduleMeta = JSON.parse(moduleMetaRaw);
-                } catch (err) {
-                    console.warn("Failed to parse module metadata", err);
-                }
+        const type = event.dataTransfer.getData("application/reactflow");
+        if (!type) return;
+        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+        let moduleMeta: Record<string, unknown> | null = null;
+
+        if (moduleMetaRaw) {
+            try {
+            moduleMeta = JSON.parse(moduleMetaRaw);
+            } catch (err) {
+                console.warn("Failed to parse module metadata", err);
             }
+        }
 
-            const position = screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
+        const position = mainFlowRef.current.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
 
-            const newNode: Node = {
-                id: getId(),
-                type: type,
-                position,
-                // width: 150,
-                // height: 50,
-                data: moduleMeta
-                    ? {
-                        ...moduleMeta,
-                        label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
-                    }
-                    : {},
-            };
-            const finalNode = assignParent(newNode, getNodes())
+        setNodes(nds => [
+            ...nds,
+            {
+        id: getId(),
+            type,
+            position,
+            data: moduleMeta
+            ? { ...moduleMeta, label: moduleMeta.name ?? "Module" }
+            : {},
+            },
+        ]);     
+}, []);
 
-            setNodes(nds => [...nds, finalNode]);
-        },
-        [screenToFlowPosition, setNodes, assignParent, getNodes]
-    );
+const onModuleDrop = useCallback((event: React.DragEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!moduleFlowRef.current) return;
+
+  const type = event.dataTransfer.getData("application/reactflow");
+  if (!type) return;
+
+  const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+  let moduleMeta = null;
+
+  try {
+    if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
+  } catch {}
+
+  const position = moduleFlowRef.current.screenToFlowPosition({
+    x: event.clientX,
+    y: event.clientY,
+  });
+
+  const newNode: Node = {
+    id: getId(),
+    type: type,
+    position,
+    data: moduleMeta
+        ? {
+            ...moduleMeta,
+            label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module"
+        }
+      : {},
+  };
+
+  setModuleStack(stack =>
+    updateActiveModule(stack, current => ({
+      ...current,
+      nodes: [...current.nodes, newNode],
+    }))
+  );
+}, []);
+
     
     // Code to handle Repeat Blocks
     const onSelectionChange = useCallback(
@@ -465,8 +502,7 @@ function FlowContent() {
                 edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
             };
             if (!applied.nodes.length) {
-                alert("Saved module is empty. Try saving it again after selecting nodes.");
-                return;
+                alert("Saved module is empty. You can now add new things and save changes.");
             }
             setModuleStack(stack =>
                 pushModule(stack, {
@@ -782,9 +818,15 @@ function FlowContent() {
     );
 
 
-return (
-        <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
-
+    return (    
+        <div style={{ display: "flex", height: "100vh" }}>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept="application/json"
+                style={{ display: "none" }}
+                onChange={onUploadGraph}
+            />
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
@@ -937,13 +979,14 @@ return (
                             edgeTypes={edgeTypes}
                             fitView
                             fitViewOptions={fitViewOptions}
-                            onDrop={onDrop}
+                            onDrop={onMainDrop}
                             onDragOver={onDragOver}
                             onSelectionChange={onSelectionChange}
                             onPaneClick={clearSelection}
                             multiSelectionKeyCode="Shift"
                             selectionOnDrag
                             defaultEdgeOptions={defaultEdgeOptions}
+                            onInit={rf => {mainFlowRef.current = rf as any;}}
                         >
                             <Background />
                         </ReactFlow>
@@ -1253,30 +1296,47 @@ return (
                 </div>
             )}
             {openModule && (
-                <div
+                <>
+                    <div
                     style={{
                         position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.6)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
+                        top: 0,
+                        left: 0,
+                        width: "20vw",
+                        height: "100vh",
+                        zIndex: 29,
+                        pointerEvents: "none",
+                    }}
+                    />
+
+                    <div
+                    style={{
+                        position: "fixed",
+                        top: 0,
+                        right: 0,
+                        width: "80vw",
+                        height: "100vh",
                         zIndex: 30,
                         padding: 20,
+                        pointerEvents: "auto",
                     }}
-                >
-                    <div
+                    >
+
+                        <div
+                        onDrop={onModuleDrop}
+                        onDragOver={onDragOver}
                         style={{
                             background: "#0f1115",
                             border: "1px solid #222",
                             borderRadius: 10,
-                            width: "92vw",
+                            width: "80vw",
                             height: "92vh",
                             display: "flex",
                             flexDirection: "column",
-                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+                            boxShadow: "0 25px 60px rgba(0,0,0,0.45)",
+                            pointerEvents: "auto",
                         }}
-                    >
+                        >
                         <div
                             style={{
                                 padding: "10px 12px",
@@ -1461,7 +1521,8 @@ return (
                             </ReactFlowProvider>
                         </div>
                     </div>
-                </div>
+                    </div>
+                </>
             )}
             {openModule && showModuleDiagram && (
                 <div
