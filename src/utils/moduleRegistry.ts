@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { GraphIR } from "../types/graph";
+import type { FieldSpec } from '../node_gen/BaseClass';
 import { buildGraphIR } from "./graphIR";
 
 export type ModuleHandles = {
@@ -38,7 +39,7 @@ export const updateModuleRefData = (
 
 export type SavedModule = {
     id: string;
-    name: string;
+    name:string;
     version: string;
     graph: GraphIR;
     handles: ModuleHandles;
@@ -47,6 +48,8 @@ export type SavedModule = {
     description?: string;
     createdAt: string;
     updatedAt: string;
+    variableSchema?: Record<string, FieldSpec>;
+    variableMap?: Record<string, Array<{ nodeId: string; paramName: string; }>>;
 };
 
 const STORAGE_KEY = "customModules";
