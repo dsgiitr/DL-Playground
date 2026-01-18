@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type PowData = { exponent?: number };
@@ -18,6 +19,10 @@ export class PowNode {
 
     static shapeCompute(_data: PowData, inputShapes: number[][]) {
         return [...(inputShapes[0] || [])];
+    }
+
+    static estimateCost(_data: PowData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
     }
 
     static getInitCode() {

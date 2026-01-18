@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateReductionCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 import { makeReduction } from "./ReductionNode";
 
@@ -39,6 +40,10 @@ export class MaxNode {
         return reduceShape(shape, dim) || [];
     }
 
+    static estimateCost(_data: DimData, inputShapes: number[][]) {
+        const inputShape = inputShapes[0] || [];
+        return estimateReductionCost(inputShape);
+    }
     static getInitCode() {
         return "# max uses torch.max(...).values";
     }
@@ -60,6 +65,7 @@ export class MinNode {
 
     static shapeVerifier = MaxNode.shapeVerifier;
     static shapeCompute = MaxNode.shapeCompute;
+    static estimateCost = MaxNode.estimateCost;
     static getInitCode() {
         return "# min uses torch.min(...).values";
     }
@@ -79,6 +85,7 @@ export class ArgMaxNode {
 
     static shapeVerifier = MaxNode.shapeVerifier;
     static shapeCompute = MaxNode.shapeCompute;
+    static estimateCost = MaxNode.estimateCost;
     static getInitCode() {
         return "# argmax uses torch.argmax";
     }
@@ -98,6 +105,7 @@ export class ArgMinNode {
 
     static shapeVerifier = MaxNode.shapeVerifier;
     static shapeCompute = MaxNode.shapeCompute;
+    static estimateCost = MaxNode.estimateCost;
     static getInitCode() {
         return "# argmin uses torch.argmin";
     }

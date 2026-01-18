@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type DropData = { p?: number };
@@ -20,6 +21,9 @@ export class DropoutNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(_data: DropoutNode, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
+    }
     static getInitCode(data: DropoutNode, name: string) {
         return buildInitString("nn.Dropout", name, DropoutNode.paramSchema, data as any);
     }
@@ -45,6 +49,7 @@ export class SpatialDropout2dNode {
     }
 
     static shapeCompute = DropoutNode.shapeCompute;
+    static estimateCost = DropoutNode.estimateCost;
 
     static getInitCode(data: DropoutNode, name: string) {
         return buildInitString("nn.Dropout2d", name, SpatialDropout2dNode.paramSchema, data as any);
@@ -59,6 +64,7 @@ export class AlphaDropoutNode {
 
     static shapeVerifier = DropoutNode.shapeVerifier;
     static shapeCompute = DropoutNode.shapeCompute;
+    static estimateCost = DropoutNode.estimateCost;
     static getInitCode(data: DropoutNode, name: string) {
         return buildInitString("nn.AlphaDropout", name, AlphaDropoutNode.paramSchema, data as any);
     }
@@ -84,6 +90,9 @@ export class StochasticDepthNode {
         return [...(inputShapes[0] || [])];
     }
 
+    static estimateCost(_data: DropData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
+    }
     static getInitCode(data: DropData, name: string) {
         return buildInitString("nn.StochasticDepth", name, StochasticDepthNode.paramSchema, data as any);
     }

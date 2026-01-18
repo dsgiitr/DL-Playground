@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateRecurrentCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type LstmData = {
@@ -33,6 +34,15 @@ export class LSTMNode {
         const h = getParamValue(this, data, "hidden_size") as number;
         const bidir = getParamValue(this, data, "bidirectional") ? 2 : 1;
         return [b, t, h * bidir];
+    }
+
+    static estimateCost(data: LstmData, inputShapes: number[][]) {
+        const input = inputShapes[0] || [];
+        const inputSize = getParamValue(this, data, "input_size") as number;
+        const hiddenSize = getParamValue(this, data, "hidden_size") as number;
+        const layers = getParamValue(this, data, "num_layers") as number;
+        const bidir = !!getParamValue(this, data, "bidirectional");
+        return estimateRecurrentCost(input, inputSize, hiddenSize, layers || 1, bidir, 4);
     }
 
     static getInitCode(data: LstmData, name: string) {

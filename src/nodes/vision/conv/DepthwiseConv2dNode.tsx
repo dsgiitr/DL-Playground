@@ -1,4 +1,5 @@
 import { buildInitString, getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimateConvCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type DepthwiseData = {
@@ -49,6 +50,16 @@ export class DepthwiseConv2dNode {
         const dilation = getParamValue(this, data, "dilation") as number;
         const computeDim = (dim: number) => Math.floor((dim + 2 * padding - dilation * (kernel - 1) - 1) / stride + 1);
         return [batch, inCh * mult, computeDim(height), computeDim(width)];
+    }
+
+    static estimateCost(data: DepthwiseData, _inputShapes: number[][], outputShape: number[]) {
+        const inCh = toNumber(getParamValue(this, data, "in_channels"), 0);
+        const mult = toNumber(getParamValue(this, data, "depth_multiplier"), 1);
+        const outCh = inCh * mult;
+        const kernel = toNumber(getParamValue(this, data, "kernel_size"), 0);
+        const bias = data.bias !== false;
+        const kernelArea = kernel * kernel;
+        return estimateConvCost(outputShape, inCh, outCh, kernelArea, bias, inCh || 1);
     }
 
     static getInitCode(data: DepthwiseData, name: string) {

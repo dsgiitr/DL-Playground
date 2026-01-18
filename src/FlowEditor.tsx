@@ -8,20 +8,20 @@ import {
     useReactFlow,
     type DefaultEdgeOptions,
     type Edge,
-    type EdgeSelectionChange,
     type FitViewOptions,
     type Node,
-    type NodeSelectionChange,
     type OnConnect,
     type OnEdgesChange,
-    type OnNodeDrag,
     type OnNodesChange,
     type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeViewer from "./components/CodeViewer.tsx";
+import ComputePanel from "./components/ComputePanel";
+import DiagnosticsPanel from "./components/DiagnosticsPanel";
 import DiagramView from "./components/DiagramView";
+import EditorHeader from "./components/HeaderUtils";
 import TraceView from "./components/TraceView";
 import Sidebar from "./Sidebar.tsx";
 import { edgeTypes } from "./types/edgeTypes";
@@ -32,9 +32,12 @@ import { exportDiagramDataUrl } from "./utils/diagramExport";
 import { useRepeatSystem } from "./utils/repeatLogic";
 // import { generatePyTorchCode } from "./utils/dummy_generator.ts";
 import { generateMainCode } from "./utils/codeCompile";
+import { estimateGraphCost } from "./utils/computeEstimator";
 import { applyGraphIR, buildGraphIR, getRootGraph } from "./utils/graphIR";
-import { deleteModule, getModule, listModules, saveModule, type ModuleContract, type SavedModule } from "./utils/moduleRegistry";
+import { deleteModule, getModule, listModules, resolveModuleName, saveExistingModule, saveModule, type ModuleHandles, type SavedModule } from "./utils/moduleRegistry";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "./utils/shape_verifier";
+import { getActiveModule, popModule, pushModule, updateActiveModule, type OpenModule } from "./utils/stackNavigation";
+import { buildShapeComparisons, compareTraceShapes } from "./utils/traceAnalysis";
 import { runTorchLensTrace } from "./utils/traceService";
 
 let id = 0;
@@ -56,11 +59,10 @@ const defaultEdgeOptions: DefaultEdgeOptions = {
     animated: true,
 };
 
-const onNodeDrag: OnNodeDrag = (_, node) => {
-    console.log("drag event", node.data);
-};
+const TRACE_SEED_PRESETS = [42, 1337, 1234, 2020, 2021];
 
 const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
+
 
 function FlowContent() {
     const [nodes, setNodes] = useState<Node[]>(() => {
@@ -98,13 +100,15 @@ function FlowContent() {
         return saved ? JSON.parse(saved) : [];
     });
     const [modules, setModules] = useState<SavedModule[]>(() => listModules());
-    const [selection, setSelection] = useState<{ nodeIds: string[]; edgeIds: string[] }>({ nodeIds: [], edgeIds: [] });
-    const [openModule, setOpenModule] = useState<{ module: SavedModule; nodes: Node[]; edges: Edge[]; fromNodeId?: string } | null>(null);
+    const [moduleStack, setModuleStack] = useState<OpenModule[]>([]);
+    const openModule = getActiveModule(moduleStack);
     const [showModuleDiagram, setShowModuleDiagram] = useState(false);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
     const [shapeResult, setShapeResult] = useState<ShapeResult | null>(null);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
+    const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
 
     const [showLiveCode, setShowLiveCode] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -117,17 +121,25 @@ function FlowContent() {
     const [exporting, setExporting] = useState<"png" | "svg" | null>(null);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [showDiagram, setShowDiagram] = useState(false);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
+    const [showComputePanel, setShowComputePanel] = useState(false);
     const [showTrace, setShowTrace] = useState(false);
     const [traceData, setTraceData] = useState<TraceResponse | null>(null);
     const [traceLoading, setTraceLoading] = useState(false);
     const [traceError, setTraceError] = useState<string | null>(null);
+    const [traceSeedPreset, setTraceSeedPreset] = useState("42");
+    const [traceSeedCustom, setTraceSeedCustom] = useState("");
+    const shapeComparisons = useMemo(
+        () => (traceData ? buildShapeComparisons(traceData, shapeResult, edges, nodes, LAYER_REGISTRY) : []),
+        [traceData, shapeResult, edges, nodes]
+    );
     const historyRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
     const historyIndexRef = useRef(0);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isRestoring = useRef(false);
     const skipHistory = useRef(false);
-    const { screenToFlowPosition, getNodes } = useReactFlow();
+    const { screenToFlowPosition, getNodes, fitView } = useReactFlow();
 
     const onNodesChange: OnNodesChange = useCallback(
         changes => {
@@ -200,7 +212,11 @@ function FlowContent() {
                 inputShapes: [[1, 3, 224, 224]],
                 code: generatedCode,
             });
-            setTraceData(resp);
+            const shapeWarnings = compareTraceShapes(resp, shapeResult, edges, nodes, LAYER_REGISTRY);
+            setTraceData({
+                ...resp,
+                warnings: [...(resp.warnings || []), ...shapeWarnings],
+            });
             setShowTrace(true);
         } catch (err) {
             setTraceError("Trace failed. Backend unavailable or returned error.");
@@ -385,44 +401,36 @@ function FlowContent() {
         },
         [screenToFlowPosition, setNodes, assignParent, getNodes]
     );
-    // Code to handle Repeat Blocks
 
+    // Code to handle Repeat Blocks
     const onSelectionChange = useCallback(
-        (params: { nodes?: NodeSelectionChange[]; edges?: EdgeSelectionChange[] }) => {
-            const changedNodes = params.nodes || [];
-            const changedEdges = params.edges || [];
+        (params: { nodes: Node[]; edges: Edge[] }) => {
+            const selectedNodeIdsFromParam = new Set(params.nodes.map(n => n.id));
+            const selectedEdgeIdsFromParam = new Set(params.edges.map(e => e.id));
 
             setNodes(nds => {
-                const next = nds.map(n => {
-                    const match = changedNodes.find(cn => cn.id === n.id);
-                    if (!match || typeof match.selected === "undefined") return n;
-                    const isSel = !!match.selected;
+                return nds.map(n => {
+                    const isSelected = selectedNodeIdsFromParam.has(n.id);
                     return {
                         ...n,
-                        selected: isSel,
-                        data: { ...(n.data || {}), __highlight: isSel ? true : undefined },
+                        selected: isSelected,
+                        data: { ...(n.data || {}), __highlight: isSelected ? true : undefined },
                     };
                 });
-                const selectedIds = next.filter(n => n.selected).map(n => n.id);
-                setSelection(sel => ({ ...sel, nodeIds: selectedIds }));
-                return next;
             });
 
             setEdges(eds => {
-                const next = eds.map(e => {
-                    const match = changedEdges.find(ce => ce.id === e.id);
-                    if (!match || typeof match.selected === "undefined") return e;
-                    return { ...e, selected: !!match.selected };
+                return eds.map(e => {
+                    return {
+                        ...e,
+                        selected: selectedEdgeIdsFromParam.has(e.id),
+                    };
                 });
-                const selectedIds = next.filter(e => e.selected).map(e => e.id);
-                setSelection(sel => ({ ...sel, edgeIds: selectedIds }));
-                return next;
             });
         },
         []
     );
     const clearSelection = useCallback(() => {
-        setSelection({ nodeIds: [], edgeIds: [] });
         setHighlightNodes(new Set());
         setHighlightEdges(new Set());
         setNodes(nds => nds.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })));
@@ -442,7 +450,10 @@ function FlowContent() {
                 alert("Module not found");
                 return;
             }
-            const appliedRaw = applyGraphIR(mod.graph);
+            const appliedRaw =
+                mod.internalNodes && mod.internalEdges
+                    ? { nodes: mod.internalNodes, edges: mod.internalEdges }
+                    : applyGraphIR(mod.graph);
             const applied = {
                 nodes: appliedRaw.nodes.map(n => ({
                     ...n,
@@ -455,12 +466,14 @@ function FlowContent() {
                 alert("Saved module is empty. Try saving it again after selecting nodes.");
                 return;
             }
-            setOpenModule({
-                module: mod,
-                nodes: applied.nodes,
-                edges: applied.edges,
-                fromNodeId: custom.detail?.nodeId,
-            });
+            setModuleStack(stack =>
+                pushModule(stack, {
+                    module: mod,
+                    nodes: applied.nodes,
+                    edges: applied.edges,
+                    fromNodeId: custom.detail?.nodeId,
+                })
+            );
             setShowModuleDiagram(false);
         };
         window.addEventListener("module-open", handler as EventListener);
@@ -473,8 +486,42 @@ function FlowContent() {
         }
     }, [openModule?.nodes, openModule?.edges]);
 
-    const computeContract = useCallback(
-        (selectedIds: Set<string>): ModuleContract => {
+    useEffect(() => {
+        setModuleNameInput(openModule?.module?.name || "");
+    }, [openModule?.module?.name]);
+
+    // this is used when the save as existing module is selected 
+    const saveExistingModuleChanges = useCallback(() => {
+        if (!openModule) return;
+        const result = saveExistingModule(openModule, moduleNameInput, nodes);
+        setNodes(result.updatedNodes);
+        setModules(listModules());
+        alert("Module saved");
+        setModuleStack(popModule);
+    }, [openModule, moduleNameInput, nodes, setNodes]);
+
+    // creates a brand‑new module from the edited nodes/edges
+    const saveModuleAsNew = useCallback(() => {
+        if (!openModule) return;
+        const updatedGraph = buildGraphIR(openModule.nodes, openModule.edges);
+        const baseName = resolveModuleName(moduleNameInput, openModule.module.name);
+        const newName = baseName === openModule.module.name ? `${baseName} Copy` : baseName;
+        saveModule({
+            name: newName,
+            version: "v1",
+            graph: updatedGraph,
+            handles: openModule.module.handles,
+            internalNodes: openModule.nodes,
+            internalEdges: openModule.edges,
+            description: openModule.module.description,
+        });
+        setModules(listModules());
+        alert("Module saved as new");
+        setModuleStack(popModule);
+    }, [openModule, moduleNameInput]);
+
+    const computeModuleHandles = useCallback(
+        (selectedIds: Set<string>): ModuleHandles => {
             const incoming = edges.filter(e => !selectedIds.has(e.source) && selectedIds.has(e.target));
             const outgoing = edges.filter(e => selectedIds.has(e.source) && !selectedIds.has(e.target));
             return {
@@ -486,7 +533,7 @@ function FlowContent() {
     );
 
     const handleSaveModule = useCallback(() => {
-        const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
+        const selectedIdsArr = selectedNodeIds;
         if (!selectedIdsArr.length) {
             setShowSaveModal(false);
             return;
@@ -503,20 +550,20 @@ function FlowContent() {
             alert("Enter a module name.");
             return;
         }
-        const contract = computeContract(selectedIds);
+        const handles = computeModuleHandles(selectedIds);
         const moduleGraph = buildGraphIR(selectedNodes, internalEdges);
         saveModule({
             name,
             version: "v1",
             graph: moduleGraph,
-            contract,
-            selectedNodes: selectedNodes,
-            selectedEdges: internalEdges,
+            handles,
+            internalNodes: selectedNodes,
+            internalEdges,
             description: `Saved from ${selectedNodes.length} node(s)`,
         });
         setModules(listModules());
         setShowSaveModal(false);
-    }, [selection.nodeIds, nodes, edges, computeContract, selectedNodeIds, pendingModuleName]);
+    }, [nodes, edges, computeModuleHandles, selectedNodeIds, pendingModuleName]);
 
     const graphSnapshot = useMemo<GraphIR>(() => buildGraphIR(nodes, edges), [nodes, edges]);
 
@@ -685,25 +732,59 @@ function FlowContent() {
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
 
+    const failureCount = shapeResult?.failures?.length ?? 0;
+    const computeSummary = useMemo(
+        () => estimateGraphCost(nodes, edges, shapeResult, LAYER_REGISTRY),
+        [nodes, edges, shapeResult]
+    );
+
+    const toggleDiagnostics = useCallback(() => {
+        setShowDiagnostics(open => {
+            const next = !open;
+            if (next) setShowComputePanel(false);
+            return next;
+        });
+    }, []);
+
+    const toggleComputePanel = useCallback(() => {
+        setShowComputePanel(open => {
+            const next = !open;
+            if (next) setShowDiagnostics(false);
+            return next;
+        });
+    }, []);
+
+    const focusFailure = useCallback(
+        (failure: ShapeFailure) => {
+            const upstream = failure.upstream || [];
+            const edgeIds = edges
+                .filter(e => upstream.includes(e.source) && e.target === failure.nodeId)
+                .map(e => e.id);
+            setHighlightNodes(new Set([failure.nodeId, ...upstream]));
+            setHighlightEdges(new Set(edgeIds));
+            const target = nodes.find(n => n.id === failure.nodeId);
+            if (target) {
+                void fitView({ nodes: [target], padding: 0.4 });
+            }
+        },
+        [edges, nodes, fitView]
+    );
+
 
     return (
-        <div style={{ display: "flex", height: "100vh" }}>
-            <input
-                ref={uploadInputRef}
-                type="file"
-                accept="application/json"
-                style={{ display: "none" }}
-                onChange={onUploadGraph}
-            />
+        <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
+
             <div
                 style={{
                     width: sidebarCollapsed ? 28 : sidebarWidth,
+                    flexShrink: 0,
                     transition: dragSidebar ? "none" : "width 0.15s",
                     background: "#484444",
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    position: "relative"
+                    position: "relative",
+                    borderRight: "1px solid #222"
                 }}
             >
                 {sidebarCollapsed ? (
@@ -747,249 +828,90 @@ function FlowContent() {
                     />
                 )}
             </div>
+
             <div
                 onMouseDown={() => setDragSidebar(true)}
                 style={{
                     width: 6,
                     cursor: "col-resize",
+                    flexShrink: 0,
                     background: dragSidebar ? "#64ffda55" : "#2a2a2a",
                     borderRight: "1px solid #222"
                 }}
                 title="Drag to resize sidebar"
             />
             <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
-                <div
-                    style={{
-                        padding: "8px",
-                        display: "flex",
-                        gap: "12px",
-                        alignItems: "center",
-                        minHeight: "40px",
-                        justifyContent: "space-between",
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 5,
-                        background: "#1a1a1a"
+                {/* Selection summary is intentionally omitted; selection is shown via highlights. */}
+                <EditorHeader
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    canSaveModule={selectedNodeIds.length > 0}
+                    traceLoading={traceLoading}
+                    traceSeedOptions={[...TRACE_SEED_PRESETS.map(String), "custom"]}
+                    traceSeedPreset={traceSeedPreset}
+                    traceSeedCustom={traceSeedCustom}
+                    showCustomSeedInput={traceSeedPreset === "custom"}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    onTrace={handleTrace}
+                    onTraceSeedPresetChange={setTraceSeedPreset}
+                    onTraceSeedCustomChange={setTraceSeedCustom}
+                    onSaveModule={() => {
+                        const selectedIdsArr = selectedNodeIds;
+                        if (!selectedIdsArr.length) {
+                            alert("Select at least one node to save as a module.");
+                            return;
+                        }
+                        const suggestion = `Module ${modules.length + 1}`;
+                        setPendingModuleName(suggestion);
+                        setShowSaveModal(true);
                     }}
-                >
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <button
-                            className="nodrag"
-                            onClick={handleUndo}
-                            disabled={!canUndo}
-                            style={{
-                                padding: "6px 10px",
-                                background: canUndo ? "#333" : "#222",
-                                color: canUndo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canUndo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Undo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleRedo}
-                            disabled={!canRedo}
-                            style={{
-                                padding: "6px 10px",
-                                background: canRedo ? "#333" : "#222",
-                                color: canRedo ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: canRedo ? "pointer" : "not-allowed"
-                            }}
-                        >
-                            Redo
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={handleTrace}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Run forward trace (TorchLens backend required)"
-                        >
-                            {traceLoading ? "Tracing…" : "TorchLens Trace"}
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={() => {
-                                const selectedIdsArr = selectedNodeIds.length ? selectedNodeIds : selection.nodeIds;
-                                if (!selectedIdsArr.length) {
-                                    alert("Select at least one node to save as a module.");
-                                    return;
-                                }
-                                const suggestion = `Module ${modules.length + 1}`;
-                                setPendingModuleName(suggestion);
-                                setShowSaveModal(true);
-                            }}
-                            disabled={!selectedNodeIds.length && !selection.nodeIds.length}
-                            style={{
-                                padding: "6px 10px",
-                                background: selectedNodeIds.length || selection.nodeIds.length ? "#335" : "#222",
-                                color: selectedNodeIds.length || selection.nodeIds.length ? "#fff" : "#666",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: selectedNodeIds.length || selection.nodeIds.length ? "pointer" : "not-allowed"
-                            }}
-                            title="Save selected nodes as a reusable module"
-                        >
-                            Save Module
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={triggerUpload}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Import GraphIR JSON"
-                        >
-                            Import JSON
-                        </button>
-                        <button
-                            className="nodrag"
-                            onClick={() => setShowDiagram(true)}
-                            style={{
-                                padding: "6px 10px",
-                                background: "#333",
-                                color: "#fff",
-                                border: "1px solid #444",
-                                borderRadius: 6,
-                                cursor: "pointer"
-                            }}
-                            title="Open paper-style diagram view"
-                        >
-                            Diagram View
-                        </button>
-                        <div style={{ position: "relative" }}>
-                            <button
-                                className="nodrag"
-                                onClick={() => setExportMenuOpen(open => !open)}
+                    onImportJson={triggerUpload}
+                    onDiagramView={() => setShowDiagram(true)}
+                    onExportToggle={() => setExportMenuOpen(open => !open)}
+                    onExportSvg={() => exportDiagram("svg")}
+                    onExportPng={() => exportDiagram("png")}
+                    onExportJson={() => {
+                        downloadGraphJson();
+                        setExportMenuOpen(false);
+                    }}
+                    exportMenuOpen={exportMenuOpen}
+                    exporting={!!exporting}
+                    showDiagnostics={showDiagnostics}
+                    showComputePanel={showComputePanel}
+                    failureCount={failureCount}
+                    onToggleDiagnostics={toggleDiagnostics}
+                    onToggleComputePanel={toggleComputePanel}
+                    statusSlot={
+                        shapeResult && shapeResult.ok ? (
+                            <div
                                 style={{
-                                    padding: "6px 10px",
-                                    background: "#333",
-                                    color: "#fff",
-                                    border: "1px solid #444",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    minWidth: 110,
-                                    textAlign: "left"
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    padding: "4px 10px",
+                                    borderRadius: 999,
+                                    border: "1px solid #1f2a2f",
+                                    background: "linear-gradient(90deg, #0f2d2f, #0b3b2f)",
+                                    color: "#7fffd4",
+                                    fontWeight: 600,
+                                    fontSize: 12,
+                                    letterSpacing: "0.01em",
+                                    boxShadow: "0 0 0 1px rgba(100, 255, 218, 0.12)",
                                 }}
-                                title="Export diagram"
                             >
-                                Export ▾
-                            </button>
-                            {exportMenuOpen && (
-                                <div
-                                    style={{
-                                        position: "absolute",
-                                        top: "110%",
-                                        left: 0,
-                                        background: "#1a1a1a",
-                                        border: "1px solid #444",
-                                        borderRadius: 6,
-                                        boxShadow: "0 10px 20px rgba(0,0,0,0.35)",
-                                        zIndex: 10,
-                                        minWidth: 150,
-                                        overflow: "hidden"
-                                    }}
-                                >
-                                    <button
-                                        onClick={() => exportDiagram("svg")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
-                                            textAlign: "left"
-                                        }}
-                                    >
-                                        Export as SVG
-                                    </button>
-                                    <button
-                                        onClick={() => exportDiagram("png")}
-                                        disabled={!!exporting}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: exporting ? "#777" : "#e6edf3",
-                                            cursor: exporting ? "not-allowed" : "pointer",
-                                            textAlign: "left"
-                                        }}
-                                    >
-                                        Export as PNG
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            downloadGraphJson();
-                                            setExportMenuOpen(false);
-                                        }}
-                                        style={{
-                                            padding: "8px 12px",
-                                            width: "100%",
-                                            background: "transparent",
-                                            border: "none",
-                                            color: "#e6edf3",
-                                            cursor: "pointer",
-                                            textAlign: "left",
-                                            borderTop: "1px solid #333"
-                                        }}
-                                    >
-                                        Export JSON
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                            minHeight: "32px",
-                            maxHeight: "120px",
-                            overflowY: "auto",
-                            padding: "4px 0"
-                        }}
-                    >
-                        {shapeResult && shapeResult.ok && (
-                            <span style={{ color: "#64ffda" }}>
-                                Shapes valid ({Object.keys(shapeResult.shapes).length} nodes). Graph is consistent.
-                            </span>
-                        )}
-                        {shapeResult && !shapeResult.ok && shapeResult.failures.length > 0 && (
-                            <ol style={{ margin: 0, paddingLeft: "16px", color: "#ff6b6b", lineHeight: 1.4 }}>
-                                {shapeResult.failures.map((f, idx) => (
-                                    <li key={`${f.nodeId}-${idx}`} style={{ marginBottom: 2 }}>
-                                        {friendlyError(f)}
-                                    </li>
-                                ))}
-                            </ol>
-                        )}
-                        <div style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <span>Selected nodes: {selectedNodeIds.length ? selectedNodeIds.join(", ") : "none"}</span>
-                            <span>Selected edges: {selectedEdgeIds.length ? selectedEdgeIds.join(", ") : "none"}</span>
-                        </div>
-                    </div>
-                </div>
+                                <span aria-hidden="true">✓</span>
+                                <span>All clear</span>
+                                <span style={{ color: "#a7f3d0", fontWeight: 500 }}>
+                                    ({Object.keys(shapeResult.shapes).length} nodes)
+                                </span>
+                            </div>
+                        ) : shapeResult && !shapeResult.ok ? (
+                            <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
+                        ) : null
+                    }
+                    selectionSummary={null}
+                />
 
                 <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", inset: "0 0 0 0" }}>
@@ -999,7 +921,6 @@ function FlowContent() {
                             onNodesChange={onNodesChange}
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
-                            onNodeDrag={onNodeDrag}
                             onNodeDragStop={onNodeDragStop}
                             onNodeDragStart={onNodeDragStart}
                             nodeTypes={nodeTypes}
@@ -1017,8 +938,40 @@ function FlowContent() {
                             <Background />
                         </ReactFlow>
                     </div>
+                    {/* load DiagnosticsPanel */}
+                    {showDiagnostics && shapeResult && !shapeResult.ok && failureCount > 0 && (
+                        <DiagnosticsPanel
+                            failures={shapeResult.failures}
+                            onSelect={focusFailure}
+                            onClose={() => setShowDiagnostics(false)}
+                        />
+                    )}
+                    {showComputePanel && (
+                        <ComputePanel
+                            summary={computeSummary}
+                            onSelect={node => {
+                                setHighlightNodes(new Set([node.nodeId]));
+                                setHighlightEdges(new Set());
+                                const target = nodes.find(n => n.id === node.nodeId);
+                                if (target) {
+                                    void fitView({ nodes: [target], padding: 0.4 });
+                                }
+                            }}
+                            onHover={nodeId => {
+                                if (!nodeId) {
+                                    setHighlightNodes(new Set());
+                                    setHighlightEdges(new Set());
+                                    return;
+                                }
+                                setHighlightNodes(new Set([nodeId]));
+                                setHighlightEdges(new Set());
+                            }}
+                            onClose={() => setShowComputePanel(false)}
+                        />
+                    )}
                 </div>
             </div>
+
             {showLiveCode && (
                 <>
                     <div
@@ -1026,15 +979,18 @@ function FlowContent() {
                         style={{
                             width: 6,
                             cursor: "col-resize",
+                            flexShrink: 0,
                             background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
                             borderLeft: "1px solid #222"
                         }}
                         title="Drag to resize code panel"
                     />
+
                     <div
                         style={{
                             width: codePanelWidth,
-                            height: "100vh",
+                            flexShrink: 0,
+                            height: "100%",
                             background: "#0f1115",
                             borderLeft: "1px solid #222",
                             display: "flex",
@@ -1051,7 +1007,8 @@ function FlowContent() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
-                                background: "#12141a"
+                                background: "#12141a",
+                                flexShrink: 0
                             }}
                         >
                             <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
@@ -1083,8 +1040,8 @@ function FlowContent() {
                             style={{
                                 flex: 1,
                                 margin: 0,
-                                padding: 16,
-                                overflow: "auto",
+                                padding: 4,
+                                overflow: "hidden",
                                 background: "#0b0d10",
                                 color: "#d4d4d4",
                                 fontSize: 13,
@@ -1229,13 +1186,27 @@ function FlowContent() {
                                 justifyContent: "space-between",
                             }}
                         >
+                            {/* editable module header to enter the updated module names  */}
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span style={{ color: "#e6edf3", fontWeight: 700 }}>
-                                    Editing Module: {openModule.module.name} ({openModule.module.version})
-                                </span>
+                                <span style={{ color: "#9ca3af", fontSize: 12 }}>Editing Module</span>
+                                <input
+                                    value={moduleNameInput}
+                                    onChange={e => setModuleNameInput(e.target.value)}
+                                    placeholder="Module name"
+                                    style={{
+                                        background: "#0f172a",
+                                        color: "#e6edf3",
+                                        border: "1px solid #1f2937",
+                                        borderRadius: 6,
+                                        padding: "4px 8px",
+                                        fontWeight: 600,
+                                        minWidth: 160,
+                                    }}
+                                />
+                                <span style={{ color: "#9ca3af", fontSize: 12 }}>({openModule.module.version})</span>
                                 <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
                             </div>
-                            <div style={{ display: "flex", gap: 8 }}>
+                            <div style={{ display: "flex", gap: 8, position: "relative" }}>
                                 <button
                                     onClick={() => setShowModuleDiagram(true)}
                                     style={{
@@ -1250,20 +1221,7 @@ function FlowContent() {
                                     Diagram View
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        const updated = buildGraphIR(openModule.nodes, openModule.edges);
-                                        saveModule({
-                                            id: openModule.module.id,
-                                            name: openModule.module.name,
-                                            version: openModule.module.version,
-                                            graph: updated,
-                                            contract: openModule.module.contract,
-                                            description: openModule.module.description,
-                                        });
-                                        setModules(listModules());
-                                        alert("Module saved");
-                                        setOpenModule(null);
-                                    }}
+                                    onClick={() => setShowModuleSaveMenu(open => !open)}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1274,10 +1232,67 @@ function FlowContent() {
                                         fontWeight: 600,
                                     }}
                                 >
-                                    Save
+                                    Save ▾
                                 </button>
+                                {/* this shows the saving dropdown */}
+                                {showModuleSaveMenu && (
+                                    <div
+                                        style={{
+                                            position: "absolute",
+                                            right: 0,
+                                            top: "100%",
+                                            marginTop: 6,
+                                            background: "#111827",
+                                            border: "1px solid #1f2937",
+                                            borderRadius: 8,
+                                            padding: 6,
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: 6,
+                                            minWidth: 160,
+                                            zIndex: 5,
+                                        }}
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setShowModuleSaveMenu(false);
+                                                saveExistingModuleChanges();
+                                            }}
+                                            style={{
+                                                padding: "6px 8px",
+                                                borderRadius: 6,
+                                                border: "1px solid #334155",
+                                                background: "#1f2937",
+                                                color: "#e6edf3",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            Save changes
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowModuleSaveMenu(false);
+                                                saveModuleAsNew();
+                                            }}
+                                            style={{
+                                                padding: "6px 8px",
+                                                borderRadius: 6,
+                                                border: "1px solid #334155",
+                                                background: "#0f172a",
+                                                color: "#e6edf3",
+                                                cursor: "pointer",
+                                                textAlign: "left",
+                                                fontSize: 12,
+                                            }}
+                                        >
+                                            Save as new module
+                                        </button>
+                                    </div>
+                                )}
                                 <button
-                                    onClick={() => setOpenModule(null)}
+                                    onClick={() => setModuleStack(popModule)}
                                     style={{
                                         padding: "6px 10px",
                                         borderRadius: 6,
@@ -1302,34 +1317,34 @@ function FlowContent() {
                                         instance.fitView({ padding: 0.2, includeHiddenNodes: true });
                                     }}
                                     onNodesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, nodes: applyNodeChanges(changes, curr.nodes) }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                nodes: applyNodeChanges(changes, current.nodes),
+                                            }))
                                         )
                                     }
                                     onEdgesChange={changes =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? { ...curr, edges: applyEdgeChanges(changes, curr.edges) }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                edges: applyEdgeChanges(changes, current.edges),
+                                            }))
                                         )
                                     }
                                     onConnect={connection =>
-                                        setOpenModule(curr =>
-                                            curr
-                                                ? {
-                                                    ...curr,
-                                                    edges: addEdge(
-                                                        {
-                                                            ...connection,
-                                                            type: "custom",
-                                                            data: { label: connection.source || "out" },
-                                                        },
-                                                        curr.edges
-                                                    ),
-                                                }
-                                                : curr
+                                        setModuleStack(stack =>
+                                            updateActiveModule(stack, current => ({
+                                                ...current,
+                                                edges: addEdge(
+                                                    {
+                                                        ...connection,
+                                                        type: "custom",
+                                                        data: { label: connection.source || "out" },
+                                                    },
+                                                    current.edges
+                                                ),
+                                            }))
                                         )
                                     }
                                     nodeTypes={nodeTypes}
@@ -1374,6 +1389,7 @@ function FlowContent() {
                     trace={traceData}
                     loading={traceLoading}
                     error={traceError}
+                    shapeComparisons={shapeComparisons}
                     onClose={() => setShowTrace(false)}
                     onSelect={ids => {
                         setHighlightNodes(new Set(ids));

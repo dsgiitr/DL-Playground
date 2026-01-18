@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { toNumber } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type EmbeddingData = {
@@ -30,6 +31,12 @@ export class EmbeddingNode {
         const [b, t] = inputShapes[0];
         const dim = getParamValue(this, data, "embedding_dim") as number;
         return [b, t, dim];
+    }
+
+    static estimateCost(data: EmbeddingData, _inputShapes: number[][], _outputShape: number[]) {
+        const vocab = toNumber(getParamValue(this, data, "num_embeddings"), 0);
+        const dim = toNumber(getParamValue(this, data, "embedding_dim"), 0);
+        return { params: vocab * dim, flops: 0 };
     }
 
     static getInitCode(data: EmbeddingData, name: string) {

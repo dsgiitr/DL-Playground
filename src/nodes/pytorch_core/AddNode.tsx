@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type AddData = Record<string, never>;
@@ -20,6 +21,10 @@ export class AddNode {
 
     static shapeCompute(_data: AddData, inputShapes: number[][]) {
         return inputShapes[0] ? [...inputShapes[0]] : [];
+    }
+
+    static estimateCost(_data: AddData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape);
     }
 
     static getInitCode() {
