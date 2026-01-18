@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateLinearCost, toNumber } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 
@@ -52,6 +53,12 @@ export class LinearLayerNode {
         const outFeatures = getParamValue(this, data, "out_features") as number;
         if (shape.length === 2) return [shape[0], outFeatures];
         return [outFeatures];
+    }
+    static estimateCost(data: LinearData, _inputShapes: number[][], outputShape: number[]) {
+        const inFeatures = toNumber(getParamValue(this, data, "in_features"), 0);
+        const outFeatures = toNumber(getParamValue(this, data, "out_features"), 0);
+        const bias = data.bias !== false;
+        return estimateLinearCost(outputShape, inFeatures, outFeatures, bias);
     }
     static getInitCode(data: LinearData, name: string) {
         const i = data.in_features || this.paramSchema.in_features.defaultValue;

@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../../node_gen/BaseClass";
+import { estimatePoolCost, toNumber } from "../../../utils/computeUtils";
 import { createLayerComponent } from "../../../node_gen/CreateNodeComponent.tsx";
 
 type AdaptivePoolData = {
@@ -24,6 +25,17 @@ export class AdaptiveAvgPool2dNode {
         const [n, c] = inputShapes[0];
         const out = getParamValue(this, data, "output_size") as number;
         return [n, c, out, out];
+    }
+
+    static estimateCost(_data: AdaptivePoolData, inputShapes: number[][], outputShape: number[]) {
+        const inputShape = inputShapes[0] || [];
+        const inH = toNumber(inputShape[2], 0);
+        const inW = toNumber(inputShape[3], 0);
+        const outH = toNumber(outputShape[2], 0);
+        const outW = toNumber(outputShape[3], 0);
+        const kernelH = outH ? Math.floor(inH / outH) : 0;
+        const kernelW = outW ? Math.floor(inW / outW) : 0;
+        return estimatePoolCost(outputShape, kernelH * kernelW);
     }
 
     static getInitCode(data: AdaptivePoolData, name: string) {

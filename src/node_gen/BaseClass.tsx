@@ -29,6 +29,8 @@ export interface LayerDefinition<D extends LayerData> {
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
     // shapeCompute: computes output shape, assumes verifier passed
     shapeCompute(data: D, inputShapes: number[][]): number[];
+    // estimateCost: optional params/FLOPs estimate for analysis panels
+    estimateCost?: (data: D, inputShapes: number[][], outputShape: number[]) => { params: number; flops: number };
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     // UI component

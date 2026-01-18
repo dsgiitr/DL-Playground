@@ -1,5 +1,6 @@
 import { useMemo, useEffect } from "react";
 import type { TraceEntry, TraceResponse } from "../types/trace";
+import type { ShapeComparisonRow } from "../utils/traceAnalysis";
 import { useState, useRef, useCallback } from "react";
 
 function SvgViewer({ svgBase64 }: { svgBase64: string }) {
@@ -70,16 +71,19 @@ type Props = {
     trace: TraceResponse | null;
     loading: boolean;
     error?: string | null;
+    shapeComparisons: ShapeComparisonRow[];
     onClose: () => void;
     onSelect: (nodeIds: string[]) => void;
 };
 
-export default function TraceView({ trace, loading, error, onClose, onSelect }: Props) {
+export default function TraceView({ trace, loading, error, shapeComparisons, onClose, onSelect }: Props) {
     const entries = trace?.entries ?? [];
     const svg = trace?.svgBase64;
     const summary = trace?.summaryText;
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
     const [tableCollapsed, setTableCollapsed] = useState(false);
+    const [comparisonOpen, setComparisonOpen] = useState(false);
+    const leftPanelRef = useRef<HTMLDivElement | null>(null);
     const warnings = trace?.warnings ?? [];
     const hasError = !!error || !!warnings.length;
 
@@ -145,6 +149,21 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
 
     const rows = useMemo(() => entries, [entries]);
     const warningText = warnings.join(" · ");
+    const mismatchCount = useMemo(
+        () => shapeComparisons.filter(row => row.matchInput === false || row.matchOutput === false).length,
+        [shapeComparisons]
+    );
+    const formatShape = (shape: number[] | null) => (shape && shape.length ? `[${shape.join(", ")}]` : "—");
+    const formatInputs = (inputs: number[][]) => {
+        if (!inputs.length) return "—";
+        if (inputs.length === 1) return formatShape(inputs[0]);
+        return inputs.map(shape => formatShape(shape)).join(" | ");
+    };
+
+    useEffect(() => {
+        if (!comparisonOpen) return;
+        if (leftPanelRef.current) leftPanelRef.current.scrollTop = 0;
+    }, [comparisonOpen]);
 
     return (
         <div
@@ -185,6 +204,24 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
                         <span style={{ color: "#e6edf3", fontWeight: 700 }}>TorchLens Trace</span>
                         {loading && <span style={{ color: "#9ca3af" }}>running…</span>}
                     </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                        <button
+                            onClick={() => setComparisonOpen(open => !open)}
+                            style={{
+                                padding: "6px 10px",
+                                borderRadius: 6,
+                                border: "1px solid #374151",
+                                background: comparisonOpen ? "#1f2937" : "#111827",
+                                color: "#e6edf3",
+                                cursor: "pointer",
+                                fontSize: 12,
+                            }}
+                            title="Compare inferred shapes against TorchLens runtime shapes"
+                        >
+                            {comparisonOpen ? "Hide shape check" : "Shape check"}
+                            {mismatchCount ? ` (${mismatchCount})` : ""}
+                        </button>
+                    </div>
                     {hasError && (
                         <div
                             style={{
@@ -219,8 +256,8 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
                         Close
                     </button>
                 </div>
-                <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "row" }}>
-                    <div style={{ flex: "0 0 55%", overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "row" }}>
+                    <div ref={leftPanelRef} style={{ flex: "0 0 55%", overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0b0d10", border: "1px solid #1f2937", borderRadius: 6, padding: "6px 8px" }}>
                             <button
                                 onClick={() => setTableCollapsed(prev => !prev)}
@@ -322,6 +359,124 @@ export default function TraceView({ trace, loading, error, onClose, onSelect }: 
                     )}
                 </div>
             </div>
+            {comparisonOpen && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(15, 17, 21, 0.7)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 40,
+                        padding: 20,
+                    }}
+                >
+                    <div
+                        style={{
+                            width: "78vw",
+                            maxHeight: "75vh",
+                            background: "#0f1115",
+                            border: "1px solid #27272a",
+                            borderRadius: 10,
+                            boxShadow: "0 20px 50px rgba(0,0,0,0.45)",
+                            display: "flex",
+                            flexDirection: "column",
+                            overflow: "hidden",
+                        }}
+                    >
+                        <div
+                            style={{
+                                padding: "10px 12px",
+                                borderBottom: "1px solid #27272a",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                background: "#111318",
+                            }}
+                        >
+                            <span style={{ color: "#f8fafc", fontWeight: 700 }}>Shape consistency</span>
+                            <button
+                                onClick={() => setComparisonOpen(false)}
+                                style={{
+                                    padding: "6px 10px",
+                                    borderRadius: 6,
+                                    border: "1px solid #444",
+                                    background: "#333",
+                                    color: "#fff",
+                                    cursor: "pointer",
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div style={{ padding: 12, overflow: "auto" }}>
+                            {shapeComparisons.length === 0 ? (
+                                <div
+                                    style={{
+                                        padding: "12px 10px",
+                                        border: "1px dashed #334155",
+                                        borderRadius: 8,
+                                        color: "#94a3b8",
+                                        textAlign: "center",
+                                        fontSize: 12,
+                                    }}
+                                >
+                                    No shape comparison data available. Run a trace with shapes inferred.
+                                </div>
+                            ) : (
+                                <table style={{ width: "100%", borderCollapse: "collapse", color: "#e6edf3", fontSize: 12 }}>
+                                    <thead>
+                                        <tr style={{ background: "#111827" }}>
+                                            <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #1f2937" }}>
+                                                Node
+                                            </th>
+                                            <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #1f2937" }}>
+                                                Inferred In
+                                            </th>
+                                            <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #1f2937" }}>
+                                                Trace In
+                                            </th>
+                                            <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #1f2937" }}>
+                                                Inferred Out
+                                            </th>
+                                            <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #1f2937" }}>
+                                                Trace Out
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {shapeComparisons.map(row => {
+                                            const inputMismatch = row.matchInput === false;
+                                            const outputMismatch = row.matchOutput === false;
+                                            return (
+                                                <tr key={row.nodeId} style={{ background: inputMismatch || outputMismatch ? "#1a1010" : "transparent" }}>
+                                                    <td style={{ padding: "8px", borderBottom: "1px solid #111827" }}>
+                                                        <div style={{ fontWeight: 600 }}>{row.label}</div>
+                                                        <div style={{ color: "#64748b", fontSize: 11 }}>{row.op}</div>
+                                                    </td>
+                                                    <td style={{ padding: "8px", borderBottom: "1px solid #111827", color: inputMismatch ? "#fca5a5" : "#e5e7eb" }}>
+                                                        {formatInputs(row.inferredInputs)}
+                                                    </td>
+                                                    <td style={{ padding: "8px", borderBottom: "1px solid #111827", color: inputMismatch ? "#f87171" : "#e5e7eb" }}>
+                                                        {formatShape(row.traceInput)}
+                                                    </td>
+                                                    <td style={{ padding: "8px", borderBottom: "1px solid #111827", color: outputMismatch ? "#fca5a5" : "#e5e7eb" }}>
+                                                        {formatShape(row.inferredOutput)}
+                                                    </td>
+                                                    <td style={{ padding: "8px", borderBottom: "1px solid #111827", color: outputMismatch ? "#f87171" : "#e5e7eb" }}>
+                                                        {formatShape(row.traceOutput)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

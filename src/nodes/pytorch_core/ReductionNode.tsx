@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateReductionCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type ReduceData = { dim?: number };
@@ -35,6 +36,11 @@ export function makeReduction(label: string, torchFn: string) {
             const shape = inputShapes[0] || [];
             const dim = getParamValue(this, data, "dim") as number;
             return reduceShape(shape, dim) || [];
+        }
+
+        static estimateCost(_data: ReduceData, inputShapes: number[][]) {
+            const inputShape = inputShapes[0] || [];
+            return estimateReductionCost(inputShape);
         }
 
         static getInitCode() {

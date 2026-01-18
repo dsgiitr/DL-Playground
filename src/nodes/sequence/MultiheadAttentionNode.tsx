@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateAttentionCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type MhaData = {
@@ -45,6 +46,13 @@ export class MultiheadAttentionNode {
         const [b, t] = inputShapes[0];
         const embed = getParamValue(this, data, "embed_dim") as number;
         return [b, t, embed];
+    }
+
+    static estimateCost(data: MhaData, inputShapes: number[][]) {
+        const input = inputShapes[0] || [];
+        const embed = getParamValue(this, data, "embed_dim") as number;
+        const heads = getParamValue(this, data, "num_heads") as number;
+        return estimateAttentionCost(input, embed, heads);
     }
 
     static getInitCode(data: MhaData, name: string) {

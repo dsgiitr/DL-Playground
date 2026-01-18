@@ -1,4 +1,5 @@
 import { getParamValue, type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateElementwiseCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type PosEncData = { dim: number };
@@ -21,6 +22,10 @@ export class PositionalEncodingNode {
 
     static shapeCompute(_data: PosEncData, inputShapes: number[][]) {
         return [...(inputShapes[0] || [])];
+    }
+
+    static estimateCost(_data: PosEncData, _inputShapes: number[][], outputShape: number[]) {
+        return estimateElementwiseCost(outputShape, 1);
     }
 
     static getInitCode() {

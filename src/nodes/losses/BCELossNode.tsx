@@ -1,4 +1,5 @@
 import { type FieldSpec } from "../../node_gen/BaseClass";
+import { estimateReductionCost } from "../../utils/computeUtils";
 import { createLayerComponent } from "../../node_gen/CreateNodeComponent.tsx";
 
 type LossData = Record<string, never>;
@@ -18,6 +19,11 @@ export class BCELossNode {
 
     static shapeCompute(_data: LossData, _inputShapes: number[][]) {
         return [];
+    }
+
+    static estimateCost(_data: LossData, inputShapes: number[][]) {
+        const predShape = inputShapes[0] || [];
+        return estimateReductionCost(predShape, 4);
     }
 
     static getInitCode(_data: LossData, name: string) {
