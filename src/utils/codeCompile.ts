@@ -14,7 +14,7 @@ export type CodeGenResult = {
 };
 
 // Sanitize arbitrary labels/ids into valid Python identifiers.
-function sanitizeIdent(name: string): string {
+export function sanitizeIdent(name: string): string {
     const cleaned = name.replace(/[^A-Za-z0-9_]/g, "_");
     if (!cleaned.length) return "_x";
     const safe = /^[A-Za-z_]/.test(cleaned[0]) ? cleaned : `_${cleaned}`;
