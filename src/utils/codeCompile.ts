@@ -1,5 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import { LAYER_REGISTRY } from "./layerRegistry";
+import type { ModuleRefData } from "../nodes/ModuleRefNode";
+import { getModule } from "./moduleRegistry";
 
 export type CodeSpan = {
     line: number;
@@ -14,12 +16,104 @@ export type CodeGenResult = {
 };
 
 // Sanitize arbitrary labels/ids into valid Python identifiers.
-function sanitizeIdent(name: string): string {
+export function sanitizeIdent(name: string): string {
     const cleaned = name.replace(/[^A-Za-z0-9_]/g, "_");
     if (!cleaned.length) return "_x";
     const safe = /^[A-Za-z_]/.test(cleaned[0]) ? cleaned : `_${cleaned}`;
     return safe;
 }
+
+export function createCustomComponentDAG (id : string, nodes: Node[], order: string[], color: Record<string, number>) : boolean { // Color: 0 for unvisited, 1 for visiting, 2 for done visiting
+
+    color[id] = 1; // Visiting
+
+    let ok : boolean = true;
+    nodes.forEach(child => {
+        
+        if (child.type && child.type === "module_ref") {
+            const module_data = child.data as ModuleRefData;
+            const module_id = module_data.moduleId as string;
+
+            if (color[module_id] === 1) {
+                return false; // Make sure to test this.
+            } else if (color[module_id] !== 2) {
+                const savedModule = getModule(module_id);
+                const internalNodes : Node[] = savedModule?.internalNodes || [];
+                ok = ok && createCustomComponentDAG(module_id, internalNodes, order, color);
+            }
+        }
+    });
+
+    order.push(id);
+    color[id] = 2; // Visited
+
+    return ok;
+
+}
+
+// This function works on the module level code generator and uses the generate main code function to generate code for individual modules.
+// It first sorts the module ids based on the way they should be arranged in the code and then writes the code.
+export function recursiveCodeGenerator (nodes: Node[], edges: Edge[]) : CodeGenResult {
+
+    console.log("Starting recursive code generation"); 
+    let order : string[] = [];
+    let color : Record<string, number> = {}; 
+    const ok = createCustomComponentDAG("0", nodes, order, color);
+
+    console.log("createCustomComponentDAG response:", {ok, order});
+
+    // *
+    // For each module id, get it's code, shift it's lines by the number of previous lines
+    // and add it to the main codegenresult object.
+    // 
+    // /
+
+    const lines: string[] = [];
+    const spans: CodeSpan[] = [];
+    
+    lines.push("import torch", "import torch.nn as nn");
+    spans.push({ line: 1, kind: "header" }, { line: 2, kind: "header" });
+
+    let generatedCode : CodeGenResult = { code: lines.join("\n"), spans };
+
+    let moduleNodes : Node[];
+    let moduleEdges : Edge[];
+    let moduleName : string;
+    let lineOffset : number = lines.length;
+
+    order.forEach(moduleId => {
+
+        if (moduleId === "0") { // Accidental clash?
+            moduleNodes = nodes;
+            moduleEdges = edges;
+            moduleName = "generatedModel";
+        } else {
+            const savedModule = getModule(moduleId);
+            if (savedModule) {
+                moduleNodes = savedModule?.internalNodes || [];
+                moduleEdges = savedModule?.internalEdges || [];
+                moduleName = sanitizeIdent(savedModule.name);
+            } else {
+                console.warn(`Module with ID ${moduleId} not found or contract missing.`);
+                moduleNodes = [];
+                moduleEdges = [];
+                moduleName = "unknownModule";
+            }
+        }
+        generatedCode.code += "\n\n\n";
+        lineOffset += 2;
+
+        let moduleCode = generateMainCode(moduleNodes, moduleEdges, moduleName, lineOffset);
+
+        generatedCode.code += moduleCode.code;
+        generatedCode.spans.push(...moduleCode.spans);
+        lineOffset += moduleCode.code.split('\n').length;
+    });
+
+    console.log("Code response:", generatedCode);
+    return generatedCode;
+}
+
 
 // Converts graphs into 3 components: initlines, forward lines, returnVar
 export function compileGraphToScript(
@@ -150,13 +244,14 @@ export function compileGraphToScript(
     return { initLines, forwardLines, returnVar };
 }
 
-export function generateMainCode(nodes: Node[], edges: Edge[]): CodeGenResult {
+// Code can be made more efficient by passing CodeGenResult by reference. Offset won't be required.
+export function generateMainCode(nodes: Node[], edges: Edge[], name : string, lineOffset: number): CodeGenResult {
     const lines: string[] = [];
     const spans: CodeSpan[] = [];
-    // Header
-    lines.push("import torch", "import torch.nn as nn", "", "class GeneratedModel(nn.Module):");
-    spans.push({ line: 1, kind: "header" }, { line: 2, kind: "header" }, { line: 4, kind: "header" });
 
+    lines.push(`class ${name}(nn.Module):`);
+    spans.push({ line: 1 + lineOffset, kind: "header" });
+    
     // Init
     lines.push("    def __init__(self):");
     lines.push("        super().__init__()");
@@ -167,22 +262,25 @@ export function generateMainCode(nodes: Node[], edges: Edge[]): CodeGenResult {
     // Stitch Init
     initLines?.forEach(l => {
         lines.push(l.text);
-        if (l.span) spans.push({ ...l.span, line: lines.length });
+        if (l.span) spans.push({ ...l.span, line: lines.length + lineOffset });
     });
     lines.push("");
 
     lines.push("    def forward(self, x):");
     forwardLines?.forEach(l => {
         lines.push(l.text);
-        if (l.span) spans.push({ ...l.span, line: lines.length });
+        if (l.span) spans.push({ ...l.span, line: lines.length + lineOffset });
     });
     lines.push(`        return ${returnVar}`);
-    spans.push({ line: lines.length, kind: "return" });
+    spans.push({ line: lines.length + lineOffset , kind: "return" });
+
     return { code: lines.join("\n"), spans };
 }
+
 // Current code doesn't work for multiple inputs. We need to add input blocks or something similar. Output blocks can also be created.
 // Right now if the same output is being used by 2 blocks hence 2 protruding edges are there then the label on each edge is different, this may be changed later.
 // Though this requires us that the nodes have labelled outputs and edges are not between 2 nodes but between 2 "handles"
+// This is deprecated now.
 export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult {
     if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
 
