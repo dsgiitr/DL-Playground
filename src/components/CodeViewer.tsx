@@ -122,8 +122,8 @@ export default function CodeViewer({
                     wordWrap: "on",
                     renderLineHighlight: "all",
                     contextmenu: false, 
-                    fontFamily: "inherit", 
-                    fontSize: 14,
+                    fontFamily: "JetBrains Mono, Fira Code, monospace", 
+                    fontSize: 16,
                     fixedOverflowWidgets: true,
                     quickSuggestions: true,
                     suggest: {
