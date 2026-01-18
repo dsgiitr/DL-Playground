@@ -109,6 +109,8 @@ function FlowContent() {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showSaveCopyModal, setShowSaveCopyModal] = useState(false);
     const [pendingModuleName, setPendingModuleName] = useState("");
+    const [pendingVariables, setPendingVariables] = useState<Record<string, FieldSpec>>({});
+    const [paramToVariableMap, setParamToVariableMap] = useState<Record<string, string>>({});
     const [pendingModuleCopyName, setPendingModuleCopyName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");  //this takes editable module input when updating
     const [showModuleSaveMenu, setShowModuleSaveMenu] = useState(false); // this is used to show the dropdown for saving changes
@@ -483,7 +485,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
 
     useEffect(() => {
         const handler = (ev: Event) => {
-            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string }>;
+            const custom = ev as CustomEvent<{ moduleId?: string; nodeId?: string, data?: ModuleRefData }>;
             const moduleId = custom.detail?.moduleId;
             if (!moduleId) return;
             const mod = getModule(moduleId);
@@ -491,18 +493,37 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                 alert("Module not found");
                 return;
             }
+
+            const moduleRefData = custom.detail?.data || {};
+            const { nodes: rawNodes, edges: rawEdges } = applyGraphIR(mod.graph);
+
+            const nodesWithVars = rawNodes.map(n => {
+                let nodeData = n.data || {};
+                if (mod.variableMap) {
+                    for (const varName in mod.variableMap) {
+                        const targets = mod.variableMap[varName];
+                        for (const target of targets) {
+                            if (target.nodeId === n.id) {
+                                if (moduleRefData[varName] !== undefined) {
+                                    nodeData = { ...nodeData, [target.paramName]: moduleRefData[varName] };
+                                }
+                            }
+                        }
+                    }
+                }
+                return { ...n, data: nodeData, selected: false };
+            });
+
+
             const appliedRaw =
                 mod.internalNodes && mod.internalEdges
                     ? { nodes: mod.internalNodes, edges: mod.internalEdges }
                     : applyGraphIR(mod.graph);
             const applied = {
-                nodes: appliedRaw.nodes.map(n => ({
-                    ...n,
-                    selected: false,
-                    data: { ...(n.data || {}), __highlight: undefined },
-                })),
-                edges: appliedRaw.edges.map(e => ({ ...e, selected: false })),
+                nodes: nodesWithVars.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })),
+                edges: rawEdges.map(e => ({ ...e, selected: false })),
             };
+
             if (!applied.nodes.length) {
                 alert("Saved module is empty. You can now add new things and save changes.");
             }
@@ -620,6 +641,20 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             alert("Enter a module name.");
             return;
         }
+
+        const variableMap: Record<string, Array<{ nodeId: string; paramName: string }>> = {};
+        for (const paramKey in paramToVariableMap) {
+            const varName = paramToVariableMap[paramKey];
+            if (varName) {
+                if (!variableMap[varName]) {
+                    variableMap[varName] = [];
+                }
+                const [nodeId, paramName] = paramKey.split("::");
+                variableMap[varName].push({ nodeId, paramName });
+            }
+        }
+
+        const contract = computeContract(selectedIds);
         const sanitizedName = sanitizeIdent(resolveModuleName(name, ""));
         const existingNames = modules.map(m => sanitizeIdent(resolveModuleName(m.name, ""))); // This might have redundant sanitization.
         if (existingNames.includes(sanitizedName)) {
@@ -637,6 +672,8 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             internalNodes: selectedNodes,
             internalEdges,
             description: `Saved from ${selectedNodes.length} node(s)`,
+            variableSchema: pendingVariables,
+            variableMap,
         });
         setModules(listModules());
         setShowSaveModal(false);
@@ -809,6 +846,20 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
 
+    const selectedNodes = useMemo(() => nodes.filter(n => selectedNodeIds.includes(n.id)), [nodes, selectedNodeIds]);
+
+    const promotableParams = useMemo(() => {
+        return selectedNodes.flatMap(node => {
+            const layerDef = LAYER_REGISTRY[node.type!];
+            if (!layerDef) return [];
+            return Object.keys(layerDef.paramSchema).map(paramName => ({
+                nodeId: node.id,
+                nodeLabel: layerDef.label,
+                paramName,
+                spec: layerDef.paramSchema[paramName],
+            }));
+        });
+    }, [selectedNodes]);
     const failureCount = shapeResult?.failures?.length ?? 0;
     const computeSummary = useMemo(
         () => estimateGraphCost(nodes, edges, shapeResult, LAYER_REGISTRY),
@@ -1238,7 +1289,9 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                             background: "#0f1115",
                             border: "1px solid #222",
                             borderRadius: 10,
-                            width: 360,
+                            minWidth: 420,
+                            maxWidth: 560,
+                            maxHeight: "80vh",
                             padding: 16,
                             boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
                             display: "flex",
@@ -1246,7 +1299,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                             gap: 12,
                         }}
                     >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
                             <span style={{ color: "#e6edf3", fontWeight: 700 }}>Save Module</span>
                             <button
                                 onClick={() => setShowSaveModal(false)}
@@ -1263,7 +1316,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                 ×
                             </button>
                         </div>
-                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
                             Module name
                             <input
                                 autoFocus
@@ -1279,7 +1332,86 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                 }}
                             />
                         </label>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                        <div style={{ borderTop: "1px solid #333", paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+                            <div style={{flexShrink: 0}}>
+                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px" }}>Module Variables</h3>
+                                {Object.entries(pendingVariables).map(([varName, spec]) => (
+                                    <div key={varName} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                        <input
+                                            type="text"
+                                            value={varName}
+                                            // onChange={e => handleRenameVariable(varName, e.target.value)}
+                                            style={{
+                                                background: "#111",
+                                                border: "1px solid #333",
+                                                borderRadius: 4,
+                                                padding: "4px 6px",
+                                                color: "#e6edf3",
+                                                fontSize: 12,
+                                            }}
+                                        />
+                                        <span style={{color: '#888', fontSize: 12}}>{spec.type}</span>
+                                        <button onClick={() => {
+                                            const newVars = { ...pendingVariables };
+                                            delete newVars[varName];
+                                            setPendingVariables(newVars);
+                                            // also remove from mappings
+                                            const newMap = { ...paramToVariableMap };
+                                            for (const key in newMap) {
+                                                if (newMap[key] === varName) {
+                                                    delete newMap[key];
+                                                }
+                                            }
+                                            setParamToVariableMap(newMap);
+                                        }} style={{marginLeft: 'auto', background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10}}>Delete</button>
+                                    </div>
+                                ))}
+                                <button onClick={() => {
+                                    const newVarName = `var${Object.keys(pendingVariables).length + 1}`;
+                                    setPendingVariables({ ...pendingVariables, [newVarName]: { type: 'number', required: true } });
+                                }} style={{ background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10, padding: '4px 8px' }}>Add Variable</button>
+                            </div>
+                            <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
+                                <div style={{ overflowY: "auto", paddingRight: 10 }}>
+                                    {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
+                                        const key = `${nodeId}::${paramName}`;
+                                        const assignedVar = paramToVariableMap[key];
+                                        return (
+                                            <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                                                <span style={{ color: "#e6edf3", fontSize: 12, flex: 1 }}>{nodeLabel}: {spec.label || paramName}</span>
+                                                <select
+                                                    value={assignedVar || ""}
+                                                    onChange={e => {
+                                                        const newVar = e.target.value;
+                                                        setParamToVariableMap(map => ({...map, [key]: newVar}));
+                                                        // if this is the first time a var is used, adopt the spec
+                                                        if (newVar && !pendingVariables[newVar]) {
+                                                            setPendingVariables(vars => ({...vars, [newVar]: spec}));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        background: "#111",
+                                                        border: "1px solid #333",
+                                                        borderRadius: 4,
+                                                        padding: "4px 6px",
+                                                        color: "#e6edf3",
+                                                        fontSize: 12,
+                                                    }}
+                                                >
+                                                    <option value="">Not Linked</option>
+                                                    {Object.keys(pendingVariables).map(varName => (
+                                                         <option key={varName} value={varName}>{varName}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4, flexShrink: 0 }}>
                             <button
                                 onClick={() => setShowSaveModal(false)}
                                 style={{
