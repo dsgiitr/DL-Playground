@@ -1,70 +1,39 @@
+@import "tailwindcss";
 :root {
+  @apply leading-normal font-normal text-[rgba(255,255,255,0.87)] bg-[#242424];
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
 a {
-  font-weight: 500;
-  color: #646cff;
+  @apply font-medium text-[#646cff] hover:text-[#535bf2];
   text-decoration: inherit;
 }
-a:hover {
-  color: #535bf2;
-}
-
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  width: 100%;
-  display: block;
-  background-color: #0f1115;
-  color: #e6edf3;
+  @apply min-w-[320px] min-h-screen w-full block bg-[#0f1115] text-[#e6edf3] m-0;
 }
-
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  @apply text-[3.2em] leading-[1.1];
 }
-
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
+  @apply border text-[1em] font-medium bg-[#1a1a1a] cursor-pointer transition-[border-color] duration-[0.25s] px-[1.2em] py-[0.6em] rounded-lg border-solid border-transparent hover:border-[#646cff];
   font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
 }
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
-
 @media (prefers-color-scheme: light) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    @apply text-[#213547] bg-white;
   }
   a:hover {
-    color: #747bff;
+    @apply text-[#747bff];
   }
   button {
-    background-color: #f9f9f9;
+    @apply bg-[#f9f9f9];
   }
 }

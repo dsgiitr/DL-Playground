@@ -901,7 +901,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
 
 
     return (    
-        <div style={{ display: "flex", height: "100vh" }}>
+        <div className="flex h-screen">
             <input
                 ref={uploadInputRef}
                 type="file"
@@ -910,32 +910,16 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                 onChange={onUploadGraph}
             />
             <div
-                style={{
-                    width: sidebarCollapsed ? 28 : sidebarWidth,
-                    flexShrink: 0,
-                    transition: dragSidebar ? "none" : "width 0.15s",
-                    background: "#484444",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                    position: "relative",
-                    borderRight: "1px solid #222"
-                }}
+                className={`shrink-0 bg-[#484444] flex flex-col overflow-hidden relative border-r border-[#222] ${
+                    dragSidebar ? "transition-none" : "transition-[width] duration-150"
+                }`}
+                style={{ width: sidebarCollapsed ? 28 : sidebarWidth }}
             >
                 
                 {sidebarCollapsed ? (
                     <button
                         onClick={() => setSidebarCollapsed(false)}
-                        style={{
-                            width: "100%",
-                            height: "100%",
-                            writingMode: "vertical-rl",
-                            background: "#1f8ecd",
-                            color: "#fff",
-                            border: "none",
-                            cursor: "pointer",
-                            fontWeight: 700
-                        }}
+                        className={`w-full h-full writing-mode-vertical-rl bg-[#1f8ecd] text-white border-none cursor-pointer font-bold`}
                         title="Expand sidebar"
                     >
                         Show Nodes
@@ -967,16 +951,10 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
 
             <div
                 onMouseDown={() => setDragSidebar(true)}
-                style={{
-                    width: 6,
-                    cursor: "col-resize",
-                    flexShrink: 0,
-                    background: dragSidebar ? "#64ffda55" : "#2a2a2a",
-                    borderRight: "1px solid #222"
-                }}
+                className="w-[6px] cursor-col-resize flex-shrink-0 bg-[#2a2a2a] border-r border-[#222]"
                 title="Drag to resize sidebar"
             />
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+            <div className="flex flex-1 flex-col relative">
                 {/* Selection summary is intentionally omitted; selection is shown via highlights. */}
                 <EditorHeader
                     canUndo={canUndo}
@@ -1021,36 +999,23 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                     statusSlot={
                         shapeResult && shapeResult.ok ? (
                             <div
-                                style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 6,
-                                    padding: "4px 10px",
-                                    borderRadius: 999,
-                                    border: "1px solid #1f2a2f",
-                                    background: "linear-gradient(90deg, #0f2d2f, #0b3b2f)",
-                                    color: "#7fffd4",
-                                    fontWeight: 600,
-                                    fontSize: 12,
-                                    letterSpacing: "0.01em",
-                                    boxShadow: "0 0 0 1px rgba(100, 255, 218, 0.12)",
-                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#1f2a2f] bg-gradient-to-r from-[#0f2d2f] to-[#0b3b2f] text-[#7fffd4] text-xs font-semibold tracking-[0.01em] shadow-[0_0_0_1px_rgba(100,255,218,0.12)]"
                             >
                                 <span aria-hidden="true">✓</span>
                                 <span>All clear</span>
-                                <span style={{ color: "#a7f3d0", fontWeight: 500 }}>
+                                <span className="text-[#a7f3d0] font-medium">
                                     ({Object.keys(shapeResult.shapes).length} nodes)
                                 </span>
                             </div>
                         ) : shapeResult && !shapeResult.ok ? (
-                            <span style={{ color: "#f97316", fontWeight: 600 }}>{failureCount} issue(s) detected</span>
+                            <span className="text-[#f97316] font-medium">{failureCount} issue(s) detected</span>
                         ) : null
                     }
                     selectionSummary={null}
                 />
 
-                <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", inset: "0 0 0 0" }}>
+                <div className="flex-1 relative overflow-hidden">
+                    <div className="absolute inset-0">
                         <ReactFlow
                             nodes={nodesForFlow}
                             edges={highlightedEdges}
@@ -1085,59 +1050,31 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                     {moduleNameWarning && ( // This component is displayed when a module with the same name already exists and we expect the user to select a new name.
                         <div
                             onClick={() => setModuleNameWarning(false)}
-                            style={{
-                                position: "fixed",
-                                inset: 0,
-                                background: "rgba(0,0,0,0.45)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                zIndex: 1000
-                            }}
+                            className="fixed inset-0 bg-black/45 flex items-center justify-center z-1000"
                         >
                             <div
                                 onClick={(e) => e.stopPropagation()}
-                                style={{
-                                    background: "#1f2937",
-                                    color: "#e5e7eb",
-                                    padding: "20px 22px",
-                                    borderRadius: "12px",
-                                    width: "360px",
-                                    boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
-                                    animation: "popupFade 0.2s ease-out",
-                                    border: "1px solid #374151",
-                                    position: "relative"
-                                }}
+                                className="flex items-center justify-center z-1000"
                             >
                                 <div
-                                    style={{
-                                        position: "absolute",
-                                        top: 0,
-                                        left: 0,
-                                        right: 0,
-                                        height: "4px",
-                                        background: "linear-gradient(90deg, #ef4444, #dc2626)",
-                                        borderTopLeftRadius: "12px",
-                                        borderTopRightRadius: "12px"
-                                    }}
-                                />
-
-                                <div style={{ fontWeight: 600, fontSize: "16px", marginBottom: "6px" }}>
-                                    Duplicate Module Name
-                                </div>
-
-                                <div style={{ fontSize: "14px", lineHeight: 1.5, color: "#9ca3af" }}>
-                                    A module with this name already exists. Please choose a different name to continue.
-                                </div>
-
-                                <div
-                                    style={{
-                                        marginTop: "16px",
-                                        fontSize: "12px",
-                                        color: "#6b7280"
-                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex items-center justify-center z-1000"
                                 >
-                                    Click outside to dismiss
+                                    <div
+                                        className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-r from-red-500 to-red-600 rounded-t-lg"
+                                    />
+
+                                    <div className="font-semibold text-lg mb-6">
+                                        Duplicate Module Name
+                                    </div>
+
+                                    <div className="text-sm text-gray-500 mb-6">
+                                        A module with this name already exists. Please choose a different name to continue.
+                                    </div>
+
+                                    <div className="text-xs text-gray-500 mt-6">
+                                        Click outside to dismiss
+                                    </div>
                                 </div>
                             </div>
 
@@ -1188,13 +1125,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                 <>
                     <div
                         onMouseDown={() => setDragCodePanel(true)}
-                        style={{
-                            width: 6,
-                            cursor: "col-resize",
-                            flexShrink: 0,
-                            background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
-                            borderLeft: "1px solid #222"
-                        }}
+                        className="w-1 cursor-col-resize flex-shrink-0 bg-[#2a2a2a] border-l border-[#222]"
                         title="Drag to resize code panel"
                     />
 
@@ -1212,34 +1143,24 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                             zIndex: 5
                         }}
                     >
-                        <div
-                            style={{
-                                padding: "12px 14px",
-                                borderBottom: "1px solid #222",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                background: "#12141a",
-                                flexShrink: 0
-                            }}
-                        >
-                            <span style={{ color: "#e6edf3", fontWeight: 600 }}>Live PyTorch Code</span>
-                            <div style={{ display: "flex", gap: 8 }}>
+                        <div className="px-4 py-4 bg-[#12141a] border-b border-[#222] flex justify-between items-center flex-shrink-0">
+                            <span className="text-[#e6edf3] font-semibold">Live PyTorch Code</span>
+                            <div className="flex gap-2">
                                 <button
                                     onClick={() => navigator.clipboard.writeText(generatedCode)}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    className="px-2 py-1 text-xs cursor-pointer"
                                 >
                                     Copy
                                 </button>
                                 <button
                                     onClick={onDownloadCode}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    className="px-2 py-1 text-xs cursor-pointer"
                                 >
                                     Download
                                 </button>
                                 <button
                                     onClick={() => setShowLiveCode(false)}
-                                    style={{ padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+                                    className="px-2 py-1 text-xs cursor-pointer"
                                 >
                                     Collapse
                                 </button>
@@ -1274,84 +1195,42 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             )}
             {showSaveModal && (
                 <div
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.55)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 70,
-                        padding: 16,
-                    }}
+                    className="fixed inset-0 bg-black/55 flex items-center justify-center z-70 p-4"
                 >
                     <div
-                        style={{
-                            background: "#0f1115",
-                            border: "1px solid #222",
-                            borderRadius: 10,
-                            minWidth: 420,
-                            maxWidth: 560,
-                            maxHeight: "80vh",
-                            padding: 16,
-                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 12,
-                        }}
+                        className="bg-[#0f1115] border border-[#222] rounded-lg min-w-102 max-w-140 max-h-80vh p-4 shadow-2xl flex flex-col gap-3"
                     >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Save Module</span>
+                        <div className="flex justify-between items-center flex-shrink-0">
+                            <span className="text-[#e6edf3] font-semibold">Save Module</span>
                             <button
                                 onClick={() => setShowSaveModal(false)}
-                                style={{
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "#888",
-                                    cursor: "pointer",
-                                    fontSize: 18,
-                                    lineHeight: 1,
-                                }}
+                                className="bg-transparent border-none text-[#888] cursor-pointer text-lg leading-none"
                                 title="Close"
                             >
                                 ×
                             </button>
                         </div>
-                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+                        <label className="text-[#cbd5e1] text-sm flex flex-col gap-1.5 flex-shrink-0">
                             Module name
                             <input
                                 autoFocus
                                 value={pendingModuleName}
                                 onChange={e => setPendingModuleName(e.target.value)}
-                                style={{
-                                    background: "#111",
-                                    border: "1px solid #333",
-                                    borderRadius: 6,
-                                    padding: "8px 10px",
-                                    color: "#e6edf3",
-                                    fontSize: 14,
-                                }}
+                                className="bg-[#111] border border-[#333] rounded-md px-2.5 py-2 text-[#e6edf3] text-sm"
                             />
                         </label>
-                        <div style={{ borderTop: "1px solid #333", paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
-                            <div style={{flexShrink: 0}}>
-                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px" }}>Module Variables</h3>
+                        <div className="border-t border-[#333] pt-3 flex flex-col gap-3 min-h-0">
+                            <div className="flex-shrink-0">
+                                <h3 className="text-[#cbd5e1] text-sm mb-2.5">Module Variables</h3>
                                 {Object.entries(pendingVariables).map(([varName, spec]) => (
-                                    <div key={varName} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                    <div key={varName} className="flex items-center gap-2 mb-2">
                                         <input
                                             type="text"
                                             value={varName}
                                             // onChange={e => handleRenameVariable(varName, e.target.value)}
-                                            style={{
-                                                background: "#111",
-                                                border: "1px solid #333",
-                                                borderRadius: 4,
-                                                padding: "4px 6px",
-                                                color: "#e6edf3",
-                                                fontSize: 12,
-                                            }}
+                                            className="bg-[#111] border border-[#333] rounded-md px-2.5 py-2 text-[#e6edf3] text-sm"
                                         />
-                                        <span style={{color: '#888', fontSize: 12}}>{spec.type}</span>
+                                        <span className="text-[#888] text-xs">{spec.type}</span>
                                         <button onClick={() => {
                                             const newVars = { ...pendingVariables };
                                             delete newVars[varName];
@@ -1364,24 +1243,24 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                                 }
                                             }
                                             setParamToVariableMap(newMap);
-                                        }} style={{marginLeft: 'auto', background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10}}>Delete</button>
+                                        }} className="ml-auto bg-[#333] border border-[#555] text-[#ddd] rounded-md text-xs px-2 py-1">Delete</button>
                                     </div>
                                 ))}
                                 <button onClick={() => {
                                     const newVarName = `var${Object.keys(pendingVariables).length + 1}`;
                                     setPendingVariables({ ...pendingVariables, [newVarName]: { type: 'number', required: true } });
-                                }} style={{ background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10, padding: '4px 8px' }}>Add Variable</button>
+                                }} className="ml-auto bg-[#333] border border-[#555] text-[#ddd] rounded-md text-xs px-2 py-1">Add Variable</button>
                             </div>
-                            <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                                <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
-                                <div style={{ overflowY: "auto", paddingRight: 10 }}>
+                            <div className="border-t border-[#333] pt-3 flex flex-col gap-3 min-h-0">
+                                <h3 className="text-[#cbd5e1] text-sm mb-2.5">Parameter Mappings</h3>
+                                <div className="overflow-y-auto pr-2">
                                     {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
                                         const key = `${nodeId}::${paramName}`;
                                         const assignedVar = paramToVariableMap[key];
                                         return (
-                                            <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                            <div key={key} className="flex items-center gap-2 mb-2">
 
-                                                <span style={{ color: "#e6edf3", fontSize: 12, flex: 1 }}>{nodeLabel}: {spec.label || paramName}</span>
+                                                <span className="text-[#e6edf3] text-sm flex-1">{nodeLabel}: {spec.label || paramName}</span>
                                                 <select
                                                     value={assignedVar || ""}
                                                     onChange={e => {
@@ -1392,14 +1271,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                                             setPendingVariables(vars => ({...vars, [newVar]: spec}));
                                                         }
                                                     }}
-                                                    style={{
-                                                        background: "#111",
-                                                        border: "1px solid #333",
-                                                        borderRadius: 4,
-                                                        padding: "4px 6px",
-                                                        color: "#e6edf3",
-                                                        fontSize: 12,
-                                                    }}
+                                                    className="bg-[#111] border border-[#333] rounded-md px-2.5 py-2 text-[#e6edf3] text-sm"
                                                 >
                                                     <option value="">Not Linked</option>
                                                     {Object.keys(pendingVariables).map(varName => (
@@ -1412,31 +1284,16 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                 </div>
                             </div>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4, flexShrink: 0 }}>
+                        <div className="flex justify-end gap-2 mt-1 flex-shrink-0">
                             <button
                                 onClick={() => setShowSaveModal(false)}
-                                style={{
-                                    padding: "8px 12px",
-                                    background: "#333",
-                                    color: "#e6edf3",
-                                    border: "1px solid #444",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                }}
+                                className="bg-[#333] border border-[#444] text-[#e6edf3] rounded-md px-2.5 py-2 text-sm cursor-pointer"
                             >
                                 Close
                             </button>
                             <button
                                 onClick={handleSaveModule}
-                                style={{
-                                    padding: "8px 12px",
-                                    background: "#1f8ecd",
-                                    color: "#fff",
-                                    border: "1px solid #1f8ecd",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    fontWeight: 600,
-                                }}
+                                className="bg-[#1f8ecd] border border-[#1f8ecd] text-[#fff] rounded-md px-2.5 py-2 text-sm cursor-pointer font-semibold"
                             >
                                 Save
                             </button>
@@ -1446,88 +1303,40 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             )}
             {showSaveCopyModal && (
                 <div
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.55)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 70,
-                        padding: 16,
-                    }}
+                    className="fixed inset-0 bg-black/55 flex items-center justify-center z-70 p-4"
                 >
                     <div
-                        style={{
-                            background: "#0f1115",
-                            border: "1px solid #222",
-                            borderRadius: 10,
-                            width: 360,
-                            padding: 16,
-                            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 12,
-                        }}
+                        className="bg-[#0f1115] border border-[#222] rounded-md w-96 p-4 shadow-lg flex flex-col gap-3"
                     >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ color: "#e6edf3", fontWeight: 700 }}>Copy Module</span>
+                        <div className="flex justify-between items-center">
+                            <span className="text-[#e6edf3] font-semibold">Copy Module</span>
                             <button
                                 onClick={() => setShowSaveCopyModal(false)}
-                                style={{
-                                    background: "transparent",
-                                    border: "none",
-                                    color: "#888",
-                                    cursor: "pointer",
-                                    fontSize: 18,
-                                    lineHeight: 1,
-                                }}
+                                className="bg-transparent border-none text-[#888] cursor-pointer text-lg leading-none"
                                 title="Close"
                             >
                                 ×
                             </button>
                         </div>
-                        <label style={{ color: "#cbd5e1", fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <label className="text-[#cbd5e1] text-sm flex flex-col gap-1.5">
                             Copy Module name
                             <input
                                 autoFocus
                                 value={pendingModuleCopyName}
                                 onChange={e => setPendingModuleCopyName(e.target.value)}
-                                style={{
-                                    background: "#111",
-                                    border: "1px solid #333",
-                                    borderRadius: 6,
-                                    padding: "8px 10px",
-                                    color: "#e6edf3",
-                                    fontSize: 14,
-                                }}
+                                className="bg-[#111] border border-[#333] rounded-md px-2.5 py-2 text-[#e6edf3] text-sm"
                             />
                         </label>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+                        <div className="flex justify-end gap-2 mt-1 flex-shrink-0">
                             <button
                                 onClick={() => setShowSaveCopyModal(false)}
-                                style={{
-                                    padding: "8px 12px",
-                                    background: "#333",
-                                    color: "#e6edf3",
-                                    border: "1px solid #444",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                }}
+                                className="bg-[#333] border border-[#444] text-[#e6edf3] rounded-md px-2.5 py-2 text-sm cursor-pointer font-semibold"
                             >
                                 Close
                             </button>
                             <button
                                 onClick={handleReturnCopyModule}
-                                style={{
-                                    padding: "8px 12px",
-                                    background: "#1f8ecd",
-                                    color: "#fff",
-                                    border: "1px solid #1f8ecd",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    fontWeight: 600,
-                                }}
+                                className="bg-[#1f8ecd] border border-[#1f8ecd] text-[#fff] rounded-md px-2.5 py-2 text-sm cursor-pointer font-semibold"
                             >
                                 Save
                             </button>
@@ -1538,54 +1347,20 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             {openModule && (
                 <>
                     <div
-                    style={{
-                        position: "fixed",
-                        top: 0,
-                        left: 0,
-                        width: "20vw",
-                        height: "100vh",
-                        zIndex: 29,
-                        pointerEvents: "none",
-                    }}
+                        className="fixed top-0 left-0 w-[20vw] h-[100vh] z-29 pointer-events-none"
                     />
 
                     <div
-                    style={{
-                        position: "fixed",
-                        top: 0,
-                        right: 0,
-                        width: "80vw",
-                        height: "100vh",
-                        zIndex: 30,
-                        padding: 20,
-                        pointerEvents: "auto",
-                    }}
+                        className="fixed top-0 right-0 w-[80vw] h-[100vh] z-30 p-5 pointer-events-auto"
                     >
 
                         <div
                         onDrop={onModuleDrop}
                         onDragOver={onDragOver}
-                        style={{
-                            background: "#0f1115",
-                            border: "1px solid #222",
-                            borderRadius: 10,
-                            width: "80vw",
-                            height: "92vh",
-                            display: "flex",
-                            flexDirection: "column",
-                            boxShadow: "0 25px 60px rgba(0,0,0,0.45)",
-                            pointerEvents: "auto",
-                        }}
+                        className="bg-[#0f1115] border border-[#222] rounded-md w-[80vw] h-[92vh] flex flex-col gap-3 shadow-lg pointer-events-auto"
                         >
                         <div
-                            style={{
-                                padding: "10px 12px",
-                                borderBottom: "1px solid #222",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                justifyContent: "space-between",
-                            }}
+                            className="p-2.5 border-b border-[#222] flex items-center gap-2.5 justify-between"
                         >
                             {/* editable module header to enter the updated module names  */}
                             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -1594,81 +1369,35 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                     value={moduleNameInput}
                                     onChange={e => setModuleNameInput(e.target.value)}
                                     placeholder="Module name"
-                                    style={{
-                                        background: "#0f172a",
-                                        color: "#e6edf3",
-                                        border: "1px solid #1f2937",
-                                        borderRadius: 6,
-                                        padding: "4px 8px",
-                                        fontWeight: 600,
-                                        minWidth: 160,
-                                    }}
+                                    className="bg-[#0f172a] border border-[#1f2937] rounded-md px-2.5 py-2 text-[#e6edf3] text-sm font-semibold min-w-[160px]"
                                 />
-                                <span style={{ color: "#9ca3af", fontSize: 12 }}>({openModule.module.version})</span>
-                                <span style={{ color: "#9ca3af", fontSize: 12 }}>View and edit without leaving the canvas</span>
+                                <span className="text-[#9ca3af] text-sm">({openModule.module.version})</span>
+                                <span className="text-[#9ca3af] text-sm">View and edit without leaving the canvas</span>
                             </div>
-                            <div style={{ display: "flex", gap: 8, position: "relative" }}>
+                            <div className="flex gap-2 relative">
                                 <button
                                     onClick={() => setShowModuleDiagram(true)}
-                                    style={{
-                                        padding: "6px 10px",
-                                        borderRadius: 6,
-                                        border: "1px solid #444",
-                                        background: "#333",
-                                        color: "#fff",
-                                        cursor: "pointer",
-                                    }}
+                                    className="px-2.5 py-2 rounded-md border border-[#444] bg-[#333] text-[#fff] cursor-pointer"
                                 >
                                     Diagram View
                                 </button>
                                 <button
                                     onClick={() => setShowModuleSaveMenu(open => !open)}
-                                    style={{
-                                        padding: "6px 10px",
-                                        borderRadius: 6,
-                                        border: "1px solid #1f8ecd",
-                                        background: "#1f8ecd",
-                                        color: "#fff",
-                                        cursor: "pointer",
-                                        fontWeight: 600,
-                                    }}
+                                    className="px-2.5 py-2 rounded-md border border-[#1f8ecd] bg-[#1f8ecd] text-[#fff] cursor-pointer font-semibold"
                                 >
                                     Save ▾
                                 </button>
                                 {/* this shows the saving dropdown */}
                                 {showModuleSaveMenu && (
-                                    <div
-                                        style={{
-                                            position: "absolute",
-                                            right: 0,
-                                            top: "100%",
-                                            marginTop: 6,
-                                            background: "#111827",
-                                            border: "1px solid #1f2937",
-                                            borderRadius: 8,
-                                            padding: 6,
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            gap: 6,
-                                            minWidth: 160,
-                                            zIndex: 5,
-                                        }}
+                                        <div
+                                            className="absolute right-0 top-full mt-1.5 bg-[#111827] border border-[#1f2937] rounded-md p-1.5 flex flex-col gap-1.5 min-w-[160px] z-5"
                                     >
                                         <button
                                             onClick={() => {
                                                 setShowModuleSaveMenu(false);
                                                 saveExistingModuleChanges();
                                             }}
-                                            style={{
-                                                padding: "6px 8px",
-                                                borderRadius: 6,
-                                                border: "1px solid #334155",
-                                                background: "#1f2937",
-                                                color: "#e6edf3",
-                                                cursor: "pointer",
-                                                textAlign: "left",
-                                                fontSize: 12,
-                                            }}
+                                            className="px-2.5 py-2 rounded-md border border-[#444] bg-[#333] text-[#fff] cursor-pointer text-sm font-semibold text-left"
                                         >
                                             Save changes
                                         </button>
@@ -1677,16 +1406,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                                 setShowModuleSaveMenu(false);
                                                 saveModuleAsNew();
                                             }}
-                                            style={{
-                                                padding: "6px 8px",
-                                                borderRadius: 6,
-                                                border: "1px solid #334155",
-                                                background: "#0f172a",
-                                                color: "#e6edf3",
-                                                cursor: "pointer",
-                                                textAlign: "left",
-                                                fontSize: 12,
-                                            }}
+                                            className="px-2.5 py-2 rounded-md border border-[#444] bg-[#333] text-[#fff] cursor-pointer text-sm"
                                         >
                                             Save as new module
                                         </button>
@@ -1694,14 +1414,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                 )}
                                 <button
                                     onClick={() => setModuleStack(popModule)}
-                                    style={{
-                                        padding: "6px 10px",
-                                        borderRadius: 6,
-                                        border: "1px solid #444",
-                                        background: "#333",
-                                        color: "#fff",
-                                        cursor: "pointer",
-                                    }}
+                                    className="px-2.5 py-2 rounded-md border border-[#444] bg-[#333] text-[#fff] cursor-pointer"
                                 >
                                     Close
                                 </button>
@@ -1754,7 +1467,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                     fitViewOptions={fitViewOptions}
                                     multiSelectionKeyCode="Shift"
                                     selectionOnDrag
-                                    style={{ background: "#0b0d10" }}
+                                    className="bg-[0b0d10]"
                                 >
                                     <Background />
                                 </ReactFlow>
@@ -1766,16 +1479,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
             )}
             {openModule && showModuleDiagram && (
                 <div
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        zIndex: 60,
-                        background: "rgba(0,0,0,0.72)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 12,
-                    }}
+                    className="fixed inset-0 z-60 bg-[rgba(0,0,0,0.72)] flex items-center justify-center p-3"
                 >
                     <DiagramView
                         nodes={openModule.nodes}

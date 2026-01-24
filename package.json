@@ -11,13 +11,15 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@tailwindcss/vite": "^4.1.18",
     "@xyflow/react": "^12.9.3",
     "dagre": "^0.8.5",
     "elkjs": "^0.9.3",
     "html-to-image": "^1.11.13",
     "lodash": "^4.17.21",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
