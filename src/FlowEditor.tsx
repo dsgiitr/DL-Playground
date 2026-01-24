@@ -906,14 +906,15 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                 ref={uploadInputRef}
                 type="file"
                 accept="application/json"
-                style={{ display: "none" }}
+                className="hidden"
                 onChange={onUploadGraph}
             />
             <div
-                className={`shrink-0 bg-[#484444] flex flex-col overflow-hidden relative border-r border-[#222] ${
-                    dragSidebar ? "transition-none" : "transition-[width] duration-150"
-                }`}
-                style={{ width: sidebarCollapsed ? 28 : sidebarWidth }}
+                className={`shrink-0 bg-[#484444] flex flex-col overflow-hidden relative border-r border-[#222]
+                ${dragSidebar ? "transition-none" : "transition-[width] duration-150"}
+                ${sidebarCollapsed ? "w-7" : "w-64"}
+                `}
+
             >
                 
                 {sidebarCollapsed ? (
@@ -1130,17 +1131,9 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                     />
 
                     <div
+                        className="cursor-col-resize flex flex-col relative flex-shrink-0 bg-[#2a2a2a] border-l border-[#222] z-5"
                         style={{
                             width: codePanelWidth,
-                            flexShrink: 0,
-                            height: "100%",
-                            background: "#0f1115",
-                            borderLeft: "1px solid #222",
-                            display: "flex",
-                            flexDirection: "column",
-                            boxShadow: "0 0 20px rgba(0,0,0,0.35)",
-                            position: "relative",
-                            zIndex: 5
                         }}
                     >
                         <div className="px-4 py-4 bg-[#12141a] border-b border-[#222] flex justify-between items-center flex-shrink-0">
@@ -1363,8 +1356,8 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                             className="p-2.5 border-b border-[#222] flex items-center gap-2.5 justify-between"
                         >
                             {/* editable module header to enter the updated module names  */}
-                            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span style={{ color: "#9ca3af", fontSize: 12 }}>Editing Module</span>
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-[#9ca3af] text-sm">Editing Module</span>
                                 <input
                                     value={moduleNameInput}
                                     onChange={e => setModuleNameInput(e.target.value)}
@@ -1420,7 +1413,7 @@ const onModuleDrop = useCallback((event: React.DragEvent) => {
                                 </button>
                             </div>
                         </div>
-                        <div style={{ flex: 1, position: "relative" }}>
+                        <div className="relative flex-1">
                             <ReactFlowProvider>
                                 <ReactFlow
                                     key={`module-editor-${openModule.module.id}-${openModule.module.updatedAt || ""}`}
