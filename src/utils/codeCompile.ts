@@ -23,13 +23,20 @@ export function sanitizeIdent(name: string): string {
     return safe;
 }
 
-export function createCustomComponentDAG (id : string, nodes: Node[], order: string[], color: Record<string, number>) : boolean { // Color: 0 for unvisited, 1 for visiting, 2 for done visiting
+export function getRootGraph(nodes: Node[], edges: Edge[]) {
+    // For now, we assume the provided nodes and edges ARE the root graph.
+    // In a more complex setup where 'nodes' might contain everything including nested subgraphs (not how ReactFlow works usually),
+    // we would filter. But here 'nodes' is the current view.
+    return { rootNodes: nodes, rootEdges: edges };
+}
+
+export function createCustomComponentDAG(id: string, nodes: Node[], order: string[], color: Record<string, number>): boolean { // Color: 0 for unvisited, 1 for visiting, 2 for done visiting
 
     color[id] = 1; // Visiting
 
-    let ok : boolean = true;
+    let ok: boolean = true;
     nodes.forEach(child => {
-        
+
         if (child.type && child.type === "module_ref") {
             const module_data = child.data as ModuleRefData;
             const module_id = module_data.moduleId as string;
@@ -38,7 +45,7 @@ export function createCustomComponentDAG (id : string, nodes: Node[], order: str
                 return false; // Make sure to test this.
             } else if (color[module_id] !== 2) {
                 const savedModule = getModule(module_id);
-                const internalNodes : Node[] = savedModule?.internalNodes || [];
+                const internalNodes: Node[] = savedModule?.internalNodes || [];
                 ok = ok && createCustomComponentDAG(module_id, internalNodes, order, color);
             }
         }
@@ -53,14 +60,13 @@ export function createCustomComponentDAG (id : string, nodes: Node[], order: str
 
 // This function works on the module level code generator and uses the generate main code function to generate code for individual modules.
 // It first sorts the module ids based on the way they should be arranged in the code and then writes the code.
-export function recursiveCodeGenerator (nodes: Node[], edges: Edge[]) : CodeGenResult {
+export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenResult {
+    // console.log("Starting recursive code generation"); 
+    let order: string[] = [];
+    let color: Record<string, number> = {};
+    createCustomComponentDAG("0", nodes, order, color);
 
-    console.log("Starting recursive code generation"); 
-    let order : string[] = [];
-    let color : Record<string, number> = {}; 
-    const ok = createCustomComponentDAG("0", nodes, order, color);
-
-    console.log("createCustomComponentDAG response:", {ok, order});
+    // console.log("createCustomComponentDAG response:", {ok, order});
 
     // *
     // For each module id, get it's code, shift it's lines by the number of previous lines
@@ -70,16 +76,16 @@ export function recursiveCodeGenerator (nodes: Node[], edges: Edge[]) : CodeGenR
 
     const lines: string[] = [];
     const spans: CodeSpan[] = [];
-    
+
     lines.push("import torch", "import torch.nn as nn");
     spans.push({ line: 1, kind: "header" }, { line: 2, kind: "header" });
 
-    let generatedCode : CodeGenResult = { code: lines.join("\n"), spans };
+    let generatedCode: CodeGenResult = { code: lines.join("\n"), spans };
 
-    let moduleNodes : Node[];
-    let moduleEdges : Edge[];
-    let moduleName : string;
-    let lineOffset : number = lines.length;
+    let moduleNodes: Node[];
+    let moduleEdges: Edge[];
+    let moduleName: string;
+    let lineOffset: number = lines.length;
 
     order.forEach(moduleId => {
 
@@ -110,7 +116,7 @@ export function recursiveCodeGenerator (nodes: Node[], edges: Edge[]) : CodeGenR
         lineOffset += moduleCode.code.split('\n').length;
     });
 
-    console.log("Code response:", generatedCode);
+    // console.log("Code response:", generatedCode);
     return generatedCode;
 }
 
@@ -192,7 +198,7 @@ export function compileGraphToScript(
             });
         });
 
-    sortedNodes.forEach((node, index) => {
+    sortedNodes.forEach((node) => {
         const layerName = `${sanitizeIdent(node.id)}_layer`;
         const type = node.type;
         if (type && LAYER_REGISTRY[type]) {
@@ -211,15 +217,15 @@ export function compileGraphToScript(
             const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
             const outputNames = (sourceHandles || []).length
                 ? sourceHandles.map((handleId, idx) => {
-                      const matching = outEdges.find(e => e.sourceHandle === handleId);
-                      const base = matching
-                          ? edgeLabel(matching, `out_${node.id}_${handleId}`)
-                          : `out_${node.id}_${idx}`;
-                      return sanitizeIdent(base);
-                  })
+                    const matching = outEdges.find(e => e.sourceHandle === handleId);
+                    const base = matching
+                        ? edgeLabel(matching, `out_${node.id}_${handleId}`)
+                        : `out_${node.id}_${idx}`;
+                    return sanitizeIdent(base);
+                })
                 : outEdges.length === 0
-                ? [sanitizeIdent(`out_${node.id}`)]
-                : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
+                    ? [sanitizeIdent(`out_${node.id}`)]
+                    : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
             nodeOutputMap[node.id] = outputNames;
             const forward_line = ClassRef.getForwardCode(node.data, layerName, inputNames, outputNames);
 
@@ -245,13 +251,13 @@ export function compileGraphToScript(
 }
 
 // Code can be made more efficient by passing CodeGenResult by reference. Offset won't be required.
-export function generateMainCode(nodes: Node[], edges: Edge[], name : string, lineOffset: number): CodeGenResult {
+export function generateMainCode(nodes: Node[], edges: Edge[], name: string, lineOffset: number): CodeGenResult {
     const lines: string[] = [];
     const spans: CodeSpan[] = [];
 
     lines.push(`class ${name}(nn.Module):`);
     spans.push({ line: 1 + lineOffset, kind: "header" });
-    
+
     // Init
     lines.push("    def __init__(self):");
     lines.push("        super().__init__()");
@@ -272,182 +278,7 @@ export function generateMainCode(nodes: Node[], edges: Edge[], name : string, li
         if (l.span) spans.push({ ...l.span, line: lines.length + lineOffset });
     });
     lines.push(`        return ${returnVar}`);
-    spans.push({ line: lines.length + lineOffset , kind: "return" });
-
-    return { code: lines.join("\n"), spans };
-}
-
-// Current code doesn't work for multiple inputs. We need to add input blocks or something similar. Output blocks can also be created.
-// Right now if the same output is being used by 2 blocks hence 2 protruding edges are there then the label on each edge is different, this may be changed later.
-// Though this requires us that the nodes have labelled outputs and edges are not between 2 nodes but between 2 "handles"
-// This is deprecated now.
-export function generatePyTorchCode(nodes: Node[], edges: Edge[]): CodeGenResult {
-    if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
-
-    const lines: string[] = [];
-    const spans: CodeSpan[] = [];
-    const initLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
-    const forwardLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
-
-    // 1. Build Adjacency List
-    const adj: Record<string, string[]> = {};
-    const inDegree: Record<string, number> = {};
-    nodes.forEach(n => {
-        adj[n.id] = [];
-        inDegree[n.id] = 0;
-    });
-    edges.forEach(e => {
-        if (adj[e.source]) adj[e.source].push(e.target);
-        if (inDegree[e.target] !== undefined) inDegree[e.target]++;
-    });
-
-    // 2. Topological Sort
-    const queue: string[] = nodes.filter(n => inDegree[n.id] === 0).map(n => n.id);
-    const sortedIds: string[] = [];
-
-    while (queue.length > 0) {
-        const u = queue.shift()!;
-        sortedIds.push(u);
-        if (adj[u]) {
-            adj[u].forEach(v => {
-                inDegree[v]--;
-                if (inDegree[v] === 0) queue.push(v);
-            });
-        }
-    }
-
-    const finalOrderIds =
-        sortedIds.length === nodes.length
-            ? sortedIds
-            : [...sortedIds, ...nodes.map(n => n.id).filter(id => !sortedIds.includes(id))];
-    const sortedNodes = finalOrderIds.map(id => nodes.find(n => n.id === id)!);
-
-    // This code creates a list of all the input and output edges of a node
-    const incomingEdges: Record<string, Edge[]> = {};
-    const outgoingEdges: Record<string, Edge[]> = {};
-
-    nodes.forEach(n => {
-        incomingEdges[n.id] = [];
-        outgoingEdges[n.id] = [];
-    });
-
-    edges.forEach(e => {
-        incomingEdges[e.target]?.push(e);
-        outgoingEdges[e.source]?.push(e);
-    });
-    // 3. Generate Code
-    lines.push("import torch");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("import torch.nn as nn");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("class GeneratedModel(nn.Module):");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("    def __init__(self):");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("        super().__init__()");
-    spans.push({ line: lines.length, kind: "header" });
-
-    const edgeLabel = (edge: Edge, fallback: string) => {
-        const lbl = (edge.data as any)?.label;
-        if (typeof lbl === "string" && lbl.trim().length > 0) return sanitizeIdent(lbl.trim());
-        // fall back to a deterministic name based on the source node and handle
-        const suffix = edge.sourceHandle ? edge.sourceHandle.replace(/[^a-zA-Z0-9_]/g, "_") : "out";
-        return sanitizeIdent(`${fallback}_${suffix}`);
-    };
-
-    // Seed variables for all source-only (zero in-degree) nodes so downstream layers see defined tensors.
-    const seedLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
-    nodes
-        .filter(n => (incomingEdges[n.id] ?? []).length === 0)
-        .forEach(n => {
-            const outs = outgoingEdges[n.id] ?? [];
-            outs.forEach((e, idx) => {
-                const name = edgeLabel(e, `in_${n.id}_${idx}`);
-                seedLines.push({
-                    text: `        ${name} = x  # input passthrough`,
-                    span: { kind: "forward", nodeId: n.id, edgeIds: [e.id] },
-                });
-            });
-        });
-
-    sortedNodes.forEach((node, index) => {
-        const layerName = `layer_${index}`;
-        const type = node.type;
-
-        if (type && LAYER_REGISTRY[type]) {
-            const ClassRef = LAYER_REGISTRY[type];
-            const line = ClassRef.getInitCode(node.data, layerName);
-
-            initLines.push({ text: `        ${line}`, span: { kind: "init", nodeId: node.id } });
-
-            const inEdges = incomingEdges[node.id];
-            const inputNames =
-                inEdges.length === 0 ? ["x"] : inEdges.map((e, idx) => edgeLabel(e, `in_${e.source || idx}`));
-
-            const outEdges = outgoingEdges[node.id];
-            const handlesSpec =
-                typeof ClassRef.handles === "function" ? ClassRef.handles(node.data as any) : ClassRef.handles;
-            const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
-            const outputNames = (sourceHandles || []).length
-                ? sourceHandles.map((handleId, idx) => {
-                      const matching = outEdges.find(e => e.sourceHandle === handleId);
-                      const base = matching
-                          ? edgeLabel(matching, `out_${node.id}_${handleId}`)
-                          : `out_${node.id}_${idx}`;
-                      return sanitizeIdent(base);
-                  })
-                : outEdges.length === 0
-                ? [sanitizeIdent(`out_${node.id}`)]
-                : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
-
-            const forward_line = ClassRef.getForwardCode(node.data, layerName, inputNames, outputNames);
-
-            forwardLines.push({
-                text: `        ${forward_line}`,
-                span: { kind: "forward", nodeId: node.id, edgeIds: outEdges.map(e => e.id) },
-            });
-        }
-    });
-
-    const terminalNodes = sortedNodes.filter(n => outgoingEdges[n.id].length === 0);
-
-    if (terminalNodes.length === 1) {
-        const lastOut = outgoingEdges[terminalNodes[0].id][0];
-        const lastOutName = lastOut
-            ? edgeLabel(lastOut, `out_${terminalNodes[0].id}`)
-            : sanitizeIdent(`out_${terminalNodes[0].id}`);
-        forwardLines.push({
-            text: `        return ${lastOutName}`,
-            span: { kind: "return", nodeId: terminalNodes[0].id, edgeIds: lastOut ? [lastOut.id] : undefined },
-        });
-    } else {
-        const returns = terminalNodes.map(n =>
-            outgoingEdges[n.id][0] ? edgeLabel(outgoingEdges[n.id][0], `out_${n.id}`) : sanitizeIdent(`out_${n.id}`)
-        );
-        const edgeIds = terminalNodes.flatMap(n => (outgoingEdges[n.id][0]?.id ? [outgoingEdges[n.id][0]!.id] : []));
-        forwardLines.push({
-            text: `        return (${returns.join(", ")})`,
-            span: { kind: "return", edgeIds },
-        });
-    }
-
-    // Stitch final lines with accurate line numbers for spans
-    const stitch = (entries: { text: string; span?: Omit<CodeSpan, "line"> }[]) => {
-        entries.forEach(entry => {
-            lines.push(entry.text);
-            if (entry.span) spans.push({ ...entry.span, line: lines.length });
-        });
-    };
-
-    stitch(initLines);
-    lines.push("");
-    spans.push({ line: lines.length, kind: "header" });
-    lines.push("    def forward(self, x):");
-    spans.push({ line: lines.length, kind: "header" });
-    stitch(seedLines);
-    stitch(forwardLines);
+    spans.push({ line: lines.length + lineOffset, kind: "return" });
 
     return { code: lines.join("\n"), spans };
 }
