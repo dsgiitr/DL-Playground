@@ -92,7 +92,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<stri
                 progressed = true;
                 continue;
             }
-            const computed = layer.shapeCompute(node.data as any, inputShapes) as any;
+            const computed = layer.shapeCompute(node.data as any, inputShapes, { registry }) as any;
             if (Array.isArray(computed)) {
                 shapes[id] = { defaultShape: computed };
             } else if (computed && typeof computed === "object") {

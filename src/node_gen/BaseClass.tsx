@@ -28,7 +28,7 @@ export interface LayerDefinition<D extends LayerData> {
     // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
     // shapeCompute: computes output shape, assumes verifier passed
-    shapeCompute(data: D, inputShapes: number[][]): number[];
+    shapeCompute(data: D, inputShapes: number[][], context?: { registry: Record<string, any> }): number[] | Record<string, number[]>;
     // estimateCost: optional params/FLOPs estimate for analysis panels
     estimateCost?: (data: D, inputShapes: number[][], outputShape: number[]) => { params: number; flops: number };
     getInitCode(data: D, name: string): string;
