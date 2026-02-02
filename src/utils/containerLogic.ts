@@ -118,14 +118,17 @@ export function assignParent(
     if (targetParent) {
         // 1. Check Capacity for new drops
         const maxCap = config.capacities[targetParent.type || ""] || 999;
+        const isAlreadyChild = node.parentId === targetParent.id;
         const existingChildren = currentNodes.filter(n => n.parentId === targetParent.id);
 
-        if (existingChildren.length >= maxCap) {
+        if (!isAlreadyChild && existingChildren.length >= maxCap) {
             // Capacity full: Drop as orphan on canvas instead
+            const nodeAbs = node.parentId ? getAbsolutePosition(node, currentNodes) : node.position;
             return {
                 ...node,
                 parentId: undefined,
                 extent: undefined,
+                position: nodeAbs,
                 // Position is already absolute for new drops
             };
         }
@@ -221,9 +224,10 @@ export function useContainerSystem(
             // Check Capacity before assigning
             const targetParent = findBestParent(node, currentNodes);
             if (targetParent) {
+                const isAlreadyChild = node.parentId === targetParent.id;
                 const maxCap = config.capacities[targetParent.type || ""] || 999;
                 const existingChildren = currentNodes.filter(n => n.parentId === targetParent.id && n.id !== node.id);
-                if (existingChildren.length >= maxCap) {
+                if (!isAlreadyChild && existingChildren.length >= maxCap) {
                     // Revert Logic
                     if (dragStartRef.current && dragStartRef.current.id === node.id) {
                         setNodes(nds => nds.map(n => (n.id === node.id ? dragStartRef.current! : n)));

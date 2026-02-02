@@ -58,7 +58,11 @@ export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<stri
                 continue;
             }
             const layer = node.type ? registry[node.type] : undefined;
-            // console.log(`inspecting ${layer.label}`);
+            // console.log(`registry here is`);
+            // console.log(registry);
+            // console.log(`inspecting ${node.type}`);
+            // const new_type = node.type || "";
+            // // console.log(`the registry locatoin ${registry[new_type]}`);
             if (!layer) {
                 failures.push({
                     nodeId: id,
@@ -100,7 +104,7 @@ export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<stri
                 progressed = true;
                 continue;
             }
-            const computed = layer.shapeCompute(node.data as any, inputShapes, { registry }) as any;
+            const computed = layer.shapeCompute(node.data as any, inputShapes, registry) as any;
             if (Array.isArray(computed)) {
                 shapes[id] = { defaultShape: computed };
             } else if (computed && typeof computed === "object") {
@@ -128,6 +132,6 @@ export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<stri
             });
         });
     }
-
+    console.log(failures);
     return { ok: failures.length === 0, shapes, failures };
 }

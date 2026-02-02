@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/BaseClass";
 import { Handle, NodeResizeControl, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import React, { useEffect } from "react";
+import { type FieldSpec, type FieldType, type LayerData } from "../../node_gen/BaseClass";
 import { compileGraphToScript } from "../../utils/codeCompile";
 import { verifyShapes } from "../../utils/shape_verifier";
 
@@ -160,6 +160,7 @@ export class ModuleListNode {
         const allEdges = this.getImplicitEdges(data);
 
         for (let i = 0; i < Math.min(N, MAX_SIM_STEPS); i++) {
+            // console.log(`iter count ${i}`)
             const MOCK_ID = `__COMPUTE_ITER_${i}__`;
             const mockDims = currentShape.map((size, idx) => ({
                 label: `D${idx}`, size: size.toString(), type: "inferred"
@@ -178,19 +179,23 @@ export class ModuleListNode {
             const edgesFiltered = edges.filter(e =>
                 (internalIds.has(e.source) || e.source === MOCK_ID) && internalIds.has(e.target)
             );
-
+            // console.log(registry);
             const result = verifyShapes(nodes, edgesFiltered, registry);
-            if (!result.ok) return [currentShape];
+            if (!result.ok) {
+                // console.log("results not ok")
+                return currentShape
+            };
 
             // Find output
             const exitEdges = allEdges.filter(e => e.target === "CONTAINER_OUTPUT");
-            if (exitEdges.length === 0) return [currentShape];
+            if (exitEdges.length === 0) { console.log("exit edges length is zero"); return [currentShape] };
 
             const outputShape = result.shapes[exitEdges[0].source]?.defaultShape;
-            if (!outputShape) return [currentShape];
+            if (!outputShape) { console.log("no output shape"); return currentShape; }
 
             const isStable = outputShape.length === currentShape.length && outputShape.every((v, k) => v === currentShape[k]);
             currentShape = outputShape;
+            console.log("current shape === outputshape")
             if (isStable) break;
         }
         return currentShape;
