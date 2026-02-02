@@ -68,7 +68,7 @@ function FlowContent() {
         onMainDrop, onModuleDrop, onDragOver,
         highlightNodes, highlightEdges, setHighlightNodes, setHighlightEdges,
         onSelectionChange, clearSelection, selectedNodeIds,
-        onConnect, onNodeDragStop
+        onConnect, onNodeDragStop, onNodeDragStart
     } = interaction;
 
     // Derived States for Visualization
@@ -233,6 +233,7 @@ function FlowContent() {
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDragStop={onNodeDragStop}
+                    onNodeDragStart={onNodeDragStart}
                     onMainDrop={onMainDrop}
                     onDragOver={onDragOver}
                     onSelectionChange={onSelectionChange}

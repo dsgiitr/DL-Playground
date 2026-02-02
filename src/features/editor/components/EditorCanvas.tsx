@@ -13,6 +13,7 @@ type EditorCanvasProps = {
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
     onNodeDragStop: any; // Type from useRepeatSystem
+    onNodeDragStart: any;
     onMainDrop: (e: React.DragEvent) => void;
     onDragOver: (e: React.DragEvent) => void;
     onSelectionChange: any;
@@ -27,6 +28,7 @@ export function EditorCanvas({
     onEdgesChange,
     onConnect,
     onNodeDragStop,
+    onNodeDragStart,
     onMainDrop,
     onDragOver,
     onSelectionChange,
@@ -43,6 +45,7 @@ export function EditorCanvas({
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDragStop={onNodeDragStop}
+                    onNodeDragStart={onNodeDragStart}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     fitView
