@@ -1,19 +1,33 @@
-import { addEdge, type Edge, type Node, type OnConnect, type ReactFlowInstance, useReactFlow } from "@xyflow/react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { updateActiveModule, type OpenModule } from "../../../utils/stackNavigation";
-import { useRepeatSystem } from "../../../utils/repeatLogic";
+import { addEdge, useReactFlow, type Edge, type Node, type OnConnect, type ReactFlowInstance } from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+    assignParent,
+    findBestParent,
+    getAbsolutePosition,
+    syncContainerData,
+    useContainerSystem,
+    DEFAULT_CONTAINER_CONFIG,
+} from "../../../utils/containerLogic";
+import { getActiveModule, updateActiveModule, type OpenModule } from "../../../utils/stackNavigation";
 import { getId } from "../utils/idUtils";
-import { assign } from "lodash";
 
 type UseGraphInteractionProps = {
     nodes: Node[];
     edges: Edge[];
     setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
+    moduleStack: OpenModule[];
     setModuleStack: React.Dispatch<React.SetStateAction<OpenModule[]>>;
 };
 
-export function useGraphInteraction({ nodes, edges, setNodes, setEdges, setModuleStack }: UseGraphInteractionProps) {
+export function useGraphInteraction({
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    moduleStack,
+    setModuleStack,
+}: UseGraphInteractionProps) {
     const { getNodes } = useReactFlow();
 
     // Refs for Flow Instances (needed for drag-and-drop coordinate conversion)
@@ -21,11 +35,65 @@ export function useGraphInteraction({ nodes, edges, setNodes, setEdges, setModul
     const mainFlowRef = useRef<ReactFlowInstance | null>(null);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
 
-    // -------------------------------------------------------------------------
-    // 1. Connection Logic
-    // -------------------------------------------------------------------------
-    const { onNodeDragStart, onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
+    const { onNodeDragStart, onNodeDragStop, assignParent } = useContainerSystem(nodes, edges, setNodes, getNodes);
+    const moduleDragStartRef = useRef<Node | null>(null);
+    const onModuleNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+        moduleDragStartRef.current = JSON.parse(JSON.stringify(node));
+    }, []);
 
+    const onModuleNodeDragStop = useCallback(
+        (_event: React.MouseEvent, node: Node) => {
+            setModuleStack(stack =>
+                updateActiveModule(stack, currentModule => {
+                    const currentNodes = currentModule.nodes;
+                    const config = DEFAULT_CONTAINER_CONFIG; // specific config may be passed in future
+                    // Check Revert Logic
+                    const targetParent = findBestParent(node, currentNodes, config);
+                    if (targetParent) {
+                        // If capacity full, revert to start state
+                        const maxCap = config.capacities[targetParent.type || ""] || 999;
+                        const existingChildren = currentNodes.filter(
+                            n => n.parentId === targetParent.id && n.id !== node.id,
+                        );
+                        if (existingChildren.length >= maxCap) {
+                            // Hardcoded capacity check for now
+                            if (moduleDragStartRef.current && moduleDragStartRef.current.id === node.id) {
+                                const revertedNode = moduleDragStartRef.current;
+                                moduleDragStartRef.current = null;
+                                return {
+                                    ...currentModule,
+                                    nodes: currentNodes.map(n => (n.id === node.id ? revertedNode : n)),
+                                };
+                            }
+                        }
+                    }
+
+                    // Apply Parenting Logic using the helper
+                    const finalNode = assignParent(node, currentNodes, config);
+                    moduleDragStartRef.current = null;
+
+                    return {
+                        ...currentModule,
+                        nodes: currentNodes.map(n => (n.id === node.id ? finalNode : n)),
+                    };
+                }),
+            );
+        },
+        [setModuleStack],
+    );
+    useEffect(() => {
+        const active = getActiveModule(moduleStack);
+        if (!active) return;
+        const result = syncContainerData(active.nodes, active.edges);
+        if (result.hasChanges) {
+            setModuleStack(stack =>
+                updateActiveModule(stack, curr => ({
+                    ...curr,
+                    nodes: result.nodes,
+                })),
+            );
+        }
+    }, [moduleStack, setModuleStack]);
     const onConnect: OnConnect = useCallback(
         connection => {
             setEdges(eds => {
@@ -90,7 +158,7 @@ export function useGraphInteraction({ nodes, edges, setNodes, setEdges, setModul
             const finalNode = assignParent(newNode, getNodes());
             setNodes(nds => [...nds, finalNode]);
         },
-        [setNodes, assignParent, getNodes],
+        [setNodes, getNodes],
     );
 
     const onModuleDrop = useCallback(
@@ -140,9 +208,6 @@ export function useGraphInteraction({ nodes, edges, setNodes, setEdges, setModul
         [setModuleStack, assignParent],
     );
 
-    // -------------------------------------------------------------------------
-    // 3. Selection & Highlights
-    // -------------------------------------------------------------------------
     const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
     const [highlightEdges, setHighlightEdges] = useState<Set<string>>(new Set());
 
@@ -199,6 +264,8 @@ export function useGraphInteraction({ nodes, edges, setNodes, setEdges, setModul
         selectedNodeIds,
         onNodeDragStop,
         onNodeDragStart,
+        onModuleNodeDragStart,
+        onModuleNodeDragStop,
         assignParent,
     };
 }

@@ -58,7 +58,6 @@ function toHandles(handles?: ModuleHandles): Handles {
     const outputs = handles.outputs?.length ? handles.outputs : ["out"];
     return { targets: inputs, sources: outputs };
 }
-
 const ModuleRefComponent: ComponentType<NodeProps<ModuleRefNodeType>> = ({ id, data, isConnectable }) => {
     const { setNodes, setEdges } = useReactFlow();
     const [isExpanded, setIsExpanded] = useState(false);

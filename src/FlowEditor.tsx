@@ -60,6 +60,7 @@ function FlowContent() {
         edges,
         setNodes,
         setEdges,
+        moduleStack: modSys.moduleStack,
         setModuleStack: modSys.setModuleStack
     });
 
@@ -68,7 +69,7 @@ function FlowContent() {
         onMainDrop, onModuleDrop, onDragOver,
         highlightNodes, highlightEdges, setHighlightNodes, setHighlightEdges,
         onSelectionChange, clearSelection, selectedNodeIds,
-        onConnect, onNodeDragStop, onNodeDragStart
+        onConnect, onNodeDragStop, onNodeDragStart, onModuleNodeDragStart, onModuleNodeDragStop
     } = interaction;
 
     // Derived States for Visualization
@@ -340,6 +341,8 @@ function FlowContent() {
                     onDragOver={onDragOver}
                     saveExistingModuleChanges={modSys.saveExistingModuleChanges}
                     saveModuleAsNew={modSys.saveModuleAsNew}
+                    onNodeDragStart={onModuleNodeDragStart}
+                    onNodeDragStop={onModuleNodeDragStop}
                 />
             )}
 

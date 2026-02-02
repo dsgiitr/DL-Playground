@@ -19,6 +19,7 @@ type ModuleListData = {
 
 export class ModuleListNode {
     static label = "Module List (Stack)";
+    static encapsulatesChildInit = true;
     static paramSchema: Record<string, FieldSpec> = {
         repetitions: {
             required: true,
