@@ -175,7 +175,7 @@ export class RepeatLayerNode {
         };
     }
 
-    static getInitCode(data: RepeatLayerData, name: string) {
+    static getInitCode(data: RepeatLayerData, _name: string) {
         if (!data.internalNodes || data.internalNodes.length === 0) {
             return `#Empty Loop`;
         }
@@ -188,7 +188,7 @@ export class RepeatLayerNode {
         }
         return initLines.map(l => l.text.trim()).join("\n        ")
     }
-    static getForwardCode(data: RepeatLayerData, name: string, inputs: Array<string>, outputs: Array<string>) {
+    static getForwardCode(data: RepeatLayerData, _name: string, inputs: Array<string>, outputs: Array<string>) {
         const inputVar = inputs[0] || "x";
         const outputVar = outputs[0] || "x";
         const N = data.repetitions || 1;
@@ -243,7 +243,7 @@ export function createRepeatLayerComponent<D extends LayerData>(
 ) {
     return ({ id, data, isConnectable, selected, width, height }: ResizableNodeProps) => {
         const { setNodes, setEdges } = useReactFlow();
-        const [isExpanded] = useState(true);
+        const [isExpanded, setIsExpanded] = useState(true);
         const safeData = data || ({} as D);
 
         const childCount = (safeData as any).internalNodes?.length || 0;
@@ -279,7 +279,7 @@ export function createRepeatLayerComponent<D extends LayerData>(
             setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, [key]: newValue } } : n));
 
         };
-        const handleDelete = (e: React.MouseEvent) => {
+        const handleDelete = (_e: React.MouseEvent) => {
             // e.stopPropagation();
             setNodes(nodes => nodes.filter(n => n.id !== id))
             setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));

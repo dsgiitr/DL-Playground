@@ -1,23 +1,23 @@
 import React, { useMemo, useRef, useEffect, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
-import type { CodeSpan } from "../utils/dummy_generator";
+import type { CodeSpan } from "../utils/codeCompile";
 
 type Props = {
     code: string;
     spans: CodeSpan[];
     onSelectionChange: (targets: { nodeIds: string[]; edgeIds: string[] }) => void;
     style?: React.CSSProperties;
-    language?: string; 
+    language?: string;
 };
 
-export default function CodeViewer({ 
-    code, 
-    spans, 
-    onSelectionChange, 
-    style, 
-    language = "python" 
+export default function CodeViewer({
+    code,
+    spans,
+    onSelectionChange,
+    style,
+    language = "python"
 }: Props) {
-    
+
     const [localCode, setLocalCode] = useState(code);
     const [isDirty, setIsDirty] = useState(false);
 
@@ -73,17 +73,17 @@ export default function CodeViewer({
                 entry.edgeIds.forEach(id => edgeIds.add(id));
             }
 
-            onSelectionChangeRef.current({ 
-                nodeIds: Array.from(nodeIds), 
-                edgeIds: Array.from(edgeIds) 
+            onSelectionChangeRef.current({
+                nodeIds: Array.from(nodeIds),
+                edgeIds: Array.from(edgeIds)
             });
         });
     };
 
     return (
-        <div 
+        <div
             style={{ ...style, overflow: "hidden", position: "relative" }}
-            onKeyDown={(e) => e.stopPropagation()} 
+            onKeyDown={(e) => e.stopPropagation()}
         >
             {isDirty && (
                 <button
@@ -114,15 +114,15 @@ export default function CodeViewer({
                 language={language}
                 value={localCode}
                 onChange={handleEditorChange}
-                theme="vs-dark" 
+                theme="vs-dark"
                 options={{
                     minimap: { enabled: false },
                     lineNumbers: "on",
                     scrollBeyondLastLine: false,
                     wordWrap: "on",
                     renderLineHighlight: "all",
-                    contextmenu: false, 
-                    fontFamily: "JetBrains Mono, Fira Code, monospace", 
+                    contextmenu: false,
+                    fontFamily: "JetBrains Mono, Fira Code, monospace",
                     fontSize: 16,
                     fixedOverflowWidgets: true,
                     quickSuggestions: true,
