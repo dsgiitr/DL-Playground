@@ -121,8 +121,6 @@ export class RepeatLayerNode {
         return { ok: true as const };
     }
     static shapeCompute(_data: RepeatLayerData, inputShapes: number[][]) {
-        //Since the shape is constant for now, pass through the shape. 
-        console.log("shape compute ran")
         if (!inputShapes || inputShapes.length === 0 || !inputShapes[0]) {
             return [[]]
         }
@@ -213,8 +211,6 @@ export class RepeatLayerNode {
             const label = endEdge.data?.label as string || 'out-internal';
             returnVar = label.replace(/-/g, '_')
         }
-        console.log(forwardLines)
-        console.log(returnVar)
         const loopBody = forwardLines?.map(l => `    ${l.text.trim()}`).join("\n        ");
         return `
         # Repeat Block (${N} iterations)

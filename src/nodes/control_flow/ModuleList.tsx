@@ -32,7 +32,7 @@ export class ModuleListNode {
 
     /**
      * Helper: Generates virtual edges connecting the Container's input/output 
-     * directly to the internal nodes. This allows "Auto-Wiring".
+     * directly to the internal nodes.
      */
     private static getImplicitEdges(data: ModuleListData): Edge[] {
         if (!data.internalNodes || data.internalNodes.length === 0) return [];
@@ -75,7 +75,6 @@ export class ModuleListNode {
         return [...data.internalEdges, ...virtualEdges];
     }
 
-    // --- SHAPE VERIFIER ---
     static shapeVerifier(data: ModuleListData, inputShapes: number[][], registry?: Record<string, any>) {
         const safeData = data || { internalNodes: [], internalEdges: [] };
 
@@ -88,9 +87,8 @@ export class ModuleListNode {
 
         // 1. Helper to run a verification pass
         const runPass = (inputShape: number[], passLabel: string) => {
-            const MOCK_ID = `__STACK_ENTRY_${passLabel}__`; // Must match the source used in getImplicitEdges? No, we re-map.
+            const MOCK_ID = `__STACK_ENTRY_${passLabel}__`;
 
-            // Mock Input Node
             const mockDims = inputShape.map((size, idx) => ({
                 label: `D${idx}`, size: size.toString(), type: "inferred"
             }));
@@ -101,13 +99,11 @@ export class ModuleListNode {
 
             const internalIds = new Set(safeData.internalNodes.map(n => n.id));
 
-            // Reroute the virtual input edges to our Mock Node
             const edgesToCheck = allEdges.map(e => {
                 if (e.source === "CONTAINER_INPUT") return { ...e, source: MOCK_ID };
                 return e;
             });
 
-            // Filter out edges that leave the graph (Output edges)
             const edgesToVerify = edgesToCheck.filter(e =>
                 (internalIds.has(e.source) || e.source === MOCK_ID) && internalIds.has(e.target)
             );
@@ -116,28 +112,22 @@ export class ModuleListNode {
             return verifyShapes(nodesToVerify, edgesToVerify, registry);
         };
 
-        // 2. PASS 1: Verify First Iteration
         const result1 = runPass(loopInputShape, "1");
         if (!result1.ok) {
             const f = result1.failures[0];
             return { ok: false as const, error: `Iteration 1 Error: ${f.error} (Node: ${f.nodeId})` };
         }
 
-        // 3. Determine Output of Pass 1
-        // We look for the virtual output edges we created
         const exitEdges = allEdges.filter(e => e.target === "CONTAINER_OUTPUT");
         if (exitEdges.length === 0) return { ok: false as const, error: "Stack has no output." };
 
-        // Assuming single output for now
         const lastNodeId = exitEdges[0].source;
         const pass1OutputShape = result1.shapes[lastNodeId]?.defaultShape;
 
         if (!pass1OutputShape) return { ok: false as const, error: "Could not calculate shape." };
-
-        // If stack size is 1, done
         if ((data.repetitions || 1) <= 1) return { ok: true as const };
 
-        // 4. PASS 2: Compatibility Check
+        // Compatibility Check
         const result2 = runPass(pass1OutputShape, "2");
         if (!result2.ok) {
             return {
@@ -160,7 +150,6 @@ export class ModuleListNode {
         const allEdges = this.getImplicitEdges(data);
 
         for (let i = 0; i < Math.min(N, MAX_SIM_STEPS); i++) {
-            // console.log(`iter count ${i}`)
             const MOCK_ID = `__COMPUTE_ITER_${i}__`;
             const mockDims = currentShape.map((size, idx) => ({
                 label: `D${idx}`, size: size.toString(), type: "inferred"
@@ -179,23 +168,20 @@ export class ModuleListNode {
             const edgesFiltered = edges.filter(e =>
                 (internalIds.has(e.source) || e.source === MOCK_ID) && internalIds.has(e.target)
             );
-            // console.log(registry);
             const result = verifyShapes(nodes, edgesFiltered, registry);
             if (!result.ok) {
-                // console.log("results not ok")
                 return currentShape
             };
 
             // Find output
             const exitEdges = allEdges.filter(e => e.target === "CONTAINER_OUTPUT");
-            if (exitEdges.length === 0) { console.log("exit edges length is zero"); return [currentShape] };
+            if (exitEdges.length === 0) { return [currentShape] };
 
             const outputShape = result.shapes[exitEdges[0].source]?.defaultShape;
-            if (!outputShape) { console.log("no output shape"); return currentShape; }
+            if (!outputShape) { return currentShape; }
 
             const isStable = outputShape.length === currentShape.length && outputShape.every((v, k) => v === currentShape[k]);
             currentShape = outputShape;
-            console.log("current shape === outputshape")
             if (isStable) break;
         }
         return currentShape;

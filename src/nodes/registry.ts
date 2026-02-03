@@ -238,5 +238,4 @@ Object.values(NODE_GROUPS).forEach(group => {
 registerLayer("module_ref", ModuleRefNode);
 
 // 3. Re-export the populated registry for convenience
-console.log(LAYER_REGISTRY);
 export { LAYER_REGISTRY };

@@ -58,11 +58,6 @@ export function verifyShapes(nodes: Node[], edges: Edge[], registry: Record<stri
                 continue;
             }
             const layer = node.type ? registry[node.type] : undefined;
-            // console.log(`registry here is`);
-            // console.log(registry);
-            // console.log(`inspecting ${node.type}`);
-            // const new_type = node.type || "";
-            // // console.log(`the registry locatoin ${registry[new_type]}`);
             if (!layer) {
                 failures.push({
                     nodeId: id,

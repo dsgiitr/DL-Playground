@@ -65,12 +65,9 @@ export function createCustomComponentDAG(
 // This function works on the module level code generator and uses the generate main code function to generate code for individual modules.
 // It first sorts the module ids based on the way they should be arranged in the code and then writes the code.
 export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenResult {
-    // console.log("Starting recursive code generation");
     let order: string[] = [];
     let color: Record<string, number> = {};
     createCustomComponentDAG("0", nodes, order, color);
-
-    // console.log("createCustomComponentDAG response:", {ok, order});
 
     // *
     // For each module id, get it's code, shift it's lines by the number of previous lines
@@ -119,8 +116,6 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
         generatedCode.spans.push(...moduleCode.spans);
         lineOffset += moduleCode.code.split("\n").length;
     });
-
-    // console.log("Code response:", generatedCode);
     return generatedCode;
 }
 
