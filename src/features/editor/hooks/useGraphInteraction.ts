@@ -1,14 +1,14 @@
+import { addEdge, useReactFlow, type Edge, type Node, type OnConnect, type ReactFlowInstance } from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    addEdge,
-    type Edge,
-    type Node,
-    type OnConnect,
-    type ReactFlowInstance,
-    useReactFlow,
-} from "@xyflow/react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { updateActiveModule, type OpenModule } from "../../../utils/stackNavigation";
-import { useRepeatSystem } from "../../../utils/repeatLogic";
+    assignParent,
+    findBestParent,
+    getAbsolutePosition,
+    syncContainerData,
+    useContainerSystem,
+    DEFAULT_CONTAINER_CONFIG,
+} from "../../../utils/containerLogic";
+import { getActiveModule, updateActiveModule, type OpenModule } from "../../../utils/stackNavigation";
 import { getId } from "../utils/idUtils";
 
 type UseGraphInteractionProps = {
@@ -16,6 +16,7 @@ type UseGraphInteractionProps = {
     edges: Edge[];
     setNodes: React.Dispatch<React.SetStateAction<Node[]>>;
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
+    moduleStack: OpenModule[];
     setModuleStack: React.Dispatch<React.SetStateAction<OpenModule[]>>;
 };
 
@@ -24,21 +25,81 @@ export function useGraphInteraction({
     edges,
     setNodes,
     setEdges,
+    moduleStack,
     setModuleStack,
 }: UseGraphInteractionProps) {
+    const { getNodes } = useReactFlow();
 
     // Refs for Flow Instances (needed for drag-and-drop coordinate conversion)
     // We export these so the UI can attach them via `onInit`
     const mainFlowRef = useRef<ReactFlowInstance | null>(null);
     const moduleFlowRef = useRef<ReactFlowInstance | null>(null);
 
-    // -------------------------------------------------------------------------
-    // 1. Connection Logic
-    // -------------------------------------------------------------------------
+    const { onNodeDragStart, onNodeDragStop, assignParent } = useContainerSystem(nodes, edges, setNodes, getNodes);
+    const moduleDragStartRef = useRef<Node | null>(null);
+    const onModuleNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+        moduleDragStartRef.current = JSON.parse(JSON.stringify(node));
+    }, []);
+
+    const onModuleNodeDragStop = useCallback(
+        (_event: React.MouseEvent, node: Node) => {
+            setModuleStack(stack =>
+                updateActiveModule(stack, currentModule => {
+                    const currentNodes = currentModule.nodes;
+                    const config = DEFAULT_CONTAINER_CONFIG; // specific config may be passed in future
+                    // Check Revert Logic
+                    const targetParent = findBestParent(node, currentNodes, config);
+                    if (targetParent) {
+                        // If capacity full, revert to start state
+                        const maxCap = config.capacities[targetParent.type || ""] || 999;
+                        const existingChildren = currentNodes.filter(
+                            n => n.parentId === targetParent.id && n.id !== node.id,
+                        );
+                        if (existingChildren.length >= maxCap) {
+                            // Hardcoded capacity check for now
+                            if (moduleDragStartRef.current && moduleDragStartRef.current.id === node.id) {
+                                const revertedNode = moduleDragStartRef.current;
+                                moduleDragStartRef.current = null;
+                                return {
+                                    ...currentModule,
+                                    nodes: currentNodes.map(n => (n.id === node.id ? revertedNode : n)),
+                                };
+                            }
+                        }
+                    }
+
+                    // Apply Parenting Logic using the helper
+                    const finalNode = assignParent(node, currentNodes, config);
+                    moduleDragStartRef.current = null;
+
+                    return {
+                        ...currentModule,
+                        nodes: currentNodes.map(n => (n.id === node.id ? finalNode : n)),
+                    };
+                }),
+            );
+        },
+        [setModuleStack],
+    );
+    useEffect(() => {
+        const active = getActiveModule(moduleStack);
+        if (!active) return;
+        const result = syncContainerData(active.nodes, active.edges);
+        if (result.hasChanges) {
+            setModuleStack(stack =>
+                updateActiveModule(stack, curr => ({
+                    ...curr,
+                    nodes: result.nodes,
+                })),
+            );
+        }
+    }, [moduleStack, setModuleStack]);
     const onConnect: OnConnect = useCallback(
         connection => {
             setEdges(eds => {
-                const sameSource = eds.filter(e => e.source === connection.source && e.sourceHandle === connection.sourceHandle);
+                const sameSource = eds.filter(
+                    e => e.source === connection.source && e.sourceHandle === connection.sourceHandle,
+                );
                 const suffix = sameSource.length ? `_dup${sameSource.length}` : "";
                 const labelBase = connection.source
                     ? `out_${connection.source}${connection.sourceHandle ? `_${connection.sourceHandle}` : ""}${suffix}`
@@ -48,14 +109,14 @@ export function useGraphInteraction({
                         ...connection,
                         type: "custom",
                         data: {
-                            label: labelBase
-                        }
+                            label: labelBase,
+                        },
                     },
-                    eds
+                    eds,
                 );
             });
         },
-        [setEdges]
+        [setEdges],
     );
 
     // -------------------------------------------------------------------------
@@ -66,85 +127,87 @@ export function useGraphInteraction({
         event.dataTransfer.dropEffect = "move";
     }, []);
 
-    const onMainDrop = useCallback((event: React.DragEvent) => {
-        event.preventDefault();
-        if (!mainFlowRef.current) return;
+    const onMainDrop = useCallback(
+        (event: React.DragEvent) => {
+            event.preventDefault();
+            if (!mainFlowRef.current) return;
 
-        const type = event.dataTransfer.getData("application/reactflow");
-        if (!type) return;
-        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-        let moduleMeta: Record<string, unknown> | null = null;
+            const type = event.dataTransfer.getData("application/reactflow");
+            if (!type) return;
+            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+            let moduleMeta: Record<string, unknown> | null = null;
 
-        if (moduleMetaRaw) {
-            try {
-                moduleMeta = JSON.parse(moduleMetaRaw);
-            } catch (err) {
-                console.warn("Failed to parse module metadata", err);
+            if (moduleMetaRaw) {
+                try {
+                    moduleMeta = JSON.parse(moduleMetaRaw);
+                } catch (err) {
+                    console.warn("Failed to parse module metadata", err);
+                }
             }
-        }
 
-        const position = mainFlowRef.current.screenToFlowPosition({
-            x: event.clientX,
-            y: event.clientY,
-        });
-
-        setNodes(nds => [
-            ...nds,
-            {
+            const position = mainFlowRef.current.screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY,
+            });
+            const newNode: Node = {
                 id: getId(),
                 type,
                 position,
+                data: moduleMeta ? { ...moduleMeta, label: moduleMeta.name ?? "Module" } : {},
+            };
+            const finalNode = assignParent(newNode, getNodes());
+            setNodes(nds => [...nds, finalNode]);
+        },
+        [setNodes, getNodes],
+    );
+
+    const onModuleDrop = useCallback(
+        (event: React.DragEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!moduleFlowRef.current) return;
+
+            const type = event.dataTransfer.getData("application/reactflow");
+            if (!type) return;
+
+            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+            let moduleMeta: any = null;
+
+            try {
+                if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
+            } catch {}
+
+            const position = moduleFlowRef.current.screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY,
+            });
+
+            const newNode: Node = {
+                id: getId(),
+                type: type,
+                position,
                 data: moduleMeta
-                    ? { ...moduleMeta, label: moduleMeta.name ?? "Module" }
+                    ? {
+                          ...moduleMeta,
+                          label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
+                      }
                     : {},
-            },
-        ]);
-    }, [setNodes]);
+            };
 
-    const onModuleDrop = useCallback((event: React.DragEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
+            setModuleStack(stack =>
+                updateActiveModule(stack, current => {
+                    const finalNode = assignParent(newNode, current.nodes);
+                    return {
+                        ...current,
+                        nodes: [...current.nodes, finalNode],
+                    };
+                }),
+            );
+        },
+        [setModuleStack, assignParent],
+    );
 
-        if (!moduleFlowRef.current) return;
-
-        const type = event.dataTransfer.getData("application/reactflow");
-        if (!type) return;
-
-        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-        let moduleMeta: any = null;
-
-        try {
-            if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
-        } catch { }
-
-        const position = moduleFlowRef.current.screenToFlowPosition({
-            x: event.clientX,
-            y: event.clientY,
-        });
-
-        const newNode: Node = {
-            id: getId(),
-            type: type,
-            position,
-            data: moduleMeta
-                ? {
-                    ...moduleMeta,
-                    label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module"
-                }
-                : {},
-        };
-
-        setModuleStack(stack =>
-            updateActiveModule(stack, current => ({
-                ...current,
-                nodes: [...current.nodes, newNode],
-            }))
-        );
-    }, [setModuleStack]);
-
-    // -------------------------------------------------------------------------
-    // 3. Selection & Highlights
-    // -------------------------------------------------------------------------
     const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
     const [highlightEdges, setHighlightEdges] = useState<Set<string>>(new Set());
 
@@ -173,7 +236,7 @@ export function useGraphInteraction({
                 });
             });
         },
-        [setNodes, setEdges]
+        [setNodes, setEdges],
     );
 
     const clearSelection = useCallback(() => {
@@ -185,18 +248,6 @@ export function useGraphInteraction({
 
     // Derived selections
     const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
-
-    // Handle nested node dragging (Repeat Logic)
-    // useReactFlow required context? No, useRepeatSystem uses getNodes() from useReactFlow 
-    // inside it? The original code calls useReactFlow inside FlowContent.
-    // useRepeatSystem(nodes, edges, setNodes, getNodes)
-    // We need 'getNodes' from useReactFlow. 
-    // BUT useReactFlow must be used inside ReactFlowProvider. 
-    // FlowEditor has <ReactFlowProvider><FlowContent /></ReactFlowProvider>.
-    // So this hook will be used inside FlowContent, so useReactFlow IS safe.
-    const { getNodes } = useReactFlow();
-    const { onNodeDragStop, assignParent } = useRepeatSystem(nodes, edges, setNodes, getNodes);
-
     return {
         mainFlowRef,
         moduleFlowRef,
@@ -212,6 +263,9 @@ export function useGraphInteraction({
         clearSelection,
         selectedNodeIds,
         onNodeDragStop,
-        assignParent, // might not be used directly by UI but needed for logic
+        onNodeDragStart,
+        onModuleNodeDragStart,
+        onModuleNodeDragStop,
+        assignParent,
     };
 }

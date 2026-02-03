@@ -24,6 +24,8 @@ export interface LayerDefinition<D extends LayerData> {
     diagramLabel?: string;
     diagramFamily?: "input" | "output" | "merge" | "activation" | "block" | "other";
     handles?: HandleSpec | HandleFactory<D>;
+    // For container type nodes where they initialize the child internally. 
+    encapsulatesChildInit?: boolean | undefined;
     // Pure functions
     // shapeVerifier: checks compatibility of incoming shapes/params, must NOT modify data
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };

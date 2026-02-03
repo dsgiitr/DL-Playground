@@ -1,7 +1,6 @@
-import { Background, ReactFlow, type ReactFlowInstance } from "@xyflow/react";
-import { type Node, type Edge, type OnNodesChange, type OnEdgesChange, type OnConnect } from "@xyflow/react";
-import { nodeTypes } from "../../../types/nodeTypes";
+import { Background, ReactFlow, type Edge, type Node, type OnConnect, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from "@xyflow/react";
 import { edgeTypes } from "../../../types/edgeTypes";
+import { nodeTypes } from "../../../types/nodeTypes";
 
 const fitViewOptions = { padding: 0.2 };
 const defaultEdgeOptions = { animated: true };
@@ -12,7 +11,8 @@ type EditorCanvasProps = {
     onNodesChange: OnNodesChange;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
-    onNodeDragStop: any; // Type from useRepeatSystem
+    onNodeDragStop: any; // Type from useContainerSystem
+    onNodeDragStart: any;
     onMainDrop: (e: React.DragEvent) => void;
     onDragOver: (e: React.DragEvent) => void;
     onSelectionChange: any;
@@ -27,6 +27,7 @@ export function EditorCanvas({
     onEdgesChange,
     onConnect,
     onNodeDragStop,
+    onNodeDragStart,
     onMainDrop,
     onDragOver,
     onSelectionChange,
@@ -43,6 +44,7 @@ export function EditorCanvas({
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDragStop={onNodeDragStop}
+                    onNodeDragStart={onNodeDragStart}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
                     fitView

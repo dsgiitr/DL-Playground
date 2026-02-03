@@ -6,8 +6,8 @@ import { buildGraphIR } from "./graphIR";
 export type ModuleHandles = {
     inputs: string[];
     outputs: string[];
-    // internal nodes 
-    // internal edges 
+    // internal nodes
+    // internal edges
     // external reference: [ids]
 };
 
@@ -29,7 +29,7 @@ export const resolveModuleName = (input: string, fallback: string) => input.trim
 export const updateModuleRefData = (
     node: Node,
     moduleId: string,
-    updates: Partial<{ name: string; version: string; handles: ModuleHandles }>
+    updates: Partial<{ name: string; version: string; handles: ModuleHandles }>,
 ) => {
     if (node.type !== "module_ref") return node;
     const data = (node.data || {}) as { moduleId?: string };
@@ -112,9 +112,11 @@ export function deleteModule(id: string) {
     persist(filtered);
 }
 
-export function saveModule(moduleInput: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string }): SavedModule {
+export function saveModule(
+    moduleInput: Omit<SavedModule, "id" | "createdAt" | "updatedAt"> & { id?: string },
+): SavedModule {
     const now = new Date().toISOString();
-    // subgraph traveral: find custom 
+    // subgraph traveral: find custom
     const next: SavedModule = {
         ...moduleInput,
         id: moduleInput.id || `mod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -157,7 +159,7 @@ export const saveExistingModule = (session: ModuleEditSession, nameInput: string
             name: nextName,
             version: nextVersion,
             handles: session.module.handles,
-        })
+        }),
     );
     return { saved, updatedNodes, nextName, nextVersion };
 };

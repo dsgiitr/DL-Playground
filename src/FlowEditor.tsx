@@ -60,6 +60,7 @@ function FlowContent() {
         edges,
         setNodes,
         setEdges,
+        moduleStack: modSys.moduleStack,
         setModuleStack: modSys.setModuleStack
     });
 
@@ -68,7 +69,7 @@ function FlowContent() {
         onMainDrop, onModuleDrop, onDragOver,
         highlightNodes, highlightEdges, setHighlightNodes, setHighlightEdges,
         onSelectionChange, clearSelection, selectedNodeIds,
-        onConnect, onNodeDragStop
+        onConnect, onNodeDragStop, onNodeDragStart, onModuleNodeDragStart, onModuleNodeDragStop
     } = interaction;
 
     // Derived States for Visualization
@@ -233,6 +234,7 @@ function FlowContent() {
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeDragStop={onNodeDragStop}
+                    onNodeDragStart={onNodeDragStart}
                     onMainDrop={onMainDrop}
                     onDragOver={onDragOver}
                     onSelectionChange={onSelectionChange}
@@ -339,6 +341,8 @@ function FlowContent() {
                     onDragOver={onDragOver}
                     saveExistingModuleChanges={modSys.saveExistingModuleChanges}
                     saveModuleAsNew={modSys.saveModuleAsNew}
+                    onNodeDragStart={onModuleNodeDragStart}
+                    onNodeDragStop={onModuleNodeDragStop}
                 />
             )}
 
@@ -366,3 +370,7 @@ export default function Flow() {
         </ReactFlowProvider>
     );
 }
+// function computeContract(selectedIds: Set<string>) {
+//     throw new Error("Function not implemented.");
+// }
+

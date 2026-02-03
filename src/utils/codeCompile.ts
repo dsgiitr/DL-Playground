@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
-import { LAYER_REGISTRY } from "./layerRegistry";
 import type { ModuleRefData } from "../nodes/ModuleRefNode";
+import { LAYER_REGISTRY } from "./layerRegistry";
 import { getModule } from "./moduleRegistry";
 
 export type CodeSpan = {
@@ -30,13 +30,18 @@ export function getRootGraph(nodes: Node[], edges: Edge[]) {
     return { rootNodes: nodes, rootEdges: edges };
 }
 
-export function createCustomComponentDAG(id: string, nodes: Node[], order: string[], color: Record<string, number>): boolean { // Color: 0 for unvisited, 1 for visiting, 2 for done visiting
+export function createCustomComponentDAG(
+    id: string,
+    nodes: Node[],
+    order: string[],
+    color: Record<string, number>,
+): boolean {
+    // Color: 0 for unvisited, 1 for visiting, 2 for done visiting
 
     color[id] = 1; // Visiting
 
     let ok: boolean = true;
     nodes.forEach(child => {
-
         if (child.type && child.type === "module_ref") {
             const module_data = child.data as ModuleRefData;
             const module_id = module_data.moduleId as string;
@@ -55,23 +60,19 @@ export function createCustomComponentDAG(id: string, nodes: Node[], order: strin
     color[id] = 2; // Visited
 
     return ok;
-
 }
 
 // This function works on the module level code generator and uses the generate main code function to generate code for individual modules.
 // It first sorts the module ids based on the way they should be arranged in the code and then writes the code.
 export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenResult {
-    // console.log("Starting recursive code generation"); 
     let order: string[] = [];
     let color: Record<string, number> = {};
     createCustomComponentDAG("0", nodes, order, color);
 
-    // console.log("createCustomComponentDAG response:", {ok, order});
-
     // *
     // For each module id, get it's code, shift it's lines by the number of previous lines
     // and add it to the main codegenresult object.
-    // 
+    //
     // /
 
     const lines: string[] = [];
@@ -88,8 +89,8 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
     let lineOffset: number = lines.length;
 
     order.forEach(moduleId => {
-
-        if (moduleId === "0") { // Accidental clash?
+        if (moduleId === "0") {
+            // Accidental clash?
             moduleNodes = nodes;
             moduleEdges = edges;
             moduleName = "generatedModel";
@@ -113,19 +114,16 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
 
         generatedCode.code += moduleCode.code;
         generatedCode.spans.push(...moduleCode.spans);
-        lineOffset += moduleCode.code.split('\n').length;
+        lineOffset += moduleCode.code.split("\n").length;
     });
-
-    // console.log("Code response:", generatedCode);
     return generatedCode;
 }
-
 
 // Converts graphs into 3 components: initlines, forward lines, returnVar
 export function compileGraphToScript(
     nodes: Node[],
     edges: Edge[],
-    variablePrefix: string = "" // Prefix for local variables to avoid namespace collisions
+    variablePrefix: string = "", // Prefix for local variables to avoid namespace collisions
 ) {
     if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
     const initLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
@@ -188,6 +186,8 @@ export function compileGraphToScript(
     nodes
         .filter(n => (incomingEdges[n.id] ?? []).length === 0)
         .forEach(n => {
+            const parentIsPresent = n.parentId && nodes.some(p => p.id === n.parentId);
+            if (parentIsPresent) return;
             const outs = outgoingEdges[n.id] ?? [];
             outs.forEach((e, idx) => {
                 const name = edgeLabel(e, `in_${n.id}_${idx}`);
@@ -198,15 +198,21 @@ export function compileGraphToScript(
             });
         });
 
-    sortedNodes.forEach((node) => {
+    sortedNodes.forEach(node => {
         const layerName = `${sanitizeIdent(node.id)}_layer`;
         const type = node.type;
-        if (type && LAYER_REGISTRY[type]) {
-            const ClassRef = LAYER_REGISTRY[type];
+        if (!type || !LAYER_REGISTRY[type]) return;
+
+        const ClassRef = LAYER_REGISTRY[type];
+        const parentNode = node.parentId ? nodes.find(n => n.id === node.parentId) : null;
+        const parentClass = parentNode ? LAYER_REGISTRY[parentNode.type!] : null;
+        const shouldGenerateInit = !parentNode || !parentClass || !parentClass.encapsulatesChildInit;
+        if (shouldGenerateInit) {
             const line = ClassRef.getInitCode(node.data, layerName);
-
             initLines.push({ text: `        ${line}`, span: { kind: "init", nodeId: node.id } });
-
+        }
+        const shouldGenerateForward = !parentNode;
+        if (shouldGenerateForward) {
             const inEdges = incomingEdges[node.id];
             const inputNames =
                 inEdges.length === 0 ? ["x"] : inEdges.map((e, idx) => edgeLabel(e, `in_${e.source || idx}`));
@@ -217,15 +223,15 @@ export function compileGraphToScript(
             const sourceHandles = handlesSpec?.sources && handlesSpec.sources.length ? handlesSpec.sources : [];
             const outputNames = (sourceHandles || []).length
                 ? sourceHandles.map((handleId, idx) => {
-                    const matching = outEdges.find(e => e.sourceHandle === handleId);
-                    const base = matching
-                        ? edgeLabel(matching, `out_${node.id}_${handleId}`)
-                        : `out_${node.id}_${idx}`;
-                    return sanitizeIdent(base);
-                })
+                      const matching = outEdges.find(e => e.sourceHandle === handleId);
+                      const base = matching
+                          ? edgeLabel(matching, `out_${node.id}_${handleId}`)
+                          : `out_${node.id}_${idx}`;
+                      return sanitizeIdent(base);
+                  })
                 : outEdges.length === 0
-                    ? [sanitizeIdent(`out_${node.id}`)]
-                    : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
+                  ? [sanitizeIdent(`out_${node.id}`)]
+                  : outEdges.map((e, idx) => edgeLabel(e, `out_${node.id}_${idx}`));
             nodeOutputMap[node.id] = outputNames;
             const forward_line = ClassRef.getForwardCode(node.data, layerName, inputNames, outputNames);
 
@@ -235,7 +241,11 @@ export function compileGraphToScript(
             });
         }
     });
-    const terminalNodes = sortedNodes.filter(n => outgoingEdges[n.id].length === 0);
+    const terminalNodes = sortedNodes.filter(n => {
+        const isTopLevel = !n.parentId || !nodes.some(p => p.id === n.parentId);
+        const hasNoOutputs = (outgoingEdges[n.id] || []).length === 0;
+        return isTopLevel && hasNoOutputs;
+    });
     let returnVar = "x";
     const allTerminalOutputs: string[] = [];
     terminalNodes.forEach(n => {

@@ -38,6 +38,8 @@ type ModuleEditorOverlayProps = {
     onDragOver: (event: React.DragEvent) => void;
     saveExistingModuleChanges: () => void;
     saveModuleAsNew: () => void;
+    onNodeDragStart: any;
+    onNodeDragStop: any;
 };
 
 export function ModuleEditorOverlay({
@@ -54,6 +56,8 @@ export function ModuleEditorOverlay({
     setModuleNameWarning,
     onModuleDrop,
     onDragOver,
+    onNodeDragStart,
+    onNodeDragStop,
     saveExistingModuleChanges,
     saveModuleAsNew,
 }: ModuleEditorOverlayProps) {
@@ -236,6 +240,8 @@ export function ModuleEditorOverlay({
                                 key={`module-editor-${openModule.module.id}-${openModule.module.updatedAt || ""}`}
                                 nodes={openModule.nodes}
                                 edges={openModule.edges}
+                                onNodeDragStart={onNodeDragStart}
+                                onNodeDragStop={onNodeDragStop}
                                 onInit={instance => {
                                     moduleFlowRef.current = instance;
                                     instance.fitView({ padding: 0.2, includeHiddenNodes: true });

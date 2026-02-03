@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
+import { Handle, Position, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState, type ComponentType } from "react";
-import { Handle, Position, useReactFlow, type NodeProps, type Node, type Edge } from "@xyflow/react";
+import { ParamsList, type FieldType, type LayerDefinition } from "../node_gen/BaseClass";
 import { getModule } from "../utils/moduleRegistry";
-import { type LayerDefinition, type FieldType, ParamsList } from "../node_gen/BaseClass";
-import { verifyShapes } from "../utils/shape_verifier";
+//import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";  //LayerData was unused
 import type { ModuleHandles } from "../utils/moduleRegistry";
+import { verifyShapes } from "../utils/shape_verifier";
 
 export type ModuleRefData = {
     moduleId?: string;
@@ -57,7 +58,6 @@ function toHandles(handles?: ModuleHandles): Handles {
     const outputs = handles.outputs?.length ? handles.outputs : ["out"];
     return { targets: inputs, sources: outputs };
 }
-
 const ModuleRefComponent: ComponentType<NodeProps<ModuleRefNodeType>> = ({ id, data, isConnectable }) => {
     const { setNodes, setEdges } = useReactFlow();
     const [isExpanded, setIsExpanded] = useState(false);
