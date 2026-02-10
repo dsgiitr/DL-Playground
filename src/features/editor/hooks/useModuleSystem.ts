@@ -9,12 +9,7 @@ import {
     saveModule,
     type SavedModule,
 } from "../../../utils/moduleRegistry";
-import {
-    getActiveModule,
-    type OpenModule,
-    popModule,
-    pushModule,
-} from "../../../utils/stackNavigation";
+import { getActiveModule, type OpenModule, popModule, pushModule } from "../../../utils/stackNavigation";
 import { sanitizeIdent } from "../../../utils/codeCompile";
 import { applyGraphIR, buildGraphIR } from "../../../utils/graphIR";
 import type { ModuleRefData } from "../../../nodes/ModuleRefNode";
@@ -45,7 +40,75 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
     const [paramToVariableMap, setParamToVariableMap] = useState<Record<string, string>>({});
     const [pendingModuleCopyName, setPendingModuleCopyName] = useState("");
     const [moduleNameInput, setModuleNameInput] = useState("");
-
+    useEffect(() => {
+        if (showSaveModal) {
+            setPendingModuleName("");
+            setPendingVariables({});
+            setParamToVariableMap({});
+        }
+    }, [showSaveModal]);
+    const addVariable = useCallback(() => {
+        setPendingVariables(prev => {
+            const count = Object.keys(prev).length + 1;
+            let newName = `var${count}`;
+            while (prev[newName]) {
+                newName = `var${Math.floor(Math.random() * 1000)}`;
+            }
+            return { ...prev, [newName]: { type: "number", required: true } };
+        });
+    }, []);
+    const renameVariable = useCallback((oldName: string, newName: string) => {
+        if (!newName || newName == oldName) return;
+        setPendingVariables(prevVars => {
+            if (prevVars[newName]) {
+                alert(`Variable "${newName}" already exists`);
+                return prevVars;
+            }
+            const newVars = { ...prevVars };
+            newVars[newName] = newVars[oldName];
+            delete newVars[oldName];
+            return newVars;
+        });
+        setParamToVariableMap(prevMap => {
+            const newMap = { ...prevMap };
+            let updated = false;
+            Object.keys(newMap).forEach(key => {
+                if (newMap[key] === oldName) {
+                    newMap[key] = newName;
+                    updated = true;
+                }
+            });
+            return updated ? newMap : prevMap;
+        });
+    }, []);
+    const deleteVariable = useCallback((varName: string) => {
+        setPendingVariables(prev => {
+            const next = { ...prev };
+            delete next[varName];
+            return next;
+        });
+        setParamToVariableMap(prevMap => {
+            const newMap = { ...prevMap };
+            Object.keys(newMap).forEach(key => {
+                if (newMap[key] === varName) {
+                    delete newMap[key];
+                }
+            });
+            return newMap;
+        });
+    }, []);
+    const updateParamMapping = useCallback((paramKey: string, variableName: string, spec?: any) => {
+        setParamToVariableMap(prev => ({ ...prev, [paramKey]: variableName }));
+        // If user selects a variable which doesnt exist yet, create it
+        if (variableName && spec) {
+            setPendingVariables(prev => {
+                if (!prev[variableName]) {
+                    return { ...prev, [variableName]: spec };
+                }
+                return prev;
+            });
+        }
+    }, []);
     useEffect(() => {
         setModuleNameInput(openModule?.module?.name || "");
     }, [openModule?.module?.name]);
@@ -86,7 +149,11 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
             });
 
             const applied = {
-                nodes: nodesWithVars.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })),
+                nodes: nodesWithVars.map(n => ({
+                    ...n,
+                    selected: false,
+                    data: { ...(n.data || {}), __highlight: undefined },
+                })),
                 edges: rawEdges.map(e => ({ ...e, selected: false })),
             };
 
@@ -99,7 +166,7 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
                     nodes: applied.nodes,
                     edges: applied.edges,
                     fromNodeId: custom.detail?.nodeId,
-                })
+                }),
             );
             setShowModuleDiagram(false);
         };
@@ -107,7 +174,7 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
         return () => window.removeEventListener("module-open", handler as EventListener);
     }, []);
 
-    const dedupe = <T,>(arr: T[]) => Array.from(new Set(arr));
+    const dedupe = <T>(arr: T[]) => Array.from(new Set(arr));
 
     const computeModuleHandles = useCallback(
         (selectedIds: Set<string>): ModuleHandles => {
@@ -118,7 +185,7 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
                 outputs: dedupe(outgoing.map(e => e.sourceHandle || "out")),
             };
         },
-        [edges]
+        [edges],
     );
 
     const handleSaveModule = useCallback(() => {
@@ -185,7 +252,9 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
         }
 
         const sanitizedName = sanitizeIdent(resolveModuleName(name, ""));
-        const existingNamesExcludingCurrent = modules.filter(m => m.id !== openModule.module.id).map(m => sanitizeIdent(resolveModuleName(m.name, "")));
+        const existingNamesExcludingCurrent = modules
+            .filter(m => m.id !== openModule.module.id)
+            .map(m => sanitizeIdent(resolveModuleName(m.name, "")));
 
         if (existingNamesExcludingCurrent.includes(sanitizedName)) {
             setModuleNameWarning(true);
@@ -228,18 +297,21 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
         setModuleStack(popModule);
     }, [openModule, pendingModuleCopyName]);
 
-    const handleDeleteModule = useCallback((id: string) => {
-        deleteModule(id);
-        const updatedModules = listModules();
-        setModules(updatedModules);
-        setNodes(nds => {
-            const remaining = nds.filter(n => {
-                const data = (n.data || {}) as { moduleId?: string };
-                return data.moduleId !== id;
+    const handleDeleteModule = useCallback(
+        (id: string) => {
+            deleteModule(id);
+            const updatedModules = listModules();
+            setModules(updatedModules);
+            setNodes(nds => {
+                const remaining = nds.filter(n => {
+                    const data = (n.data || {}) as { moduleId?: string };
+                    return data.moduleId !== id;
+                });
+                return remaining;
             });
-            return remaining;
-        });
-    }, [setNodes]);
+        },
+        [setNodes],
+    );
 
     return {
         modules,
@@ -261,17 +333,26 @@ export function useModuleSystem({ nodes, edges, setNodes }: UseModuleSystemProps
         setModuleNameWarning,
 
         // Form States
-        pendingModuleName, setPendingModuleName,
-        pendingVariables, setPendingVariables,
-        paramToVariableMap, setParamToVariableMap,
-        pendingModuleCopyName, setPendingModuleCopyName,
-        moduleNameInput, setModuleNameInput,
+        pendingModuleName,
+        setPendingModuleName,
+        pendingVariables,
+        // setPendingVariables,
+        paramToVariableMap,
+        // setParamToVariableMap,
 
+        pendingModuleCopyName,
+        setPendingModuleCopyName,
+        moduleNameInput,
+        setModuleNameInput,
+        addVariable,
+        renameVariable,
+        deleteVariable,
+        updateParamMapping,
         // Actions
         handleSaveModule,
         saveExistingModuleChanges,
         saveModuleAsNew,
         handleReturnCopyModule,
-        handleDeleteModule
+        handleDeleteModule,
     };
 }

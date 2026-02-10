@@ -1,20 +1,32 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { GraphIR } from "../types/graph";
-import type { FieldSpec } from '../node_gen/BaseClass';
+import type { FieldSpec } from "../node_gen/BaseClass";
 import { buildGraphIR } from "./graphIR";
 
 export type ModuleHandles = {
     inputs: string[];
     outputs: string[];
-    // internal nodes
-    // internal edges
-    // external reference: [ids]
 };
 
 export type ModuleEditSession = {
     module: SavedModule;
     nodes: Node[];
     edges: Edge[];
+};
+
+export type SavedModule = {
+    id: string;
+    name: string;
+    version: string;
+    graph: GraphIR;
+    handles: ModuleHandles;
+    internalNodes?: Node[];
+    internalEdges?: Edge[];
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    variableSchema?: Record<string, FieldSpec>;
+    variableMap?: Record<string, Array<{ nodeId: string; paramName: string }>>;
 };
 
 export const nextIncrementModuleVersion = (version: string) => {
@@ -35,21 +47,6 @@ export const updateModuleRefData = (
     const data = (node.data || {}) as { moduleId?: string };
     if (data.moduleId !== moduleId) return node;
     return { ...node, data: { ...node.data, ...updates } };
-};
-
-export type SavedModule = {
-    id: string;
-    name:string;
-    version: string;
-    graph: GraphIR;
-    handles: ModuleHandles;
-    internalNodes?: Node[];
-    internalEdges?: Edge[];
-    description?: string;
-    createdAt: string;
-    updatedAt: string;
-    variableSchema?: Record<string, FieldSpec>;
-    variableMap?: Record<string, Array<{ nodeId: string; paramName: string; }>>;
 };
 
 const STORAGE_KEY = "customModules";

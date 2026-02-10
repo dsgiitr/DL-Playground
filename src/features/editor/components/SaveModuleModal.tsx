@@ -6,10 +6,14 @@ type SaveModuleModalProps = {
     pendingModuleName: string;
     setPendingModuleName: (val: string) => void;
     pendingVariables: Record<string, FieldSpec>;
-    setPendingVariables: (val: Record<string, FieldSpec>) => void;
+    // setPendingVariables: (val: Record<string, FieldSpec>) => void;
     paramToVariableMap: Record<string, string>;
-    setParamToVariableMap: (val: React.SetStateAction<Record<string, string>>) => void; // Allow functional update to match hook
+    // setParamToVariableMap: (val: React.SetStateAction<Record<string, string>>) => void; // Allow functional update to match hook
     promotableParams: Array<{ nodeId: string; nodeLabel: string; paramName: string; spec: any }>;
+    onAddVariable: () => void;
+    onRenameVariable: (oldName: string, newName: string) => void;
+    onDeleteVariable: (varName: string) => void;
+    onUpdateMapping: (paramKey: string, variableName: string, spec?: any) => void;
 };
 
 export function SaveModuleModal({
@@ -18,10 +22,14 @@ export function SaveModuleModal({
     pendingModuleName,
     setPendingModuleName,
     pendingVariables,
-    setPendingVariables,
+    // setPendingVariables,
     paramToVariableMap,
-    setParamToVariableMap,
-    promotableParams
+    // setParamToVariableMap,
+    promotableParams,
+    onAddVariable,
+    onRenameVariable,
+    onDeleteVariable,
+    onUpdateMapping
 }: SaveModuleModalProps) {
     return (
         <div
@@ -84,15 +92,38 @@ export function SaveModuleModal({
                         }}
                     />
                 </label>
-                <div style={{ borderTop: "1px solid #333", paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
-                    <div style={{ flexShrink: 0 }}>
-                        <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px" }}>Module Variables</h3>
+                {/* Variables Section*/}
+                <div style={{ flexShrink: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: 0 }}>Module Variables</h3>
+                        <button
+                            onClick={onAddVariable}
+                            style={{
+                                background: '#333',
+                                border: '1px solid #555',
+                                color: '#ddd',
+                                borderRadius: 4,
+                                fontSize: 10,
+                                padding: '4px 8px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            + Add Variable
+                        </button>
+                    </div>
+                    <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                         {Object.entries(pendingVariables).map(([varName, spec]) => (
                             <div key={varName} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                                 <input
                                     type="text"
-                                    value={varName}
-                                    onChange={() => { }} // Disabled renaming for simplicity as per original code comment or impl
+                                    defaultValue={varName}
+                                    onBlur={(e) => onRenameVariable(varName, e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            onRenameVariable(varName, e.currentTarget.value);
+                                            e.currentTarget.blur();
+                                        }
+                                    }}
                                     style={{
                                         background: "#111",
                                         border: "1px solid #333",
@@ -100,68 +131,67 @@ export function SaveModuleModal({
                                         padding: "4px 6px",
                                         color: "#e6edf3",
                                         fontSize: 12,
+                                        flex: 1
                                     }}
                                 />
-                                <span style={{ color: '#888', fontSize: 12 }}>{spec.type}</span>
-                                <button onClick={() => {
-                                    const newVars = { ...pendingVariables };
-                                    delete newVars[varName];
-                                    setPendingVariables(newVars);
-                                    // also remove from mappings
-                                    setParamToVariableMap(map => {
-                                        const newMap = { ...map };
-                                        for (const key in newMap) {
-                                            if (newMap[key] === varName) {
-                                                delete newMap[key];
-                                            }
-                                        }
-                                        return newMap;
-                                    });
-                                }} style={{ marginLeft: 'auto', background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10 }}>Delete</button>
+                                <span style={{ color: '#888', fontSize: 12, width: 40 }}>{spec.type}</span>
+                                <button
+                                    onClick={() => onDeleteVariable(varName)}
+                                    style={{
+                                        marginLeft: 'auto',
+                                        background: '#333',
+                                        border: '1px solid #555',
+                                        color: '#ff6b6b',
+                                        borderRadius: 4,
+                                        fontSize: 10,
+                                        padding: '4px 8px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Delete
+                                </button>
                             </div>
                         ))}
-                        <button onClick={() => {
-                            const newVarName = `var${Object.keys(pendingVariables).length + 1}`;
-                            setPendingVariables({ ...pendingVariables, [newVarName]: { type: 'number', required: true } });
-                        }} style={{ background: '#333', border: '1px solid #555', color: '#ddd', borderRadius: 4, fontSize: 10, padding: '4px 8px' }}>Add Variable</button>
+                        {Object.keys(pendingVariables).length === 0 && (
+                            <div style={{ color: '#555', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>
+                                No variables defined.
+                            </div>
+                        )}
                     </div>
-                    <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                        <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
-                        <div style={{ overflowY: "auto", paddingRight: 10 }}>
-                            {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
-                                const key = `${nodeId}::${paramName}`;
-                                const assignedVar = paramToVariableMap[key];
-                                return (
-                                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                                        <span style={{ color: "#e6edf3", fontSize: 12, flex: 1 }}>{nodeLabel}: {spec.label || paramName}</span>
-                                        <select
-                                            value={assignedVar || ""}
-                                            onChange={e => {
-                                                const newVar = e.target.value;
-                                                setParamToVariableMap(map => ({ ...map, [key]: newVar }));
-                                                // if this is the first time a var is used, adopt the spec
-                                                if (newVar && !pendingVariables[newVar]) {
-                                                    setPendingVariables({ ...pendingVariables, [newVar]: spec });
-                                                }
-                                            }}
-                                            style={{
-                                                background: "#111",
-                                                border: "1px solid #333",
-                                                borderRadius: 4,
-                                                padding: "4px 6px",
-                                                color: "#e6edf3",
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            <option value="">Not Linked</option>
-                                            {Object.keys(pendingVariables).map(varName => (
-                                                <option key={varName} value={varName}>{varName}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                </div>
+                {/* Mappings Section */}
+                <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
+                    <div style={{ overflowY: "auto", paddingRight: 10 }}>
+                        {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
+                            const key = `${nodeId}::${paramName}`;
+                            const assignedVar = paramToVariableMap[key];
+                            return (
+                                <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                    <span style={{ color: "#e6edf3", fontSize: 12, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        <span style={{ color: '#888' }}>{nodeLabel}:</span> {spec.label || paramName}
+                                    </span>
+                                    <select
+                                        value={assignedVar || ""}
+                                        onChange={e => onUpdateMapping(key, e.target.value, spec)}
+                                        style={{
+                                            background: "#111",
+                                            border: "1px solid #333",
+                                            borderRadius: 4,
+                                            padding: "4px 6px",
+                                            color: "#e6edf3",
+                                            fontSize: 12,
+                                            maxWidth: '120px'
+                                        }}
+                                    >
+                                        <option value="">(Static)</option>
+                                        {Object.keys(pendingVariables).map(varName => (
+                                            <option key={varName} value={varName}>{varName}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4, flexShrink: 0 }}>
@@ -194,6 +224,6 @@ export function SaveModuleModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

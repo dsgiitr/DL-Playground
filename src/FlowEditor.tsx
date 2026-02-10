@@ -308,10 +308,14 @@ function FlowContent() {
                     pendingModuleName={modSys.pendingModuleName}
                     setPendingModuleName={modSys.setPendingModuleName}
                     pendingVariables={modSys.pendingVariables}
-                    setPendingVariables={modSys.setPendingVariables}
+                    // setPendingVariables={modSys.setPendingVariables}
                     paramToVariableMap={modSys.paramToVariableMap}
-                    setParamToVariableMap={modSys.setParamToVariableMap}
+                    // setParamToVariableMap={modSys.setParamToVariableMap}
                     promotableParams={promotableParams}
+                    onAddVariable={modSys.addVariable}
+                    onDeleteVariable={modSys.deleteVariable}
+                    onRenameVariable={modSys.renameVariable}
+                    onUpdateMapping={modSys.updateParamMapping}
                 />
             )}
 
