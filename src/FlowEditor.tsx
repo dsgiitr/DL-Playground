@@ -52,7 +52,7 @@ function FlowContent() {
     });
 
     // 5. Module System
-    const modSys = useModuleSystem({ nodes, edges, setNodes });
+    const modSys = useModuleSystem({ nodes, edges, setNodes, getNodeSchema: (type) => LAYER_REGISTRY[type]?.paramSchema });
 
     // 6. Interaction (Drag/Drop, Selection)
     const interaction = useGraphInteraction({
@@ -90,22 +90,6 @@ function FlowContent() {
         if (!highlightNodes.size) return nodes;
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
-
-    const promotableParams = useMemo(() => {
-        return selectedNodeIds.flatMap(nodeId => {
-            const node = nodes.find(n => n.id === nodeId);
-            if (!node || !node.type) return [];
-            const layerDef = LAYER_REGISTRY[node.type];
-            if (!layerDef) return [];
-            return Object.keys(layerDef.paramSchema).map(paramName => ({
-                nodeId: node.id,
-                nodeLabel: layerDef.label,
-                paramName,
-                spec: layerDef.paramSchema[paramName],
-            }));
-        });
-    }, [selectedNodeIds, nodes]);
-
 
     // Helper for generating code toggle
     const handleGenerateCode = () => layout.setShowLiveCode(v => !v);
@@ -311,7 +295,7 @@ function FlowContent() {
                     // setPendingVariables={modSys.setPendingVariables}
                     paramToVariableMap={modSys.paramToVariableMap}
                     // setParamToVariableMap={modSys.setParamToVariableMap}
-                    promotableParams={promotableParams}
+                    promotableParams={modSys.promotableParams}
                     onAddVariable={modSys.addVariable}
                     onDeleteVariable={modSys.deleteVariable}
                     onRenameVariable={modSys.renameVariable}

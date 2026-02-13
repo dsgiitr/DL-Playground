@@ -7,13 +7,13 @@ type SaveModuleModalProps = {
     setPendingModuleName: (val: string) => void;
     pendingVariables: Record<string, FieldSpec>;
     // setPendingVariables: (val: Record<string, FieldSpec>) => void;
-    paramToVariableMap: Record<string, string>;
+    paramToVariableMap: Record<string, Record<string, string>>;
     // setParamToVariableMap: (val: React.SetStateAction<Record<string, string>>) => void; // Allow functional update to match hook
     promotableParams: Array<{ nodeId: string; nodeLabel: string; paramName: string; spec: any }>;
     onAddVariable: () => void;
     onRenameVariable: (oldName: string, newName: string) => void;
     onDeleteVariable: (varName: string) => void;
-    onUpdateMapping: (paramKey: string, variableName: string, spec?: any) => void;
+    onUpdateMapping: (nodeId: string, paramName: string, variableName: string, spec?: any) => void;
 };
 
 export function SaveModuleModal({
@@ -154,7 +154,7 @@ export function SaveModuleModal({
                         ))}
                         {Object.keys(pendingVariables).length === 0 && (
                             <div style={{ color: '#555', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>
-                                No variables defined.
+                                No public variables defined.
                             </div>
                         )}
                     </div>
@@ -162,36 +162,46 @@ export function SaveModuleModal({
                 {/* Mappings Section */}
                 <div style={{ borderTop: "1px solid #333", paddingTop: 12, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                     <h3 style={{ color: "#cbd5e1", fontSize: 14, margin: "0 0 10px", flexShrink: 0 }}>Parameter Mappings</h3>
-                    <div style={{ overflowY: "auto", paddingRight: 10 }}>
-                        {promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
-                            const key = `${nodeId}::${paramName}`;
-                            const assignedVar = paramToVariableMap[key];
-                            return (
-                                <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                                    <span style={{ color: "#e6edf3", fontSize: 12, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        <span style={{ color: '#888' }}>{nodeLabel}:</span> {spec.label || paramName}
-                                    </span>
-                                    <select
-                                        value={assignedVar || ""}
-                                        onChange={e => onUpdateMapping(key, e.target.value, spec)}
-                                        style={{
-                                            background: "#111",
-                                            border: "1px solid #333",
-                                            borderRadius: 4,
-                                            padding: "4px 6px",
-                                            color: "#e6edf3",
-                                            fontSize: 12,
-                                            maxWidth: '120px'
-                                        }}
-                                    >
-                                        <option value="">(Static)</option>
-                                        {Object.keys(pendingVariables).map(varName => (
-                                            <option key={varName} value={varName}>{varName}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            );
-                        })}
+                    <div style={{ overflowY: "auto", paddingRight: 10, minHeight: '100px' }}>
+                        {promotableParams.length > 0 ? (
+                            promotableParams.map(({ nodeId, nodeLabel, paramName, spec }) => {
+                                const assignedVar = paramToVariableMap[nodeId]?.[paramName] || "";
+                                const displayLabel = spec.label || paramName;
+                                const key = `${nodeId}::${paramName}`;
+                                return (
+                                    <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                                            <div style={{ color: '#888', fontSize: 11 }}>{nodeLabel}</div>
+                                            <div style={{ color: '#e6edf3', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {displayLabel}
+                                            </div>
+                                        </div>
+                                        <select
+                                            value={assignedVar || ""}
+                                            onChange={e => onUpdateMapping(nodeId, paramName, e.target.value, spec)}
+                                            style={{
+                                                background: "#111",
+                                                border: "1px solid #333",
+                                                borderRadius: 4,
+                                                padding: "4px 6px",
+                                                color: assignedVar ? "#4da6ff" : "#e6edf3",
+                                                fontSize: 12,
+                                                maxWidth: '120px'
+                                            }}
+                                        >
+                                            <option value="">(Static)</option>
+                                            {Object.keys(pendingVariables).map(varName => (
+                                                <option key={varName} value={varName}>{varName}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <div style={{ color: '#555', fontSize: 12, fontStyle: 'italic', paddingTop: 8 }}>
+                                No configurable parameters found in selected nodes.
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4, flexShrink: 0 }}>
