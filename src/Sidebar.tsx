@@ -27,10 +27,11 @@ export default function Sidebar({
         if (window.confirm("This will clear Local storage and reload")) {
             localStorage.removeItem("nodes");
             localStorage.removeItem("edges");
+            localStorage.removeItem("graphIR");
             window.location.reload();
         }
     };
-    
+
     const openModuleEditor = (moduleId: string) => {
         window.dispatchEvent(new CustomEvent("module-open", { detail: { moduleId } }));
     };
