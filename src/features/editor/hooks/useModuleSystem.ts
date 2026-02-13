@@ -71,10 +71,11 @@ export function useModuleSystem({ nodes, edges, setNodes, getNodeSchema }: UseMo
                 alert(`Variable "${newName}" already exists`);
                 return prevVars;
             }
-            const newVars = { ...prevVars };
-            newVars[newName] = newVars[oldName];
-            delete newVars[oldName];
-            return newVars;
+            const { [oldName]: targetValue, ...rest } = prevVars;
+            return {
+                ...rest,
+                [newName]: targetValue,
+            };
         });
         setParamToVariableMap(prevMap => {
             const newMap: Record<string, Record<string, string>> = {};
@@ -94,9 +95,9 @@ export function useModuleSystem({ nodes, edges, setNodes, getNodeSchema }: UseMo
     }, []);
     const deleteVariable = useCallback((varName: string) => {
         setPendingVariables(prev => {
-            const next = { ...prev };
-            delete next[varName];
-            return next;
+            const { [varName]: _unused, ...rest } = prev;
+
+            return rest;
         });
         setParamToVariableMap(prevMap => {
             const newMap: Record<string, Record<string, string>> = {};
