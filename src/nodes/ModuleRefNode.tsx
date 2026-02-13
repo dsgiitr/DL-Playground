@@ -4,6 +4,7 @@ import { useMemo, useState, type ComponentType } from "react";
 import { ParamsList, type FieldType, type LayerDefinition } from "../node_gen/BaseClass";
 import { getModule } from "../utils/moduleRegistry";
 //import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";  //LayerData was unused
+import { createLayerComponent } from "../node_gen/CreateNodeComponent";
 import type { ModuleHandles } from "../utils/moduleRegistry";
 import { verifyShapes } from "../utils/shape_verifier";
 
@@ -335,5 +336,54 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         const input = inputs[0] || "x";
         return `${out} = ${input}  # module forward (simulated)`;
     },
-    Component: ModuleRefComponent,
+    Component: createLayerComponent<ModuleRefData>(
+        "Module",
+        {},
+        {
+            // Dynamic Handles 
+            handles: (data) => {
+                const h = data.handles;
+                return {
+                    targets: h?.inputs?.length ? h.inputs : ["in"],
+                    sources: h?.outputs?.length ? h.outputs : ["out"]
+                };
+            },
+            // Variable Schema Resolution
+            resolveSchema: (data) => {
+                if (!data.moduleId) return {};
+                const mod = getModule(data.moduleId)
+                return mod?.variableSchema || {};
+            },
+
+            renderHeaderActions: (data, nodeId) => (
+                <button
+                    className="nodrag"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (data.moduleId) {
+                            window.dispatchEvent(
+                                new CustomEvent("module-open", {
+                                    detail: { moduleId: data.moduleId, nodeId: nodeId }
+                                })
+                            )
+                        }
+                    }}
+                    title="Edit Internal Graph"
+                    style={{
+                        cursor: "pointer",
+                        border: "1px solid #78aecdff",
+                        background: "#32353722",
+                        color: "#4e9fcfff",
+                        borderRadius: "2px",
+                        fontSize: "12px",
+                        padding: "5px 10px",
+                        fontWeight: 600,
+                        lineHeight: "12px",
+                    }}
+                >
+                    Edit
+                </button>
+            )
+        }
+    ),
 };
