@@ -4,38 +4,28 @@ import type { SavedModule } from "../../../utils/moduleRegistry";
 
 export function useSidebarSystem(modules: SavedModule[]) {
     const [searchQuery, setSearchQuery] = useState("");
-
-    // Initialize groups as collapsed
-    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
-        () =>
-            Object.keys(NODE_GROUPS).reduce<Record<string, boolean>>(
-                (acc, key) => {
-                    acc[key] = false;
-                    return acc;
-                },
-                { custom_modules: false },
-            ), // Ensure custom_modules key exists
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+        Object.keys(NODE_GROUPS).reduce<Record<string, boolean>>(
+            (acc, key) => {
+                acc[key] = false;
+                return acc;
+            },
+            { custom_modules: false },
+        ),
     );
-
     const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    // Helper to match text against query
     const matchesQuery = useCallback(
         (text?: string) => {
             return (text ?? "").toLowerCase().includes(normalizedQuery);
         },
         [normalizedQuery],
     );
-
-    // Filter Custom Modules
     const filteredModules = useMemo(() => {
         if (!normalizedQuery) return modules;
         return modules.filter(
             mod => matchesQuery(mod.name) || matchesQuery(mod.version) || matchesQuery(mod.description),
         );
     }, [modules, normalizedQuery, matchesQuery]);
-
-    // Filter Standard Node Groups
     const filteredGroups = useMemo(() => {
         return Object.entries(NODE_GROUPS)
             .map(([key, group]) => {
@@ -100,6 +90,6 @@ export function useSidebarSystem(modules: SavedModule[]) {
         onDragStart,
         handleReset,
         openModuleEditor,
-        normalizedQuery, // Exposed to help UI decide whether to force expand
+        normalizedQuery,
     };
 }
