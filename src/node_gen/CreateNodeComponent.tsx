@@ -1,6 +1,6 @@
 import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
-import { type FieldSpec, type LayerData, type FieldType, type HandleSpec, type HandleFactory, renderHandles, ParamsList } from "./BaseClass";
+import { ParamsList, renderHandles, type FieldSpec, type FieldType, type HandleFactory, type HandleSpec, type LayerData } from "./BaseClass";
 
 export function createLayerComponent<D extends LayerData>(
     label: string,
@@ -43,8 +43,11 @@ export function createLayerComponent<D extends LayerData>(
 
         const paramsToShow = new Set(requiredParams);
         optionalParams.forEach(key => {
-            if (isExpanded || safeData[key] !== undefined) {
-                paramsToShow.add(key);
+            const currentVal = safeData[key];
+            const defaultVal = paramSchema[key].defaultValue;
+            const isDefault = currentVal === defaultVal;
+            if (isExpanded || !isDefault) {
+                paramsToShow.add(key)
             }
         });
         const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
