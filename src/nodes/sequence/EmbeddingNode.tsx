@@ -44,7 +44,7 @@ export class EmbeddingNode {
         const dim = getParamValue(EmbeddingNode.paramSchema, data, "embedding_dim");
         const pad = getParamValue(EmbeddingNode.paramSchema, data, "padding_idx");
         const padArg = pad !== undefined && pad >= 0 ? `, padding_idx=${pad}` : "";
-        return `self.${name} = nn.Embedding(${vocab}, ${dim}${padArg})`;
+        return `self.${name} = nn.Embedding(num_embeddings=${vocab}, embedding_dim=${dim}${padArg})`;
     }
 
     static getForwardCode(_data: EmbeddingData, name: string, inputs: Array<string>, outputs: Array<string>) {

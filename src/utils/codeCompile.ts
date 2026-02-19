@@ -89,13 +89,14 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
     let lineOffset: number = lines.length;
 
     order.forEach(moduleId => {
+        let savedModule: any = null;
         if (moduleId === "0") {
             // Accidental clash?
             moduleNodes = nodes;
             moduleEdges = edges;
             moduleName = "generatedModel";
         } else {
-            const savedModule = getModule(moduleId);
+            savedModule = getModule(moduleId);
             if (savedModule) {
                 moduleNodes = savedModule?.internalNodes || [];
                 moduleEdges = savedModule?.internalEdges || [];
@@ -110,7 +111,7 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
         generatedCode.code += "\n\n\n";
         lineOffset += 2;
 
-        let moduleCode = generateMainCode(moduleNodes, moduleEdges, moduleName, lineOffset);
+        let moduleCode = generateMainCode(moduleNodes, moduleEdges, moduleName, lineOffset, savedModule);
 
         generatedCode.code += moduleCode.code;
         generatedCode.spans.push(...moduleCode.spans);
@@ -124,6 +125,7 @@ export function compileGraphToScript(
     nodes: Node[],
     edges: Edge[],
     variablePrefix: string = "", // Prefix for local variables to avoid namespace collisions
+    variableMap?: Record<string, Array<{ nodeId: string; paramName: string }>>, // Variable mapping for custom modules
 ) {
     if (nodes.length === 0) return { code: "class Model(nn.Module):\n    pass", spans: [] };
     const initLines: { text: string; span?: Omit<CodeSpan, "line"> }[] = [];
@@ -208,7 +210,22 @@ export function compileGraphToScript(
         const parentClass = parentNode ? LAYER_REGISTRY[parentNode.type!] : null;
         const shouldGenerateInit = !parentNode || !parentClass || !parentClass.encapsulatesChildInit;
         if (shouldGenerateInit) {
-            const line = ClassRef.getInitCode(node.data, layerName);
+            let line = ClassRef.getInitCode(node.data, layerName);
+            
+            // Apply variable mapping if provided
+            if (variableMap) {
+                for (const varName in variableMap) {
+                    const targets = variableMap[varName];
+                    for (const target of targets) {
+                        if (target.nodeId === node.id) {
+                            // Replace the parameter with the variable name
+                            const paramRegex = new RegExp(`\\b${target.paramName}\\s*=\\s*[^,)]+`, 'g');
+                            line = line.replace(paramRegex, `${target.paramName}=${varName}`);
+                        }
+                    }
+                }
+            }
+            
             initLines.push({ text: `        ${line}`, span: { kind: "init", nodeId: node.id } });
         }
         const shouldGenerateForward = !parentNode;
@@ -261,19 +278,50 @@ export function compileGraphToScript(
 }
 
 // Code can be made more efficient by passing CodeGenResult by reference. Offset won't be required.
-export function generateMainCode(nodes: Node[], edges: Edge[], name: string, lineOffset: number): CodeGenResult {
+export function generateMainCode(
+    nodes: Node[], 
+    edges: Edge[], 
+    name: string, 
+    lineOffset: number,
+    savedModule?: any // Optional: saved module with variableSchema and variableMap
+): CodeGenResult {
     const lines: string[] = [];
     const spans: CodeSpan[] = [];
 
     lines.push(`class ${name}(nn.Module):`);
     spans.push({ line: 1 + lineOffset, kind: "header" });
 
-    // Init
-    lines.push("    def __init__(self):");
+    // Build __init__ signature with variable schema parameters
+    const variableSchema = savedModule?.variableSchema || {};
+    const pyLiteral = (spec: any, value: any) => {
+        if (value === undefined || value === null) return "None";
+        if (spec?.type === "string") return `"${value}"`;
+        if (spec?.type === "boolean") return value ? "True" : "False";
+        return `${value}`;
+    };
+
+    const variableParams = Object.entries(variableSchema).map(([varName, spec]: [string, any]) => {
+        const required = spec?.required ?? false;
+        const defaultValue = spec?.defaultValue;
+        if (required) return varName;
+        if (defaultValue !== undefined) return `${varName}=${pyLiteral(spec, defaultValue)}`;
+        return `${varName}=None`;
+    });
+
+    const initSignature = variableParams.length > 0 
+        ? `    def __init__(self, ${variableParams.join(", ")}):` 
+        : "    def __init__(self):";
+    
+    lines.push(initSignature);
     lines.push("        super().__init__()");
 
-    // Compile Main Graph
-    const { initLines, forwardLines, returnVar } = compileGraphToScript(nodes, edges);
+    // Compile Main Graph with variable mapping
+    const { initLines, forwardLines, returnVar } = compileGraphToScript(
+        nodes, 
+        edges, 
+        "", 
+        savedModule?.variableMap
+    );
 
     // Stitch Init
     initLines?.forEach(l => {

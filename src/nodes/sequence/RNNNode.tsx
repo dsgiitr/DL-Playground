@@ -50,7 +50,7 @@ export class RNNNode {
         const hiddenSize = getParamValue(RNNNode.paramSchema, data, "hidden_size");
         const layers = getParamValue(RNNNode.paramSchema, data, "num_layers");
         const bidir = getParamValue(RNNNode.paramSchema, data, "bidirectional");
-        return `self.${name} = nn.RNN(${inputSize}, ${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
+        return `self.${name} = nn.RNN(input_size=${inputSize}, hidden_size=${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
     }
 
     static getForwardCode(_data: RnnData, name: string, inputs: Array<string>, outputs: Array<string>) {
