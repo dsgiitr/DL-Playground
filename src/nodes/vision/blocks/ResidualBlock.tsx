@@ -51,8 +51,8 @@ export class ResidualBlockNode {
         const k = getParamValue(this, data, "kernel_size") ?? 3;
         const useBn = getParamValue(this, data, "use_bn");
         const padding = Math.floor((k as number) / 2);
-        const bnLine = useBn ? `\n        self.${name}_bn = nn.BatchNorm2d(${c})` : "";
-        return `self.${name}_conv = nn.Conv2d(${c}, ${c}, kernel_size=${k}, padding=${padding})${bnLine}`;
+        const bnLine = useBn ? `\n        self.${name}_bn = nn.BatchNorm2d(num_features=${c})` : "";
+        return `self.${name}_conv = nn.Conv2d(in_channels=${c}, out_channels=${c}, kernel_size=${k}, padding=${padding})${bnLine}`;
     }
     static getForwardCode(data: ResidualData, name: string, inputs: Array<string>, outputs: Array<string>) {
         const x = inputs[0] || "x";

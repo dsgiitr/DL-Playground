@@ -3,6 +3,8 @@ import { Handle, Position, type Edge, type Node } from "@xyflow/react";
 import { type LayerDefinition } from "../node_gen/BaseClass";
 import { getModule } from "../utils/moduleRegistry";
 import { createLayerComponent } from "../node_gen/CreateNodeComponent";
+import { sanitizeIdent } from "../utils/codeCompile";
+//import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";  //LayerData was unused
 import type { ModuleHandles } from "../utils/moduleRegistry";
 import { verifyShapes } from "../utils/shape_verifier";
 
@@ -30,8 +32,32 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
     const module = getModule(data.moduleId);
     if (!module) return { ok: false as const, error: "Module not found in registry" };
 
-    const internalNodes = module.internalNodes || [];
+    let internalNodes = module.internalNodes || [];
     const internalEdges = module.internalEdges || [];
+
+    // 2. Apply Variable Mapping - Inject values from data into internal nodes
+    if (module.variableMap) {
+        internalNodes = internalNodes.map(node => {
+            let updatedData = { ...node.data };
+
+            // For each variable in the schema
+            for (const varName in module.variableMap) {
+                const targets = module.variableMap[varName];
+
+                // Check if this node is a target for any variable
+                for (const target of targets) {
+                    if (target.nodeId === node.id) {
+                        // Inject the value from the ModuleRefNode's data
+                        if (data[varName] !== undefined) {
+                            updatedData[target.paramName] = data[varName];
+                        }
+                    }
+                }
+            }
+
+            return { ...node, data: updatedData };
+        });
+    }
 
     const mockNodes: Node[] = [];
     const mockEdges: Edge[] = [];
@@ -51,18 +77,23 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
 
     // Create mock inputs feeding these roots
     rootNodes.forEach((root, idx) => {
-        if (idx >= inputShapes.length) return; // No input for this root?
         const shape = inputShapes[idx];
 
         if (root.type === 'input_layer') {
-            const dims = shape.map((s, i) => ({ size: s, label: `d${i}` }));
-            const newRoot = {
-                ...root,
-                data: { ...root.data, dims, _injectedShape: shape }
-            };
-            const rootIdx = internalNodes.findIndex(n => n.id === root.id);
-            if (rootIdx !== -1) internalNodes[rootIdx] = newRoot;
+            // If external shape is provided, use it. Otherwise, use the input node's existing dims
+            if (shape && shape.length > 0) {
+                const dims = shape.map((s, i) => ({ size: s, label: `d${i}` }));
+                const newRoot = {
+                    ...root,
+                    data: { ...root.data, dims, _injectedShape: shape }
+                };
+                const rootIdx = internalNodes.findIndex(n => n.id === root.id);
+                if (rootIdx !== -1) internalNodes[rootIdx] = newRoot;
+            }
+            // If no shape provided, keep the input node's existing dims (already defined in module)
         } else {
+            // Non-input root node - need external input
+            if (!shape || idx >= inputShapes.length) return; // Skip if no input shape available
             const mockId = `__mock_in_${idx}`;
             mockNodes.push({
                 id: mockId,
@@ -97,12 +128,17 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
     handles: (data: ModuleRefData) => toHandles(data.handles),
 
     shapeVerifier: (data: ModuleRefData, inputShapes: number[][], registry?: Record<string, any>) => {
-        if (!registry) return { ok: true as const };
+        if (!registry) return { ok: true as const }; // Cannot verify without registry
+
+        // Run full internal verification
+        // Note: inputShapes might be empty if used standalone, but internal Input nodes may have their own dims
         const result = runInternalVerification(data, inputShapes, registry);
         if (!result.ok) {
+            const firstFailure = result.failures?.[0];
+            const errorDetail = firstFailure ? `${firstFailure.error} (${firstFailure.nodeId})` : "Internal verification failed";
             return {
                 ok: false,
-                error: "failed"
+                error: errorDetail
             };
         }
         return { ok: true };
@@ -121,13 +157,14 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         if (!module) return [];
 
         const internalEdges = module.internalEdges || [];
+        const internalNodes = module.internalNodes || [];
         const nodesWithOutgoing = new Set<string>();
         internalEdges.forEach(e => {
             nodesWithOutgoing.add(e.source);
         });
 
         // Heuristic: leaf nodes are outputs
-        const leafIds = module.internalNodes!.filter(n => !nodesWithOutgoing.has(n.id)).map(n => n.id);
+        const leafIds = internalNodes.filter(n => !nodesWithOutgoing.has(n.id)).map(n => n.id);
         leafIds.sort(); // naive sort
 
         if (leafIds.length > 0) {
@@ -138,11 +175,62 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         return [];
     },
 
-    getInitCode: (data: ModuleRefData, name: string) => `# module ${data.name || data.moduleId || name} (custom)`,
-    getForwardCode: (_data: ModuleRefData, _name: string, inputs: Array<string>, outputs: Array<string>) => {
-        const out = outputs[0] || "x";
-        const input = inputs[0] || "x";
-        return `${out} = ${input}  # module forward (simulated)`;
+    getInitCode: (data: ModuleRefData, name: string) => {
+        if (!data.moduleId) return `# module ${name} (no ID)`;
+        const module = getModule(data.moduleId);
+        if (!module) return `# module ${name} (not found)`;
+
+        const moduleName = sanitizeIdent(module.name);
+        const variableSchema = module.variableSchema || {};
+
+        // Build parameter list for module instantiation
+        const params: string[] = [];
+        for (const varName in variableSchema) {
+            const spec = variableSchema[varName];
+            const value = data[varName];
+            const type = (spec as any)?.type;
+
+            if (value !== undefined) {
+                // Use the literal value from node data
+                if (type === 'string') {
+                    params.push(`${varName}="${value}"`);
+                } else if (type === 'boolean') {
+                    params.push(`${varName}=${value ? "True" : "False"}`);
+                } else {
+                    params.push(`${varName}=${value}`);
+                }
+            } else {
+                // Use variable reference (assuming outer module provides it)
+                params.push(`${varName}=${varName}`);
+            }
+        }
+
+        const paramStr = params.length > 0 ? params.join(', ') : '';
+        return `self.${name} = ${moduleName}(${paramStr})`;
+    },
+    getForwardCode: (data: ModuleRefData, name: string, inputs: Array<string>, outputs: Array<string>) => {
+        if (!data.moduleId) {
+            const out = outputs[0] || "x";
+            const input = inputs[0] || "x";
+            return `${out} = ${input}  # module (no ID)`;
+        }
+
+        const module = getModule(data.moduleId);
+        if (!module) {
+            const out = outputs[0] || "x";
+            const input = inputs[0] || "x";
+            return `${out} = ${input}  # module (not found)`;
+        }
+
+        const callArgs = inputs.length > 0 ? inputs.join(', ') : '';
+        const call = callArgs ? `(${callArgs})` : "()";
+
+        if (outputs.length > 1) {
+            return `${outputs.join(', ')} = self.${name}${call}`;
+        }
+
+        const outputVar = outputs[0] || "x";
+        return `${outputVar} = self.${name}${call}`;
     },
     Component: createLayerComponent<ModuleRefData>(
         "Module",
