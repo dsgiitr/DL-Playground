@@ -64,7 +64,7 @@ export class LinearLayerNode {
         const i = data.in_features || this.paramSchema.in_features.defaultValue;
         const o = data.out_features || this.paramSchema.out_features.defaultValue;
         const biasStr = data.bias === false ? ', bias=False' : '';
-        return `self.${name} = nn.Linear(${i}, ${o}${biasStr})`;
+        return `self.${name} = nn.Linear(in_features=${i}, out_features=${o}${biasStr})`;
     }
     static getForwardCode(_data: LinearData, name: string, inputs: Array<string>, outputs: Array<string>) {
         const inputVar = inputs.length > 0 ? inputs[0] : "x";

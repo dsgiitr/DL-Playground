@@ -50,7 +50,7 @@ export class LSTMNode {
         const hiddenSize = getParamValue(LSTMNode.paramSchema, data, "hidden_size");
         const layers = getParamValue(LSTMNode.paramSchema, data, "num_layers");
         const bidir = getParamValue(LSTMNode.paramSchema, data, "bidirectional");
-        return `self.${name} = nn.LSTM(${inputSize}, ${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
+        return `self.${name} = nn.LSTM(input_size=${inputSize}, hidden_size=${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
     }
 
     static getForwardCode(_data: LstmData, name: string, inputs: Array<string>, outputs: Array<string>) {

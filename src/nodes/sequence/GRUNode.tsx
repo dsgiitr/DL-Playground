@@ -50,7 +50,7 @@ export class GRUNode {
         const hiddenSize = getParamValue(GRUNode.paramSchema, data, "hidden_size");
         const layers = getParamValue(GRUNode.paramSchema, data, "num_layers");
         const bidir = getParamValue(GRUNode.paramSchema, data, "bidirectional");
-        return `self.${name} = nn.GRU(${inputSize}, ${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
+        return `self.${name} = nn.GRU(input_size=${inputSize}, hidden_size=${hiddenSize}, num_layers=${layers}, bidirectional=${bidir ? "True" : "False"}, batch_first=True)`;
     }
 
     static getForwardCode(_data: GruData, name: string, inputs: Array<string>, outputs: Array<string>) {

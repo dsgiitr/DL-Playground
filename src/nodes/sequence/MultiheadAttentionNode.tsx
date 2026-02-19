@@ -58,7 +58,7 @@ export class MultiheadAttentionNode {
     static getInitCode(data: MhaData, name: string) {
         const embed = getParamValue(MultiheadAttentionNode.paramSchema, data, "embed_dim");
         const heads = getParamValue(MultiheadAttentionNode.paramSchema, data, "num_heads");
-        return `self.${name} = nn.MultiheadAttention(${embed}, ${heads}, batch_first=True)`;
+        return `self.${name} = nn.MultiheadAttention(embed_dim=${embed}, num_heads=${heads}, batch_first=True)`;
     }
 
     static getForwardCode(_data: MhaData, name: string, inputs: Array<string>, outputs: Array<string>) {
