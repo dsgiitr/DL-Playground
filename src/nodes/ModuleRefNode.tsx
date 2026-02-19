@@ -264,18 +264,23 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
 
     // Create mock inputs feeding these roots
     rootNodes.forEach((root, idx) => {
-        if (idx >= inputShapes.length) return; // No input for this root?
         const shape = inputShapes[idx];
 
         if (root.type === 'input_layer') {
-            const dims = shape.map((s, i) => ({ size: s, label: `d${i}` }));
-            const newRoot = {
-                ...root,
-                data: { ...root.data, dims, _injectedShape: shape }
-            };
-            const rootIdx = internalNodes.findIndex(n => n.id === root.id);
-            if (rootIdx !== -1) internalNodes[rootIdx] = newRoot;
+            // If external shape is provided, use it. Otherwise, use the input node's existing dims
+            if (shape && shape.length > 0) {
+                const dims = shape.map((s, i) => ({ size: s, label: `d${i}` }));
+                const newRoot = {
+                    ...root,
+                    data: { ...root.data, dims, _injectedShape: shape }
+                };
+                const rootIdx = internalNodes.findIndex(n => n.id === root.id);
+                if (rootIdx !== -1) internalNodes[rootIdx] = newRoot;
+            }
+            // If no shape provided, keep the input node's existing dims (already defined in module)
         } else {
+            // Non-input root node - need external input
+            if (!shape || idx >= inputShapes.length) return; // Skip if no input shape available
             const mockId = `__mock_in_${idx}`;
             mockNodes.push({
                 id: mockId,
@@ -311,14 +316,18 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
 
     shapeVerifier: (data: ModuleRefData, inputShapes: number[][], registry?: Record<string, any>) => {
         if (!registry) return { ok: true as const }; // Cannot verify without registry
+        
         // Run full internal verification
+        // Note: inputShapes might be empty if used standalone, but internal Input nodes may have their own dims
         const result = runInternalVerification(data, inputShapes, registry);
 
         // Return type must be { ok: true } | { ok: false, error: string }
         if (!result.ok) {
+            const firstFailure = result.failures?.[0];
+            const errorDetail = firstFailure ? `${firstFailure.error} (${firstFailure.nodeId})` : "Internal verification failed";
             return {
                 ok: false,
-                error: "failed"
+                error: errorDetail
             };
         }
         return { ok: true };
