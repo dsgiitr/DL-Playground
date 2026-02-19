@@ -29,6 +29,7 @@ import { ConcatNode } from "./pytorch_core/ConcatNode";
 import { OnesNode, RandNode, ZerosNode } from "./pytorch_core/ConstantTensorNodes";
 import { makeElementwiseBinary } from "./pytorch_core/ElementwiseBinaryNode";
 import { FlattenNode } from "./pytorch_core/FlattenNode";
+import { PassLayerNode } from "./pytorch_core/Identity";
 import { MatMulNode } from "./pytorch_core/MatMulNode";
 import {
     BatchNorm2dNode,
@@ -119,7 +120,12 @@ export const NODE_GROUPS: Record<string, NodeGroup> = {
     },
     tensor_shape: {
         label: "Tensor Shape",
-        nodes: { reshape_layer: ReshapeNode, transpose_layer: TransposeNode, flatten_layer: FlattenNode },
+        nodes: {
+            reshape_layer: ReshapeNode,
+            transpose_layer: TransposeNode,
+            flatten_layer: FlattenNode,
+            pass_layer: PassLayerNode,
+        },
     },
     tensor_create: {
         label: "Tensor Creation",
