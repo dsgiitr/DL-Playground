@@ -1,13 +1,14 @@
 import { addEdge, useReactFlow, type Edge, type Node, type OnConnect, type ReactFlowInstance } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FieldSpec } from "../../../node_gen/BaseClass";
 import {
-    assignParent,
+    DEFAULT_CONTAINER_CONFIG,
     findBestParent,
-    getAbsolutePosition,
     syncContainerData,
     useContainerSystem,
-    DEFAULT_CONTAINER_CONFIG,
 } from "../../../utils/containerLogic";
+import { LAYER_REGISTRY } from "../../../utils/layerRegistry";
+import { getModule } from "../../../utils/moduleRegistry";
 import { getActiveModule, updateActiveModule, type OpenModule } from "../../../utils/stackNavigation";
 import { getId } from "../utils/idUtils";
 
@@ -19,7 +20,69 @@ type UseGraphInteractionProps = {
     moduleStack: OpenModule[];
     setModuleStack: React.Dispatch<React.SetStateAction<OpenModule[]>>;
 };
-
+function getInitialNodeData(type: string, targetModuleId?: string): Record<string, any> {
+    const initialData: Record<string, any> = {};
+    const registryItem = LAYER_REGISTRY[type];
+    if (registryItem && registryItem.paramSchema) {
+        Object.entries(registryItem.paramSchema as Record<string, FieldSpec>).forEach(([key, spec]) => {
+            if (spec.defaultValue !== undefined) {
+                initialData[key] = spec.defaultValue;
+            } else {
+                switch (spec.type) {
+                    case "number":
+                        initialData[key] = 0;
+                        break;
+                    case "boolean":
+                        initialData[key] = false;
+                        break;
+                    case "text":
+                        initialData[key] = "";
+                        break;
+                    case "select":
+                        initialData[key] = spec.options?.[0] || "";
+                        break;
+                }
+            }
+        });
+        initialData.label = registryItem.label || type;
+    }
+    if (type === "module_ref" && targetModuleId) {
+        const moduleDef = getModule(targetModuleId);
+        if (moduleDef) {
+            initialData.moduleId = moduleDef.id;
+            initialData.name = moduleDef.name;
+            initialData.version = moduleDef.version;
+            initialData.handles = moduleDef.handles;
+            initialData.description = moduleDef.description;
+            initialData.label = moduleDef.name;
+            if (moduleDef.variableSchema) {
+                Object.entries(moduleDef.variableSchema).forEach(([key, spec]) => {
+                    if (spec.defaultValue !== undefined) {
+                        initialData[key] = spec.defaultValue;
+                    } else {
+                        switch (spec.type) {
+                            case "number":
+                                initialData[key] = 0;
+                                break;
+                            case "boolean":
+                                initialData[key] = false;
+                                break;
+                            case "text":
+                                initialData[key] = "";
+                                break;
+                            default:
+                                initialData[key] = 0;
+                        }
+                    }
+                });
+            }
+        } else {
+            console.warn(`Module ID ${targetModuleId} not found in registry.`);
+            initialData.label = "Unknown Module";
+        }
+    }
+    return initialData;
+}
 export function useGraphInteraction({
     nodes,
     edges,
@@ -118,43 +181,52 @@ export function useGraphInteraction({
         },
         [setEdges],
     );
-
-    // -------------------------------------------------------------------------
-    // 2. Drag & Drop Logic
-    // -------------------------------------------------------------------------
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
     }, []);
+    const createNodeFromEvent = (event: React.DragEvent, flowInstance: ReactFlowInstance | null) => {
+        if (!flowInstance) return null;
+
+        const type = event.dataTransfer.getData("application/reactflow");
+        if (!type) return null;
+
+        // Extract ID from the meta JSON
+        const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
+        let targetModuleId: string | undefined = undefined;
+
+        try {
+            if (moduleMetaRaw) {
+                const parsed = JSON.parse(moduleMetaRaw);
+                // Support both 'moduleId' and 'id' as valid identifiers
+                targetModuleId = parsed.moduleId || parsed.id;
+            }
+        } catch (err) {
+            console.warn("Failed to parse module ID from drag data", err);
+        }
+
+        const position = flowInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
+
+        // Pass ID to helper, which will call getModule()
+        const initialData = getInitialNodeData(type, targetModuleId);
+
+        return {
+            id: getId(),
+            type,
+            position,
+            data: initialData,
+        };
+    };
 
     const onMainDrop = useCallback(
         (event: React.DragEvent) => {
             event.preventDefault();
-            if (!mainFlowRef.current) return;
+            const newNode = createNodeFromEvent(event, mainFlowRef.current);
+            if (!newNode) return;
 
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: Record<string, unknown> | null = null;
-
-            if (moduleMetaRaw) {
-                try {
-                    moduleMeta = JSON.parse(moduleMetaRaw);
-                } catch (err) {
-                    console.warn("Failed to parse module metadata", err);
-                }
-            }
-
-            const position = mainFlowRef.current.screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
-            const newNode: Node = {
-                id: getId(),
-                type,
-                position,
-                data: moduleMeta ? { ...moduleMeta, label: moduleMeta.name ?? "Module" } : {},
-            };
             const finalNode = assignParent(newNode, getNodes());
             setNodes(nds => [...nds, finalNode]);
         },
@@ -166,34 +238,8 @@ export function useGraphInteraction({
             event.preventDefault();
             event.stopPropagation();
 
-            if (!moduleFlowRef.current) return;
-
-            const type = event.dataTransfer.getData("application/reactflow");
-            if (!type) return;
-
-            const moduleMetaRaw = event.dataTransfer.getData("application/module-meta");
-            let moduleMeta: any = null;
-
-            try {
-                if (moduleMetaRaw) moduleMeta = JSON.parse(moduleMetaRaw);
-            } catch {}
-
-            const position = moduleFlowRef.current.screenToFlowPosition({
-                x: event.clientX,
-                y: event.clientY,
-            });
-
-            const newNode: Node = {
-                id: getId(),
-                type: type,
-                position,
-                data: moduleMeta
-                    ? {
-                          ...moduleMeta,
-                          label: typeof moduleMeta.name === "string" ? moduleMeta.name : "Module",
-                      }
-                    : {},
-            };
+            const newNode = createNodeFromEvent(event, moduleFlowRef.current);
+            if (!newNode) return;
 
             setModuleStack(stack =>
                 updateActiveModule(stack, current => {
@@ -205,7 +251,7 @@ export function useGraphInteraction({
                 }),
             );
         },
-        [setModuleStack, assignParent],
+        [setModuleStack],
     );
 
     const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());

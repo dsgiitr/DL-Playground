@@ -97,7 +97,7 @@ export function CodePanel({
                         overflow: "hidden",
                         background: "#0b0d10",
                         color: "#d4d4d4",
-                        fontSize: 13,
+                        fontSize: 11,
                         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
                         lineHeight: 1.5
                     }}

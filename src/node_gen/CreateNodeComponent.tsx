@@ -1,11 +1,30 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { useMemo, useState } from "react";
-import { type FieldSpec, type LayerData, type FieldType, type HandleSpec, type HandleFactory, renderHandles, ParamsList } from "./BaseClass";
+import {
+    ParamsList,
+    renderHandles,
+    type FieldSpec,
+    type FieldType,
+    type HandleFactory,
+    type HandleSpec,
+    type LayerData
+} from "./BaseClass";
+
+// Options interface for the factory
+type LayerComponentOptions<D> = {
+    targetHandles?: number;
+    handles?: HandleSpec | HandleFactory<D>;
+    // Allow dynamic schema resolution (for Custom Modules)
+    resolveSchema?: (data: D) => Record<string, FieldSpec>;
+    // Allow custom buttons in the header
+    renderHeaderActions?: (data: D, id: string) => React.ReactNode;
+};
 
 export function createLayerComponent<D extends LayerData>(
     label: string,
-    paramSchema: Record<string, FieldSpec>,
-    options?: { targetHandles?: number; handles?: HandleSpec | HandleFactory<D> }
+    staticSchema: Record<string, FieldSpec>,
+    options?: LayerComponentOptions<D>
 ) {
     return ({ id, data, isConnectable }: NodeProps<Node<any>>) => {
         const { setNodes, setEdges } = useReactFlow();
@@ -13,12 +32,20 @@ export function createLayerComponent<D extends LayerData>(
         const safeData = data || ({} as D);
         const isHighlighted = !!(safeData as any).__highlight;
 
+        // 1. Resolve Schema 
+        const paramSchema = useMemo(() => {
+            if (options?.resolveSchema) {
+                return options.resolveSchema(safeData);
+            }
+            return staticSchema;
+        }, [safeData, options?.resolveSchema]);
+
         const { requiredParams, optionalParams } = useMemo(() => {
             const keys = Object.keys(paramSchema);
             const req = keys.filter(k => paramSchema[k].required);
             const opt = keys.filter(k => !paramSchema[k].required);
             return { requiredParams: req, optionalParams: opt };
-        }, []);
+        }, [paramSchema]);
 
         const onChange = (key: string, type: FieldType) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             let newValue: any = e.target.value;
@@ -30,22 +57,25 @@ export function createLayerComponent<D extends LayerData>(
             setNodes(nodes =>
                 nodes.map(n => {
                     if (n.id !== id) return n;
-                    const newData = { ...n.data };
-                    if (newValue === undefined || newValue === "") {
-                        delete newData[key];
-                    } else {
-                        newData[key] = newValue;
-                    }
+                    const { [key]: _old, ...rest } = n.data;
+                    const newData = newValue === undefined || newValue === "" ? rest : { ...rest, [key]: newValue };
                     return { ...n, data: newData };
                 })
             );
         };
 
+        const handleDelete = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setNodes(nodes => nodes.filter(n => n.id !== id));
+            setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
+        };
+
         const paramsToShow = new Set(requiredParams);
         optionalParams.forEach(key => {
-            if (isExpanded || safeData[key] !== undefined) {
-                paramsToShow.add(key);
-            }
+            const currentVal = safeData[key];
+            const defaultVal = paramSchema[key].defaultValue;
+            const isDefault = currentVal === defaultVal;
+            if (isExpanded || !isDefault) paramsToShow.add(key);
         });
         const renderList = [...requiredParams, ...optionalParams.filter(k => paramsToShow.has(k))];
         const hiddenOptionCount = optionalParams.length - (renderList.length - requiredParams.length);
@@ -67,12 +97,6 @@ export function createLayerComponent<D extends LayerData>(
             };
         })();
 
-        const handleDelete = (e: React.MouseEvent) => {
-            e.stopPropagation();
-            setNodes(nodes => nodes.filter(n => n.id !== id));
-            setEdges(eds => eds.filter(edge => edge.source !== id && edge.target !== id));
-        };
-
         return (
             <div
                 className="layer-node"
@@ -83,10 +107,9 @@ export function createLayerComponent<D extends LayerData>(
                     minWidth: "170px",
                     transition: "all 0.2s",
                     position: "relative",
-                    boxShadow: isHighlighted
-                        ? "0 0 0 2px #f1c40f, 0 0 20px #f1c40f66"
-                        : undefined,
-                    transform: isHighlighted ? "translateY(-2px) scale(1.01)" : undefined
+                    boxShadow: isHighlighted ? "0 0 0 2px #f1c40f, 0 0 20px #f1c40f66" : undefined,
+                    transform: isHighlighted ? "translateY(-2px) scale(1.01)" : undefined,
+                    color: "#e6edf3"
                 }}
             >
                 {renderHandles("left", resolvedHandles.targets, isConnectable)}
@@ -103,30 +126,36 @@ export function createLayerComponent<D extends LayerData>(
                         alignItems: "center"
                     }}
                 >
-                    <span>{label}</span>
-                    <button
-                        className="nodrag"
-                        onClick={handleDelete}
-                        style={{
-                            marginLeft: "8px",
-                            cursor: "pointer",
-                            border: "none",
-                            background: "transparent",
-                            color: "#888",
-                            fontWeight: "bold",
-                            fontSize: "18px",
-                            lineHeight: "18px",
-                            width: "24px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                        }}
-                        aria-label="Delete node"
-                        title="Delete node"
-                    >
-                        ×
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                        <span>{(safeData as any).name || label}</span>
+                        {/* {(safeData as any).version && <span style={{ fontSize: '9px', color: '#888', fontWeight: 'normal' }}>{(safeData as any).version}</span>} */}
+                    </div>
+                    <div style={{ paddingLeft: 10 }}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {options?.renderHeaderActions && options.renderHeaderActions(safeData, id)}
+
+                        <button
+                            className="nodrag"
+                            onClick={handleDelete}
+                            style={{
+                                cursor: "pointer",
+                                border: "none",
+                                background: "transparent",
+                                color: "#888",
+                                fontWeight: "bold",
+                                fontSize: "18px",
+                                lineHeight: "18px",
+                                width: "24px",
+                                height: "24px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center"
+                            }}
+                            title="Delete node"
+                        >
+                            ×
+                        </button>
+                    </div>
                 </div>
 
                 <ParamsList

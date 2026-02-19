@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { CodeSpan } from "../utils/codeCompile";
 
 type Props = {
@@ -116,6 +116,7 @@ export default function CodeViewer({
                 onChange={handleEditorChange}
                 theme="vs-dark"
                 options={{
+                    automaticLayout: true,
                     minimap: { enabled: false },
                     lineNumbers: "on",
                     scrollBeyondLastLine: false,
@@ -123,12 +124,12 @@ export default function CodeViewer({
                     renderLineHighlight: "all",
                     contextmenu: false,
                     fontFamily: "JetBrains Mono, Fira Code, monospace",
-                    fontSize: 16,
+                    fontSize: 14,
                     fixedOverflowWidgets: true,
                     quickSuggestions: true,
                     suggest: {
                         preview: true,
-                        showWords: false
+                        showWords: true
                     }
                 }}
                 onMount={handleEditorDidMount}
