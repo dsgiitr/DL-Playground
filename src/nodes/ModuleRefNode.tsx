@@ -1,9 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Handle, Position, type Edge, type Node } from "@xyflow/react";
+import { type Edge, type Node } from "@xyflow/react";
 import { type LayerDefinition } from "../node_gen/BaseClass";
-import { getModule } from "../utils/moduleRegistry";
 import { createLayerComponent } from "../node_gen/CreateNodeComponent";
 import { sanitizeIdent } from "../utils/codeCompile";
+import { getModule } from "../utils/moduleRegistry";
 //import type { LayerData, LayerDefinition } from "../node_gen/BaseClass";  //LayerData was unused
 import type { ModuleHandles } from "../utils/moduleRegistry";
 import { verifyShapes } from "../utils/shape_verifier";
@@ -134,8 +134,8 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         // Note: inputShapes might be empty if used standalone, but internal Input nodes may have their own dims
         const result = runInternalVerification(data, inputShapes, registry);
         if (!result.ok) {
-            const firstFailure = result.failures?.[0];
-            const errorDetail = firstFailure ? `${firstFailure.error} (${firstFailure.nodeId})` : "Internal verification failed";
+            const firstFailure = "failures" in result ? result.failures?.[0] : result;
+            const errorDetail = firstFailure ? `${firstFailure.error} (${"nodeId" in firstFailure ? firstFailure.nodeId : data.moduleId})` : "Internal verification failed";
             return {
                 ok: false,
                 error: errorDetail
@@ -144,17 +144,26 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         return { ok: true };
     },
 
-    shapeCompute: (data: ModuleRefData, inputShapes: number[][], context?: { registry: Record<string, any> }) => {
-        const registry = context?.registry || (window as any).__LAYER_REGISTRY_GLOBAL__;
+    shapeCompute: (data: ModuleRefData, inputShapes: number[][], registry?: Record<string, any>) => {
+        // const registry = context?.registry || (window as any).__LAYER_REGISTRY_GLOBAL__;
 
-        if (!registry) return []; // Can't compute
+        if (!registry) {
+            console.log("case 1")
+            return []
+        }; // Can't compute
 
         const result = runInternalVerification(data, inputShapes, registry);
-        if (!result.ok) return [];
+        if (!result.ok) {
+            console.log("case 2")
+            return []
+        };
 
         // Find output nodes
         const module = getModule(data.moduleId!);
-        if (!module) return [];
+        if (!module) {
+            console.log("case 3")
+            return []
+        };
 
         const internalEdges = module.internalEdges || [];
         const internalNodes = module.internalNodes || [];
@@ -169,9 +178,10 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
 
         if (leafIds.length > 0) {
             const leafId = leafIds[0];
+            console.log("case 4")
             return result.shapes[leafId]?.defaultShape || [];
         }
-
+        console.log("case 5")
         return [];
     },
 
