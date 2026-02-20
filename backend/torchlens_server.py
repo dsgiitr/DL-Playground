@@ -196,10 +196,26 @@ class TraceResponse(BaseModel):
 
 
 app = FastAPI()
+
+def _parse_cors_origins(raw: str) -> List[str]:
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or ["*"]
+
+cors_origins = _parse_cors_origins(os.getenv("TORCHLENS_CORS_ORIGINS", "*"))
+cors_allow_credentials = os.getenv("TORCHLENS_CORS_ALLOW_CREDENTIALS", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+# Browsers disallow "*" with credentials; enforce safe config.
+if "*" in cors_origins:
+    cors_allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -228,52 +244,71 @@ def run_trace(req: TraceRequest):
     x = inputs[0] if len(inputs) == 1 else inputs
 
     svg_b64: Optional[str] = None
-    prev_cwd = os.getcwd()
-    tmpdir = tempfile.mkdtemp()
+    history = None
+    timeout_s = float(os.getenv("TORCHLENS_TIMEOUT_S", "60"))
     try:
-        os.chdir(tmpdir)
-        with torch.no_grad():
-            # Save all layers; request unrolled graph.
-            # link to the function https://github.com/johnmarktaylor91/torchlens/blob/main/torchlens/user_funcs.py#L100
-            tl_kwargs = {
-                "vis_opt": "unrolled",
-                "layers_to_save": "all",
-                "vis_save_only": True,
-                "vis_fileformat": "svg",
-                "vis_outpath": str(Path(tmpdir) / "torchlens_graph"),
-            }
-            # TorchLens versions differ; enable input-saving knobs if present.
-            sig = inspect.signature(tl.log_forward_pass)
-            param_names = set(sig.parameters)
-            for name in (
-                "save_input_tensors",
-                "save_inputs",
-                "save_input_args",
-                "save_args",
-                "save_function_args",
-                "save_input_activations",
-                "save_activations",
-            ):
-                if name in param_names:
-                    tl_kwargs[name] = True
-            if DEBUG_TORCHLENS:
-                logger.info("TorchLens log_forward_pass params: %s", sorted(tl_kwargs.keys()))
-            history = tl.log_forward_pass(model, x, **tl_kwargs)
-        # Prefer in-memory rendering from DOT.
-        dot_graph = getattr(history, "dot_graph", None) or getattr(getattr(history, "graph", None), "dot_graph", None)
-        if dot_graph:
-            svg_bytes = Source(dot_graph).pipe(format="svg")
-            svg_b64 = base64.b64encode(svg_bytes).decode("utf-8")
-        # Fallback: if no DOT attached, read a generated SVG if present.
-        if not svg_b64:
-            svg_path = next(iter(Path(tmpdir).glob("*.svg")), None)
-            if svg_path and svg_path.exists():
-                svg_b64 = base64.b64encode(svg_path.read_bytes()).decode("utf-8")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.no_grad():
+                # Save all layers; request unrolled graph.
+                # link to the function https://github.com/johnmarktaylor91/torchlens/blob/main/torchlens/user_funcs.py#L100
+                tl_kwargs = {
+                    "vis_opt": "unrolled",
+                    "layers_to_save": "all",
+                    "vis_save_only": True,
+                    "vis_fileformat": "svg",
+                    "vis_outpath": str(Path(tmpdir) / "torchlens_graph"),
+                }
+                # TorchLens versions differ; enable input-saving knobs if present.
+                sig = inspect.signature(tl.log_forward_pass)
+                param_names = set(sig.parameters)
+                for name in (
+                    "save_input_tensors",
+                    "save_inputs",
+                    "save_input_args",
+                    "save_args",
+                    "save_function_args",
+                    "save_input_activations",
+                    "save_activations",
+                ):
+                    if name in param_names:
+                        tl_kwargs[name] = True
+                if DEBUG_TORCHLENS:
+                    logger.info("TorchLens log_forward_pass params: %s", sorted(tl_kwargs.keys()))
+
+                def do_trace() -> object:
+                    return tl.log_forward_pass(model, x, **tl_kwargs)
+
+                if timeout_s > 0:
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(do_trace)
+                        try:
+                            history = future.result(timeout=timeout_s)
+                        except concurrent.futures.TimeoutError as exc:
+                            future.cancel()
+                            raise HTTPException(
+                                status_code=504,
+                                detail=f"Trace timed out after {timeout_s:.0f}s",
+                            ) from exc
+                else:
+                    history = do_trace()
+
+            # Prefer in-memory rendering from DOT.
+            dot_graph = getattr(history, "dot_graph", None) or getattr(getattr(history, "graph", None), "dot_graph", None)
+            if dot_graph:
+                svg_bytes = Source(dot_graph).pipe(format="svg")
+                svg_b64 = base64.b64encode(svg_bytes).decode("utf-8")
+            # Fallback: if no DOT attached, read a generated SVG if present.
+            if not svg_b64:
+                svg_path = next(iter(Path(tmpdir).glob("*.svg")), None)
+                if svg_path and svg_path.exists():
+                    svg_b64 = base64.b64encode(svg_path.read_bytes()).decode("utf-8")
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.exception("Trace failed")
         raise HTTPException(status_code=500, detail=f"Trace failed: {exc}") from exc
-    finally:
-        os.chdir(prev_cwd)
 
     entries: List[TraceEntry] = []
     # TorchLens ModelHistory exposes layer_labels and indexing by label; fall back to layers dict.

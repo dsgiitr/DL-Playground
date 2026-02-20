@@ -94,7 +94,7 @@ export function recursiveCodeGenerator(nodes: Node[], edges: Edge[]): CodeGenRes
             // Accidental clash?
             moduleNodes = nodes;
             moduleEdges = edges;
-            moduleName = "generatedModel";
+            moduleName = "GeneratedModel";
         } else {
             savedModule = getModule(moduleId);
             if (savedModule) {

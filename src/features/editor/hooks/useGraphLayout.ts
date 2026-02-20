@@ -34,7 +34,8 @@ export function useGraphLayout() {
     useEffect(() => {
         if (!dragCodePanel) return;
         const onMove = (ev: MouseEvent) => {
-            const newWidth = Math.min(700, Math.max(260, window.innerWidth - ev.clientX));
+            const maxWidth = Math.max(260, window.innerWidth - 240);
+            const newWidth = Math.min(maxWidth, Math.max(260, window.innerWidth - ev.clientX));
             setCodePanelWidth(newWidth);
         };
         const onUp = () => setDragCodePanel(false);

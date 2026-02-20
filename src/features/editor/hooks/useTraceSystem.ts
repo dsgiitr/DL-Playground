@@ -43,6 +43,39 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
         }
     }, [verificationResult]);
 
+    const getTraceInputShapes = useCallback((): number[][] => {
+        const inputNodes = nodes.filter(n => n.type === "input_layer");
+        const shapes: number[][] = [];
+        for (const node of inputNodes) {
+            const data = (node.data && typeof node.data === "object") ? (node.data as any) : {};
+            const liveShape = Array.isArray(data.__shape) ? data.__shape : null;
+            if (liveShape && liveShape.length) {
+                shapes.push(liveShape as number[]);
+                continue;
+            }
+            const dims = Array.isArray(data.dims) ? data.dims : [];
+            if (dims.length) {
+                const parsed: number[] = dims.map((d: { size?: unknown }) => Number(d?.size));
+                let allValid = true;
+                for (const dimVal of parsed) {
+                    if (!Number.isFinite(dimVal) || dimVal <= 0) {
+                        allValid = false;
+                        break;
+                    }
+                }
+                if (allValid) {
+                    shapes.push(parsed);
+                    continue;
+                }
+            }
+            const inferred = shapeResult?.shapes?.[node.id]?.defaultShape;
+            if (Array.isArray(inferred) && inferred.length) {
+                shapes.push(inferred);
+            }
+        }
+        return shapes.length ? shapes : [[1, 3, 224, 224]];
+    }, [nodes, shapeResult]);
+
     // Apply calculated shapes to nodes
     useEffect(() => {
         if (!verificationResult.shapes) return;
@@ -86,7 +119,7 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
             const graph = buildGraphIR(nodes, edges);
             const resp = await runTorchLensTrace({
                 graph,
-                inputShapes: [[1, 3, 224, 224]], // TODO: Parameterize input shapes?
+                inputShapes: getTraceInputShapes(),
                 code: generatedCode,
             });
             const shapeWarnings = compareTraceShapes(resp, shapeResult, edges, nodes, LAYER_REGISTRY);
