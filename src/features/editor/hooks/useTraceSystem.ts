@@ -6,6 +6,7 @@ import { buildShapeComparisons, compareTraceShapes } from "../../../utils/traceA
 import { LAYER_REGISTRY } from "../../../types/nodeTypes";
 import { verifyShapes, type ShapeFailure, type ShapeResult } from "../../../utils/shape_verifier";
 import type { TraceResponse } from "../../../types/trace";
+import { getModule } from "../../../utils/moduleRegistry";
 
 // Move comparison logic here or keep in utils?
 // FlowEditor line 140: buildShapeComparisons(traceData, shapeResult ...)
@@ -44,37 +45,63 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
     }, [verificationResult]);
 
     const getTraceInputShapes = useCallback((): number[][] => {
-        const inputNodes = nodes.filter(n => n.type === "input_layer");
-        const shapes: number[][] = [];
-        for (const node of inputNodes) {
-            const data = (node.data && typeof node.data === "object") ? (node.data as any) : {};
-            const liveShape = Array.isArray(data.__shape) ? data.__shape : null;
-            if (liveShape && liveShape.length) {
-                shapes.push(liveShape as number[]);
-                continue;
-            }
-            const dims = Array.isArray(data.dims) ? data.dims : [];
+        const isValidShape = (vals: number[]) => vals.length > 0 && vals.every(v => Number.isFinite(v) && v > 0);
+        const readDimsFromData = (data: any): number[] | null => {
+            const liveShape = Array.isArray(data?.__shape) ? data.__shape : null;
+            if (liveShape && isValidShape(liveShape)) return liveShape as number[];
+            const dims = Array.isArray(data?.dims) ? data.dims : [];
             if (dims.length) {
                 const parsed: number[] = dims.map((d: { size?: unknown }) => Number(d?.size));
-                let allValid = true;
-                for (const dimVal of parsed) {
-                    if (!Number.isFinite(dimVal) || dimVal <= 0) {
-                        allValid = false;
-                        break;
-                    }
-                }
-                if (allValid) {
-                    shapes.push(parsed);
-                    continue;
-                }
+                if (isValidShape(parsed)) return parsed;
+            }
+            return null;
+        };
+
+        const shapes: number[][] = [];
+        const inputNodes = nodes.filter(n => n.type === "input_layer");
+        for (const node of inputNodes) {
+            const data = (node.data && typeof node.data === "object") ? (node.data as any) : {};
+            const shape = readDimsFromData(data);
+            if (shape) {
+                shapes.push(shape);
+                continue;
             }
             const inferred = shapeResult?.shapes?.[node.id]?.defaultShape;
-            if (Array.isArray(inferred) && inferred.length) {
-                shapes.push(inferred);
-            }
+            if (Array.isArray(inferred) && inferred.length) shapes.push(inferred);
         }
+
+        if (shapes.length) return shapes;
+
+        // If no root Input nodes, infer from root-level nodes (e.g., module_ref).
+        const incomingCount = new Map<string, number>();
+        edges.forEach(e => {
+            incomingCount.set(e.target, (incomingCount.get(e.target) || 0) + 1);
+        });
+        const rootNodes = nodes.filter(n => (incomingCount.get(n.id) || 0) === 0);
+        for (const node of rootNodes) {
+            if (node.type === "input_layer") {
+                const shape = readDimsFromData(node.data);
+                if (shape) shapes.push(shape);
+                continue;
+            }
+            if (node.type === "module_ref") {
+                const moduleId = (node.data as any)?.moduleId;
+                const mod = moduleId ? getModule(moduleId) : undefined;
+                const internal = mod?.internalNodes || [];
+                const internalInputNodes = internal.filter(n => n.type === "input_layer");
+                // Use internal input dims in their visual order.
+                for (const inner of internalInputNodes) {
+                    const shape = readDimsFromData(inner.data);
+                    if (shape) shapes.push(shape);
+                }
+                if (internalInputNodes.length) continue;
+            }
+            const inferred = shapeResult?.shapes?.[node.id]?.defaultShape;
+            if (Array.isArray(inferred) && inferred.length) shapes.push(inferred);
+        }
+
         return shapes.length ? shapes : [[1, 3, 224, 224]];
-    }, [nodes, shapeResult]);
+    }, [nodes, edges, shapeResult]);
 
     // Apply calculated shapes to nodes
     useEffect(() => {
