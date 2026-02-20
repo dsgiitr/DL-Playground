@@ -31,15 +31,10 @@ export interface LayerDefinition<D extends LayerData> {
     shapeVerifier(data: D, inputShapes: number[][]): { ok: true } | { ok: false; error: string };
     // shapeCompute: computes output shape, assumes verifier passed
     shapeCompute(data: D, inputShapes: number[][], context?: { registry: Record<string, any> }): number[] | Record<string, number[]>;
-    // estimateCost: optional params/FLOPs estimate for analysis panels
+    // estimateCost: optional params/FLOPs estimate for analysis panels. Currently WIP. 
     estimateCost?: (data: D, inputShapes: number[][], outputShape: number[]) => { params: number; flops: number };
     getInitCode(data: D, name: string): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
-    // UI component
-    // Choose a design choice to make the Component a class reference or an instance reference
-    // highly leaning towards making it an instance reference
-    // abstract away the component updation process into its own function and keep the default component here
-    // the component updation process will be dependant on the specific data while first creation should be component specific
     Component: ComponentType<NodeProps<any>>;
 }
 
@@ -254,5 +249,3 @@ export function buildInitString(
     })
     return `self.${name} = ${className}(${args.join(', ')})`
 }
-
-// A base implementation of forward pass code is also required here since most layers will behave almost exactly the same way
