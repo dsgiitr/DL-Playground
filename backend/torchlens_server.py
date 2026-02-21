@@ -22,6 +22,37 @@ import tempfile
 import os
 from pathlib import Path
 
+class _MultiInputUnsupported(Exception):
+    pass
+
+
+def _build_tl_kwargs(tmpdir: str, enable_input_flags: bool, input_count: int) -> Dict[str, object]:
+    kwargs: Dict[str, object] = {
+        "vis_opt": "unrolled",
+        "layers_to_save": "all",
+        "vis_save_only": True,
+        "vis_fileformat": "svg",
+        "vis_outpath": str(Path(tmpdir) / "torchlens_graph"),
+    }
+    sig = inspect.signature(tl.log_forward_pass)
+    param_names = set(sig.parameters)
+    input_flag_names = (
+        "save_input_tensors",
+        "save_inputs",
+        "save_input_args",
+        "save_args",
+        "save_function_args",
+        "save_input_activations",
+        "save_activations",
+    )
+    if enable_input_flags:
+        for name in input_flag_names:
+            if name in param_names:
+                kwargs[name] = True
+    if "input_arg_names" in param_names:
+        kwargs["input_arg_names"] = [f"x{i}" for i in range(max(1, input_count))]
+    return kwargs
+
 
 class MultiInputIdentity(torch.nn.Module):
     """Pass inputs through unchanged while allowing 1+ args (helps multi-input edges)."""
@@ -196,10 +227,26 @@ class TraceResponse(BaseModel):
 
 
 app = FastAPI()
+
+def _parse_cors_origins(raw: str) -> List[str]:
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or ["*"]
+
+cors_origins = _parse_cors_origins(os.getenv("TORCHLENS_CORS_ORIGINS", "*"))
+cors_allow_credentials = os.getenv("TORCHLENS_CORS_ALLOW_CREDENTIALS", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+# Browsers disallow "*" with credentials; enforce safe config.
+if "*" in cors_origins:
+    cors_allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -225,59 +272,74 @@ def run_trace(req: TraceRequest):
     model.eval()
     # Build dummy inputs on CPU; switch to CUDA if desired by moving model/inputs to 'cuda'
     inputs = [torch.randn(*shape) for shape in req.inputShapes]
-    x = inputs[0] if len(inputs) == 1 else inputs
 
     svg_b64: Optional[str] = None
-    prev_cwd = os.getcwd()
-    tmpdir = tempfile.mkdtemp()
+    history = None
+    timeout_s = float(os.getenv("TORCHLENS_TIMEOUT_S", "60"))
     try:
-        os.chdir(tmpdir)
-        with torch.no_grad():
-            # Save all layers; request unrolled graph.
-            # link to the function https://github.com/johnmarktaylor91/torchlens/blob/main/torchlens/user_funcs.py#L100
-            tl_kwargs = {
-                "vis_opt": "unrolled",
-                "layers_to_save": "all",
-                "vis_save_only": True,
-                "vis_fileformat": "svg",
-                "vis_outpath": str(Path(tmpdir) / "torchlens_graph"),
-            }
-            # TorchLens versions differ; enable input-saving knobs if present.
-            sig = inspect.signature(tl.log_forward_pass)
-            param_names = set(sig.parameters)
-            for name in (
-                "save_input_tensors",
-                "save_inputs",
-                "save_input_args",
-                "save_args",
-                "save_function_args",
-                "save_input_activations",
-                "save_activations",
-            ):
-                if name in param_names:
-                    tl_kwargs[name] = True
-            if DEBUG_TORCHLENS:
-                logger.info("TorchLens log_forward_pass params: %s", sorted(tl_kwargs.keys()))
-            history = tl.log_forward_pass(model, x, **tl_kwargs)
-        # Prefer in-memory rendering from DOT.
-        dot_graph = getattr(history, "dot_graph", None) or getattr(getattr(history, "graph", None), "dot_graph", None)
-        if dot_graph:
-            svg_bytes = Source(dot_graph).pipe(format="svg")
-            svg_b64 = base64.b64encode(svg_bytes).decode("utf-8")
-        # Fallback: if no DOT attached, read a generated SVG if present.
-        if not svg_b64:
-            svg_path = next(iter(Path(tmpdir).glob("*.svg")), None)
-            if svg_path and svg_path.exists():
-                svg_b64 = base64.b64encode(svg_path.read_bytes()).decode("utf-8")
+        if len(inputs) > 1:
+            warnings = [
+                "Multiple inputShapes provided; TorchLens will be invoked with the first input only.",
+                "Limitation: TorchLens trace does not reliably support true multi-input models.",
+            ]
+        else:
+            warnings = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with torch.no_grad():
+                tl_kwargs = _build_tl_kwargs(tmpdir, enable_input_flags=True, input_count=len(inputs))
+                if DEBUG_TORCHLENS:
+                    logger.info("TorchLens log_forward_pass params: %s", sorted(tl_kwargs.keys()))
+
+                def _call_torchlens(**kwargs: object) -> object:
+                    return tl.log_forward_pass(model, inputs[0], **kwargs)
+
+                def do_trace() -> object:
+                    try:
+                        return _call_torchlens(**tl_kwargs)
+                    except UnboundLocalError:
+                        # Retry without input-saving flags, but keep vis args.
+                        tl_kwargs = _build_tl_kwargs(tmpdir, enable_input_flags=False, input_count=len(inputs))
+                        return _call_torchlens(**tl_kwargs)
+
+                if timeout_s > 0:
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(do_trace)
+                        try:
+                            history = future.result(timeout=timeout_s)
+                        except concurrent.futures.TimeoutError as exc:
+                            future.cancel()
+                            raise HTTPException(
+                                status_code=504,
+                                detail=f"Trace timed out after {timeout_s:.0f}s",
+                            ) from exc
+                else:
+                    history = do_trace()
+
+            # Prefer in-memory rendering from DOT.
+            dot_graph = getattr(history, "dot_graph", None) or getattr(getattr(history, "graph", None), "dot_graph", None)
+            if dot_graph:
+                svg_bytes = Source(dot_graph).pipe(format="svg")
+                svg_b64 = base64.b64encode(svg_bytes).decode("utf-8")
+            # Fallback: if no DOT attached, read a generated SVG if present.
+            if not svg_b64:
+                svg_path = next(iter(Path(tmpdir).glob("*.svg")), None)
+                if svg_path and svg_path.exists():
+                    svg_b64 = base64.b64encode(svg_path.read_bytes()).decode("utf-8")
+    except HTTPException:
+        raise
+    except _MultiInputUnsupported as exc:
+        warnings = [str(exc)]
+        history = None
     except Exception as exc:  # noqa: BLE001
         logger.exception("Trace failed")
         raise HTTPException(status_code=500, detail=f"Trace failed: {exc}") from exc
-    finally:
-        os.chdir(prev_cwd)
 
     entries: List[TraceEntry] = []
     # TorchLens ModelHistory exposes layer_labels and indexing by label; fall back to layers dict.
-    labels = getattr(history, "layer_labels", None)
+    labels = getattr(history, "layer_labels", None) if history else None
     def tensor_shape_to_str(val: object) -> Optional[str]:
         """Normalize various TorchLens shape fields or tensors to a readable string."""
         if val is None:
@@ -359,70 +421,21 @@ def run_trace(req: TraceRequest):
             return None
         return shapes[0] if len(shapes) == 1 else "[" + ", ".join(shapes) + "]"
 
-    if labels:
-        for idx, lbl in enumerate(labels):
-            layer = history[lbl]
-            scope = getattr(layer, "layer_label", getattr(layer, "layer_name", lbl))
-            op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
-            tensor_contents = getattr(layer, "tensor_contents", None)
-            input_tensors = getattr(layer, "input_tensors", None)
-            input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
-            output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
-            tensor_shape = getattr(layer, "tensor_shape", None)
-
-            # Prefer actual tensors for shapes; fall back to dimension metadata if tensors list is empty.
-            preferred_input = prefer_nonempty(input_tensors, input_dims)
-            preferred_output = prefer_nonempty(tensor_contents, output_dims)
-            if preferred_output is None and tensor_shape is not None:
-                preferred_output = tensor_shape
-            if preferred_input is None:
-                preferred_input = parent_shapes_from_layer(layer)
-            if preferred_input is None and getattr(layer, "is_input_layer", False):
-                if req.inputShapes:
-                    preferred_input = [tuple(req.inputShapes[0])]
-            if DEBUG_TORCHLENS:
-                logger.info(
-                    "TorchLens layer=%s op=%s input_tensors=%s input_dims=%s output_dims=%s tensor_contents=%s",
-                    scope,
-                    op,
-                    type(input_tensors).__name__,
-                    input_dims,
-                    output_dims,
-                    type(tensor_contents).__name__,
-                )
-                if idx == 0:
-                    logger.info("TorchLens layer attrs: %s", sorted(getattr(layer, "__dict__", {}).keys()))
-
-            dtype_val = (
-                getattr(layer, "input_dtype", None)
-                or getattr(layer, "dtype", None)
-                or tensor_dtype_to_str(tensor_contents)
-                or tensor_dtype_to_str(input_tensors)
-            )
-            entries.append(
-                TraceEntry(
-                    id=str(scope),
-                    scope=str(scope),
-                    op=str(op),
-                    inputShape=tensor_shape_to_str(preferred_input),
-                    outputShape=tensor_shape_to_str(preferred_output),
-                    dtype=str(dtype_val) if dtype_val is not None else None,
-                    nodeIds=[],  # populate with your GraphIR node ids by mapping scope→nodeId
-                )
-            )
-    else:
-        layer_dict = getattr(history, "layers", None)
-        if layer_dict:
-            for idx, layer in enumerate(layer_dict.values()):
-                scope = getattr(layer, "layer_label", getattr(layer, "layer_name", ""))
+    def _extract_entries(history_obj: object) -> List[TraceEntry]:
+        extracted: List[TraceEntry] = []
+        labels_local = getattr(history_obj, "layer_labels", None)
+        if labels_local:
+            for idx, lbl in enumerate(labels_local):
+                layer = history_obj[lbl]
+                scope = getattr(layer, "layer_label", getattr(layer, "layer_name", lbl))
                 op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
                 tensor_contents = getattr(layer, "tensor_contents", None)
-                input_tensors = getattr(layer, "input_tensors", None)
+                layer_input_tensors = getattr(layer, "input_tensors", None)
                 input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
                 output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
                 tensor_shape = getattr(layer, "tensor_shape", None)
 
-                preferred_input = prefer_nonempty(input_tensors, input_dims)
+                preferred_input = prefer_nonempty(layer_input_tensors, input_dims)
                 preferred_output = prefer_nonempty(tensor_contents, output_dims)
                 if preferred_output is None and tensor_shape is not None:
                     preferred_output = tensor_shape
@@ -436,7 +449,7 @@ def run_trace(req: TraceRequest):
                         "TorchLens layer=%s op=%s input_tensors=%s input_dims=%s output_dims=%s tensor_contents=%s",
                         scope,
                         op,
-                        type(input_tensors).__name__,
+                        type(layer_input_tensors).__name__,
                         input_dims,
                         output_dims,
                         type(tensor_contents).__name__,
@@ -448,9 +461,9 @@ def run_trace(req: TraceRequest):
                     getattr(layer, "input_dtype", None)
                     or getattr(layer, "dtype", None)
                     or tensor_dtype_to_str(tensor_contents)
-                    or tensor_dtype_to_str(input_tensors)
+                    or tensor_dtype_to_str(layer_input_tensors)
                 )
-                entries.append(
+                extracted.append(
                     TraceEntry(
                         id=str(scope),
                         scope=str(scope),
@@ -458,11 +471,66 @@ def run_trace(req: TraceRequest):
                         inputShape=tensor_shape_to_str(preferred_input),
                         outputShape=tensor_shape_to_str(preferred_output),
                         dtype=str(dtype_val) if dtype_val is not None else None,
-                        nodeIds=[],  # populate with your GraphIR node ids by mapping scope→nodeId
+                        nodeIds=[],
                     )
                 )
+        else:
+            layer_dict = getattr(history_obj, "layers", None)
+            if layer_dict:
+                for idx, layer in enumerate(layer_dict.values()):
+                    scope = getattr(layer, "layer_label", getattr(layer, "layer_name", ""))
+                    op = getattr(layer, "layer_type", getattr(layer, "layer_hooked_type", ""))
+                    tensor_contents = getattr(layer, "tensor_contents", None)
+                    layer_input_tensors = getattr(layer, "input_tensors", None)
+                    input_dims = getattr(layer, "input_dims", None) or getattr(layer, "input_shapes", None) or getattr(layer, "input_shape", None)
+                    output_dims = getattr(layer, "output_dims", None) or getattr(layer, "output_shapes", None) or getattr(layer, "output_shape", None)
+                    tensor_shape = getattr(layer, "tensor_shape", None)
 
-    warnings = list(getattr(history, "warnings", []))
+                    preferred_input = prefer_nonempty(layer_input_tensors, input_dims)
+                    preferred_output = prefer_nonempty(tensor_contents, output_dims)
+                    if preferred_output is None and tensor_shape is not None:
+                        preferred_output = tensor_shape
+                    if preferred_input is None:
+                        preferred_input = parent_shapes_from_layer(layer)
+                    if preferred_input is None and getattr(layer, "is_input_layer", False):
+                        if req.inputShapes:
+                            preferred_input = [tuple(req.inputShapes[0])]
+                    if DEBUG_TORCHLENS:
+                        logger.info(
+                            "TorchLens layer=%s op=%s input_tensors=%s input_dims=%s output_dims=%s tensor_contents=%s",
+                            scope,
+                            op,
+                            type(layer_input_tensors).__name__,
+                            input_dims,
+                            output_dims,
+                            type(tensor_contents).__name__,
+                        )
+                        if idx == 0:
+                            logger.info("TorchLens layer attrs: %s", sorted(getattr(layer, "__dict__", {}).keys()))
+
+                    dtype_val = (
+                        getattr(layer, "input_dtype", None)
+                        or getattr(layer, "dtype", None)
+                        or tensor_dtype_to_str(tensor_contents)
+                        or tensor_dtype_to_str(layer_input_tensors)
+                    )
+                    extracted.append(
+                        TraceEntry(
+                            id=str(scope),
+                            scope=str(scope),
+                            op=str(op),
+                            inputShape=tensor_shape_to_str(preferred_input),
+                            outputShape=tensor_shape_to_str(preferred_output),
+                            dtype=str(dtype_val) if dtype_val is not None else None,
+                            nodeIds=[],
+                        )
+                    )
+        return extracted
+
+    if history:
+        entries = _extract_entries(history)
+
+    warnings = warnings + (list(getattr(history, "warnings", [])) if history else [])
     if not svg_b64:
         warnings.append("TorchLens did not return a graph SVG; check DOT generation or vis options.")
     summary_text = None
@@ -470,6 +538,23 @@ def run_trace(req: TraceRequest):
         summary_text = str(history)
     except Exception:
         summary_text = None
+
+    if not entries and req.code:
+        warnings.append("Trace captured no layers from codegen; falling back to GraphModel stub.")
+        try:
+            stub_model = GraphModel(req.graph.get("nodes", []), req.graph.get("edges", []))
+            stub_model.eval()
+            stub_inputs = [torch.randn(*shape) for shape in req.inputShapes]
+            stub_input = stub_inputs[0] if stub_inputs else torch.randn(1, 3, 224, 224)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with torch.no_grad():
+                    tl_kwargs = _build_tl_kwargs(tmpdir, enable_input_flags=False, input_count=1)
+                    # Use a single input for the stub to avoid TorchLens multi-input issues.
+                    stub_history = tl.log_forward_pass(stub_model, stub_input, **tl_kwargs)
+                history = stub_history
+                entries = _extract_entries(history)
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"GraphModel stub trace failed: {exc}")
 
     if not entries:
         warnings.append("TorchLens returned no layers; check model code or TorchLens config.")

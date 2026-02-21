@@ -28,13 +28,18 @@ export function CodePanel({
     return (
         <>
             <div
-                onMouseDown={() => setDragCodePanel(true)}
+                onMouseDown={(ev) => {
+                    ev.preventDefault();
+                    setDragCodePanel(true);
+                }}
                 style={{
-                    width: 6,
+                    width: 10,
                     cursor: "col-resize",
                     flexShrink: 0,
                     background: dragCodePanel ? "#64ffda55" : "#2a2a2a",
-                    borderLeft: "1px solid #222"
+                    borderLeft: "1px solid #222",
+                    position: "relative",
+                    zIndex: 10
                 }}
                 title="Drag to resize code panel"
             />
