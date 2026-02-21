@@ -234,12 +234,12 @@ export class RepeatLayerNode {
 // - allow handle incremention 
 // 
 export function createRepeatLayerComponent<D extends LayerData>(
-    label: string,
+    _label: string,
     paramSchema: Record<string, FieldSpec>,
 ) {
     return ({ id, data, isConnectable, selected, width, height }: ResizableNodeProps) => {
         const { setNodes, setEdges } = useReactFlow();
-        const [isExpanded, setIsExpanded] = useState(true);
+        const [isExpanded] = useState(true);
         const safeData = data || ({} as D);
 
         const childCount = (safeData as any).internalNodes?.length || 0;

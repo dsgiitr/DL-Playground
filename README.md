@@ -29,11 +29,9 @@ This tool provides an intuitive drag-and-drop interface that empowers developers
 ## Technology Stack
 
 - **Frontend**:
-    - **Framework**: React (with Vite)
+    - **Framework**: React
     - **Language**: TypeScript
     - **Graph Visualization**: React Flow
-    - **Layout Engine**: ELK.js / Dagre
-    - **Code Editor**: Monaco Editor
 - **Backend**:
     - **Framework**: FastAPI
     - **Language**: Python
@@ -54,49 +52,20 @@ git clone https://github.com/your-username/DL-Playground.git
 cd DL-Playground
 ```
 
-### 2. Set Up the Backend (Python)
-
-The backend powers model analysis features.
+### 2. Build the Torchlens image 
 
 ```bash
-# Create and activate a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install the required Python packages
-pip install -r backend/requirements.txt
+cd backend
+docker build -t torchlens-worker:latest .
 ```
 
-### 3. Set Up the Frontend (Node.js)
+### 3. Build docker compose (in project root folder)
 
-The frontend is the main visual editor interface.
 
 ```bash
-# Install the necessary Node.js packages
-npm install
+docker compose up -d --build
 ```
-
-### 4. Run the Application
-
-You need to run both the backend and frontend servers in separate terminal windows.
-
-**Terminal 1: Start the Backend Server**
-
-```bash
-# This will serve the torchlens API
-uvicorn backend.torchlens_server:app --host 0.0.0.0 --port 8000
-```
-
-The backend will be available at `http://localhost:8000`.
-
-**Terminal 2: Start the Frontend Development Server**
-
-```bash
-# This will start the React application
-npm run dev
-```
-
-The frontend will be available at `http://localhost:5173` (or another port if 5173 is in use). Open this URL in your browser to start using the playground!
+The frontend will be available at `http://localhost:7000`. Open this URL in your browser to start using the playground!
 
 ---
 
@@ -117,3 +86,4 @@ The frontend will be available at `http://localhost:5173` (or another port if 51
 This project is a combined effort from the DSG Club and SDSLabs at IIT Roorkee.
 
 Contributions are welcome! If you have ideas for new features, bug fixes, or improvements, please feel free to open an issue or submit a pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
+

@@ -1,4 +1,3 @@
-import React from "react";
 import type { SavedModule } from "../../../utils/moduleRegistry";
 import { useSidebarSystem } from "../hooks/useSidebarSystem";
 

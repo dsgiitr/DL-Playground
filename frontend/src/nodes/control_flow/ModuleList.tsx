@@ -20,6 +20,10 @@ type ModuleListData = {
 export class ModuleListNode {
     static label = "Module List (Stack)";
     static encapsulatesChildInit = true;
+    static handles = {
+        targets: ["in"],
+        sources: ["out"]
+    };
     static paramSchema: Record<string, FieldSpec> = {
         repetitions: {
             required: true,
@@ -34,7 +38,7 @@ export class ModuleListNode {
      * Helper: Generates virtual edges connecting the Container's input/output 
      * directly to the internal nodes.
      */
-    private static getImplicitEdges(data: ModuleListData): Edge[] {
+    private static getImplicitEdges(data: ModuleListData, registry?: Record<string,any>): Edge[] {
         if (!data.internalNodes || data.internalNodes.length === 0) return [];
 
         const internalIds = new Set(data.internalNodes.map(n => n.id));
@@ -52,23 +56,43 @@ export class ModuleListNode {
         const virtualEdges: Edge[] = [];
 
         entries.forEach((node, i) => {
+            let tHandle = "in";
+            if (registry && node.type && registry[node.type]) {
+                const layerDef = registry && node.type ? registry[node.type] : null;
+            if (layerDef && layerDef.handles) {
+                const hDef = typeof layerDef.handles === "function" 
+                    ? layerDef.handles(node.data) 
+                    : layerDef.handles;
+                if (hDef?.targets?.length) tHandle = hDef.targets[0];
+            }
+            }
             virtualEdges.push({
                 id: `_implicit_in_${i}`,
                 source: "CONTAINER_INPUT", // Virtual Source
-                sourceHandle: "in-external",
+                sourceHandle: "out",
                 target: node.id,
-                targetHandle: null // Connect to default input
+                targetHandle: tHandle // Connect to default input
             });
         });
 
         // Connect Exit Nodes -> Virtual Output
         exits.forEach((node, i) => {
+            let sHandle = "out";
+            if (registry && node.type && registry[node.type]) {
+                const layerDef = registry && node.type ? registry[node.type] : null;
+            if (layerDef && layerDef.handles) {
+                const hDef = typeof layerDef.handles === "function" 
+                    ? layerDef.handles(node.data) 
+                    : layerDef.handles;
+                if (hDef?.sources?.length) sHandle = hDef.sources[0];
+                }
+            }
             virtualEdges.push({
                 id: `_implicit_out_${i}`,
                 source: node.id,
-                sourceHandle: null, // Connect from default output
+                sourceHandle: sHandle, // Connect from default output
                 target: "CONTAINER_OUTPUT", // Virtual Target
-                targetHandle: "out-external"
+                targetHandle: "in"
             });
         });
 
@@ -83,7 +107,7 @@ export class ModuleListNode {
         if (!inputShapes || inputShapes.length === 0) return { ok: false as const, error: "Input required." };
 
         const loopInputShape = inputShapes[0];
-        const allEdges = this.getImplicitEdges(safeData); // Use Implicit Edges
+        const allEdges = this.getImplicitEdges(safeData, registry); // Use Implicit Edges
 
         // 1. Helper to run a verification pass
         const runPass = (inputShape: number[], passLabel: string) => {
@@ -147,7 +171,7 @@ export class ModuleListNode {
         const MAX_SIM_STEPS = 5;
 
         // Use implicit edges
-        const allEdges = this.getImplicitEdges(data);
+        const allEdges = this.getImplicitEdges(data, registry);
 
         for (let i = 0; i < Math.min(N, MAX_SIM_STEPS); i++) {
             const MOCK_ID = `__COMPUTE_ITER_${i}__`;
@@ -188,7 +212,10 @@ export class ModuleListNode {
     }
 
     // --- CODE GEN ---
-    static getInitCode(data: ModuleListData, name: string) {
+    static getInitCode(data: ModuleListData, name: string, variableMap?: Record<string, Array<{
+    nodeId: string;
+    paramName: string;
+}>>) {
         if (!data.internalNodes || data.internalNodes.length === 0) {
             return `self.${name} = nn.ModuleList()`;
         }
@@ -198,7 +225,7 @@ export class ModuleListNode {
         // For Init code, we just need the Node Definitions (self.layer = ...), 
         // so connectivity doesn't matter much.
 
-        const { initLines } = compileGraphToScript(data.internalNodes, data.internalEdges);
+        const { initLines } = compileGraphToScript(data.internalNodes, data.internalEdges, "", variableMap);
 
         if (!initLines || initLines.length === 0) return `pass`;
 
@@ -213,7 +240,7 @@ export class ModuleListNode {
         if (layerDefs.length === 1) {
             return `self.${name} = nn.ModuleList([
             ${layerDefs[0]} 
-            for _ in range(${N})
+            for _ in range((dict(repetitions=${N})["repetitions"]))
         ])`;
         }
 
@@ -223,7 +250,7 @@ export class ModuleListNode {
 
         return `self.${name} = nn.ModuleList([
             ${sequentialBlock} 
-            for _ in range(${N})
+            for _ in range((dict(repetitions=${N})["repetitions"]))
         ])`;
     }
 
@@ -247,7 +274,7 @@ export class ModuleListNode {
 
 export function createModuleListComponent(
     label: string,
-    paramSchema: Record<string, FieldSpec>,
+    _paramSchema: Record<string, FieldSpec>,
 ) {
     return ({ id, data, isConnectable, selected, width, height }: ResizableNodeProps) => {
         const { setNodes, setEdges } = useReactFlow();
@@ -375,10 +402,10 @@ export function createModuleListComponent(
                    The internal wiring is now handled by getImplicitEdges in the class logic.
                    We assume standard Left->Right flow.
                 */}
-                <Handle type='target' position={Position.Left} id="in-external"
+                <Handle type='target' position={Position.Left} id="in"
                     style={{ ...baseHandleStyle, background: '#fff', left: -9 }} isConnectable={isConnectable} />
 
-                <Handle type="source" position={Position.Right} id="out-external"
+                <Handle type="source" position={Position.Right} id="out"
                     style={{ ...baseHandleStyle, background: '#fff', right: -9 }} isConnectable={isConnectable} />
             </>
         )

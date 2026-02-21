@@ -33,7 +33,7 @@ export interface LayerDefinition<D extends LayerData> {
     shapeCompute(data: D, inputShapes: number[][], context?: { registry: Record<string, any> }): number[] | Record<string, number[]>;
     // estimateCost: optional params/FLOPs estimate for analysis panels. Currently WIP. 
     estimateCost?: (data: D, inputShapes: number[][], outputShape: number[]) => { params: number; flops: number };
-    getInitCode(data: D, name: string): string;
+    getInitCode(data: D, name: string, variableMap?:any): string;
     getForwardCode(data: D, name: string, inputs: Array<string>, outputs: Array<string>): string;
     Component: ComponentType<NodeProps<any>>;
 }

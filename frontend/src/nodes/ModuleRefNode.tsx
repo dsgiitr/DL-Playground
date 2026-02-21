@@ -37,26 +37,35 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
 
     // 2. Apply Variable Mapping - Inject values from data into internal nodes
     if (module.variableMap) {
-        internalNodes = internalNodes.map(node => {
-            let updatedData = { ...node.data };
+        const injectVariables = (nodes: Node[]): Node[] => {
+            return nodes.map(node => {
+                let updatedData = { ...node.data };
+                
+                if (Array.isArray(updatedData.internalNodes)) {
+                    updatedData.internalNodes = injectVariables(updatedData.internalNodes);
+                }
+                // For each variable in the schema
+                for (const varName in module.variableMap) {
+                    const targets = module.variableMap[varName];
 
-            // For each variable in the schema
-            for (const varName in module.variableMap) {
-                const targets = module.variableMap[varName];
-
-                // Check if this node is a target for any variable
-                for (const target of targets) {
-                    if (target.nodeId === node.id) {
-                        // Inject the value from the ModuleRefNode's data
-                        if (data[varName] !== undefined) {
-                            updatedData[target.paramName] = data[varName];
+                    // Check if this node is a target for any variable
+                    for (const target of targets) {
+                        if (target.nodeId === node.id) {
+                            // Inject the value from the ModuleRefNode's data
+                            if (data[varName] !== undefined && data[varName] !== "" && data[varName] !== 0) {
+                                updatedData[target.paramName] = data[varName];
+                            }
                         }
                     }
                 }
-            }
 
-            return { ...node, data: updatedData };
-        });
+                return { ...node, data: updatedData };
+            });
+        }
+        internalNodes = injectVariables(internalNodes);
+        console.log(`[Variable Trace - ${data.name}] After Injection:`, 
+            internalNodes.map(n => ({ id: n.id, type: n.type, data: n.data }))
+        );
     }
 
     const mockNodes: Node[] = [];
@@ -71,7 +80,11 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
         }
     });
 
-    const rootNodes = internalNodes.filter(n => !nodesWithIncoming.has(n.id));
+    const rootNodes = internalNodes.filter(n => {
+        const isTopLevel = !n.parentId || !internalNodeIds.has(n.parentId);
+        const hasNoIncoming = !nodesWithIncoming.has(n.id);
+        return isTopLevel && hasNoIncoming;
+    });
     // Sort roots by Y then X to try and match "top-to-bottom" intuitive order
     rootNodes.sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
 
@@ -95,6 +108,15 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
             // Non-input root node - need external input
             if (!shape || idx >= inputShapes.length) return; // Skip if no input shape available
             const mockId = `__mock_in_${idx}`;
+            let tHandle = 'in';
+            const layerDef = registry && root.type ? registry[root.type] : null;
+            if (layerDef && layerDef.handles) {
+                const hDef = typeof layerDef.handles === "function"
+                    ? layerDef.handles(root.data)
+                    : layerDef.handles;
+                if (hDef?.targets?.length) tHandle = hDef.targets[0];
+            
+            }
             mockNodes.push({
                 id: mockId,
                 type: 'input_layer', // Use valid type
@@ -109,14 +131,13 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
                 source: mockId,
                 target: root.id,
                 sourceHandle: 'out',
-                targetHandle: 'in' // Assumption
+                targetHandle: tHandle // Assumption
             });
         }
     });
 
     const verificationNodes = [...internalNodes, ...mockNodes];
     const verificationEdges = [...internalEdges, ...mockEdges];
-
     return verifyShapes(verificationNodes, verificationEdges, registry);
 }
 
