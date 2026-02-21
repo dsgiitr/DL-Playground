@@ -1,16 +1,19 @@
-## TorchLens Backend (CPU)
+## TorchLens Backend (Run inside backend directory)
 
 ### Install
 
 ```bash
 
-pip install torch torchlens torchvision fastapi uvicorn pydantic graphviz
+pip install -r requirements.txt
 ```
 
-### Run
+### Build Image and start Server 
+```bash
+docker build -t torchlens-worker:latest .
+```
 
 ```bash
-uvicorn backend.torchlens_server:app --host 0.0.0.0 --port 8000
+uvicorn runner:app --host 0.0.0.0 --port 8000
 ```
 
 ### Endpoint

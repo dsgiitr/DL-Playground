@@ -1,7 +1,4 @@
-torch 
-torchlens 
 fastapi 
-uvicorn 
-pydantic 
-graphviz
-torchvision
+docker
+pydantic
+uvicorn
