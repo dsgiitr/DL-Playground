@@ -160,12 +160,12 @@ export function useGraphInteraction({
     const onConnect: OnConnect = useCallback(
         connection => {
             setEdges(eds => {
-                const sameSource = eds.filter(
-                    e => e.source === connection.source && e.sourceHandle === connection.sourceHandle,
-                );
-                const suffix = sameSource.length ? `_dup${sameSource.length}` : "";
+                // const sameSource = eds.filter(
+                //     e => e.source === connection.source && e.sourceHandle === connection.sourceHandle,
+                // );
+                // const suffix = sameSource.length ? `_dup${sameSource.length}` : "";
                 const labelBase = connection.source
-                    ? `out_${connection.source}${connection.sourceHandle ? `_${connection.sourceHandle}` : ""}${suffix}`
+                    ? `out_${connection.source}${connection.sourceHandle ? `_${connection.sourceHandle}` : ""}`//${suffix}`
                     : "out";
                 return addEdge(
                     {

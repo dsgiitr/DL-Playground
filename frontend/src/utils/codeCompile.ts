@@ -210,7 +210,7 @@ export function compileGraphToScript(
         const parentClass = parentNode ? LAYER_REGISTRY[parentNode.type!] : null;
         const shouldGenerateInit = !parentNode || !parentClass || !parentClass.encapsulatesChildInit;
         if (shouldGenerateInit) {
-            let line = ClassRef.getInitCode(node.data, layerName);
+            let line = ClassRef.getInitCode(node.data, layerName, variableMap);
             
             // Apply variable mapping if provided
             if (variableMap) {
