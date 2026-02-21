@@ -247,7 +247,7 @@ export class ModuleListNode {
 
 export function createModuleListComponent(
     label: string,
-    paramSchema: Record<string, FieldSpec>,
+    _paramSchema: Record<string, FieldSpec>,
 ) {
     return ({ id, data, isConnectable, selected, width, height }: ResizableNodeProps) => {
         const { setNodes, setEdges } = useReactFlow();
