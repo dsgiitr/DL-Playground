@@ -24,6 +24,7 @@ import { useGraphLayout } from "./features/editor/hooks/useGraphLayout";
 import { useTraceSystem } from "./features/editor/hooks/useTraceSystem";
 import { useCodeGeneration } from "./features/editor/hooks/useCodeGeneration";
 import { LAYER_REGISTRY } from "./types/nodeTypes";
+import { estimateGraphCost } from "./utils/computeEstimator";
 
 const TRACE_SEED_PRESETS = [42, 1337, 1234, 2020, 2021];
 
@@ -90,6 +91,11 @@ function FlowContent() {
         if (!highlightNodes.size) return nodes;
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
     }, [nodes, highlightNodes]);
+
+    const computeSummary = useMemo(
+        () => estimateGraphCost(nodes, edges, trace.shapeResult, LAYER_REGISTRY),
+        [nodes, edges, trace.shapeResult]
+    );
 
     // Helper for generating code toggle
     const handleGenerateCode = () => layout.setShowLiveCode(v => !v);
@@ -241,7 +247,7 @@ function FlowContent() {
 
                 {layout.showComputePanel && (
                     <ComputePanel
-                        summary={{ totalParams: 0, totalFlops: 0, nodes: [] }}
+                        summary={computeSummary}
                         onSelect={node => {
                             setHighlightNodes(new Set([node.nodeId]));
                             setHighlightEdges(new Set());
@@ -361,4 +367,3 @@ export default function Flow() {
 // function computeContract(selectedIds: Set<string>) {
 //     throw new Error("Function not implemented.");
 // }
-
