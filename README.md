@@ -9,8 +9,7 @@
 This tool provides an intuitive drag-and-drop interface that empowers developers and learners to build complex deep learning models without writing code from scratch. See your architecture come to life, from individual layers to complete computational graphs, and instantly generate the corresponding Python code.
 
 ## Watch Demo
-<video src="demo.mp4" controls="controls" style="max-width: 100%;">
-</video>
+[![DL-Playground Demo](https://i.ytimg.com/an_webp/fR5L05nidVM/mqdefault_6s.webp?du=3000&sqp=CMam8swG&rs=AOn4CLDH2ZR4fQZ11O1DjO4qm8ekr_KF-g)](https://www.youtube.com/watch?v=fR5L05nidVM)
 
 ---
 
