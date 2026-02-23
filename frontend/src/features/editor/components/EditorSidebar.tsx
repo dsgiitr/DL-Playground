@@ -1,7 +1,7 @@
 import type { SavedModule } from "../../../utils/moduleRegistry";
 import { useSidebarSystem } from "../hooks/useSidebarSystem";
-import logo1 from "../assets/sdslabs.png"; // Adjust the path to your file
-import logo2 from "../assets/dsg.png";
+import logo2 from "../assets/sdslabs.png"; // Adjust the path to your file
+import logo1 from "../assets/dsg.png";
 
 // --- Modern Dark Theme Palette ---
 const THEME = {
