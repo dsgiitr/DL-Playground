@@ -1,5 +1,7 @@
 import type { SavedModule } from "../../../utils/moduleRegistry";
 import { useSidebarSystem } from "../hooks/useSidebarSystem";
+import logo1 from "../assets/sdslabs.png"; // Adjust the path to your file
+import logo2 from "../assets/dsg.png";
 
 // --- Modern Dark Theme Palette ---
 const THEME = {
@@ -390,6 +392,18 @@ export function EditorSidebar({
                                 </div>
                             )}
                         </div>
+
+                                <div style={{ 
+                                    display: "flex", 
+                                    justifyContent: "center", 
+                                    alignItems: "center", 
+                                    gap: "20px",
+                                    marginTop: "40px",
+                                    paddingBottom: "10px" 
+                                }}>
+                                    <img src={logo1} alt="Logo 1" style={{ height: "28px", opacity: 0.5 }} />
+                                    <img src={logo2} alt="Logo 2" style={{ height: "28px", opacity: 0.5 }} />
+                                </div>
 
                         {renderFooter()}
                     </>

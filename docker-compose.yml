@@ -5,8 +5,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.server
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
