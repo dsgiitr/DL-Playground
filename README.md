@@ -10,6 +10,7 @@
   </a>
 </h3>
 <br>
+
 **DL-Playground is an interactive, web-based visual editor for designing, prototyping, and understanding PyTorch neural network architectures.**
 
 This tool provides an intuitive drag-and-drop interface that empowers developers and learners to build complex deep learning models without writing code from scratch. See your architecture come to life, from individual layers to complete computational graphs, and instantly generate the corresponding Python code.
