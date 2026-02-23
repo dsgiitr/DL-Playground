@@ -4,7 +4,7 @@ import type { TraceRequest, TraceResponse } from "../types/trace";
  * Call backend TorchLens endpoint (POST /api/torchlens returning TraceResponse).
  * On failure, surface the backend error so the user can fix shapes/code and retry.
  */
-const BASE_URL = (import.meta as any).env?.VITE_BACKEND_URL || "http://localhost:8000";
+const BASE_URL = "";
 
 export async function runTorchLensTrace(body: TraceRequest): Promise<TraceResponse> {
     try {
