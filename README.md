@@ -1,6 +1,6 @@
 # DL-Playground: A Visual Deep Learning Prototyping Tool
 
-## Built in collaboration with **SDSLabs × DSG**
+## Built in collaboration with **DSG × SDSLabs**
 
 <br>
 
@@ -8,7 +8,9 @@
 
 This tool provides an intuitive drag-and-drop interface that empowers developers and learners to build complex deep learning models without writing code from scratch. See your architecture come to life, from individual layers to complete computational graphs, and instantly generate the corresponding Python code.
 
-## [Watch Demo](demo.mp4)
+## Watch Demo
+<video src="demo.mp4" controls="controls" style="max-width: 100%;">
+</video>
 
 ---
 
