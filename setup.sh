@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+
+IMAGE_NAME="torchlens-worker:latest"
+
+echo "Pulling latest changes from main..."
+git pull origin main
+
+echo "Checking if Docker image '$IMAGE_NAME' exists..."
+
+if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
+    echo "Image not found. Building Docker image..."
+    docker build -t $IMAGE_NAME ./backend/
+else
+    echo "Image already exists. Skipping build."
+fi
+
+echo "Starting Docker Compose..."
+docker compose up -d --build
+
+echo "Setup complete!"

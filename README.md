@@ -20,6 +20,27 @@ This tool provides an intuitive drag-and-drop interface that empowers developers
 <img src="https://github.com/user-attachments/assets/3499f9df-f0ed-49a7-ac69-0bf1d80318c6" alt="DL-Playground Demo" width="100%">
 </a>
 
+---
+
+## Getting Started
+
+To get the application running locally, follow these steps.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/DL-Playground.git
+cd DL-Playground
+```
+
+### 2. Run the setup script (Docker required)
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+The frontend will be available at `http://localhost:7000`. Open this URL in your browser to start using the playground!
 
 ---
 
@@ -51,33 +72,6 @@ This tool provides an intuitive drag-and-drop interface that empowers developers
   - **Language**: Python
   - **Deep Learning**: PyTorch
   - **Model Analysis**: TorchLens
-
----
-
-## Getting Started
-
-To get the application running locally, follow these steps.
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/your-username/DL-Playground.git
-cd DL-Playground
-```
-
-### 2. Build the Torchlens image
-
-```bash
-docker build -t torchlens-worker:latest ./backend/
-```
-
-### 3. Build docker compose
-
-```bash
-docker compose up -d --build
-```
-
-The frontend will be available at `http://localhost:7000`. Open this URL in your browser to start using the playground!
 
 ---
 
