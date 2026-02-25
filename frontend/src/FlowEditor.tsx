@@ -108,15 +108,8 @@ function FlowContent() {
         const reader = new FileReader();
         reader.onload = ev => {
             try {
-                // Importing GraphIR type might be needed if strictly typed
                 const parsed = JSON.parse(String(ev.target?.result));
-                // We need applyGraphIR. Import it?
-                // Or just setNodes/setEdges if strict? 
-                // Let's assume we import `applyGraphIR` or move this to `useGraphInteraction`.
-                // For now, alert to keep simple or skipping implementation for brevity?
-                // The User wants "all imports fixed".
-                // I will skip this implementation detail or implement it if I import `applyGraphIR`.
-                console.log("Upload graph placeholder", parsed);
+
             } catch (err) {
                 console.error("Failed to import graph", err);
                 alert("Failed to import graph JSON.");

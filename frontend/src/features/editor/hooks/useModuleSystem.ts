@@ -118,7 +118,6 @@ export function useModuleSystem({ nodes, edges, setNodes, getNodeSchema }: UseMo
         const params: PromotableParam[] = [];
         selectedNodes.forEach(node => {
             const nodeLabel = (node.data?.label as string) || node.type || "Node";
-            console.log(`looking at node ${node.type}`);
             if (node.type === "module_ref") {
                 const data = node.data as { moduleId?: string };
                 if (data?.moduleId) {
@@ -126,8 +125,6 @@ export function useModuleSystem({ nodes, edges, setNodes, getNodeSchema }: UseMo
 
                     if (modDef) {
                         const schema = modDef.variableSchema || {};
-                        console.log(modDef);
-                        console.log(`[Module system] Found schema for ${modDef.name}:`, Object.keys(schema));
                         Object.entries(schema).forEach(([varName, spec]) => {
                             params.push({
                                 nodeId: node.id,
