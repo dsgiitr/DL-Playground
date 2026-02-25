@@ -63,9 +63,6 @@ function runInternalVerification(data: ModuleRefData, inputShapes: number[][], r
             });
         }
         internalNodes = injectVariables(internalNodes);
-        console.log(`[Variable Trace - ${data.name}] After Injection:`, 
-            internalNodes.map(n => ({ id: n.id, type: n.type, data: n.data }))
-        );
     }
 
     const mockNodes: Node[] = [];
@@ -169,20 +166,17 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
         // const registry = context?.registry || (window as any).__LAYER_REGISTRY_GLOBAL__;
 
         if (!registry) {
-            // console.log("case 1")
             return []
         }; // Can't compute
 
         const result = runInternalVerification(data, inputShapes, registry);
         if (!result.ok) {
-            // console.log("case 2")
             return []
         };
 
         // Find output nodes
         const module = getModule(data.moduleId!);
         if (!module) {
-            // console.log("case 3")
             return []
         };
 
@@ -199,10 +193,8 @@ export const ModuleRefNode: LayerDefinition<ModuleRefData> = {
 
         if (leafIds.length > 0) {
             const leafId = leafIds[0];
-            // console.log("case 4")
             return result.shapes[leafId]?.defaultShape || [];
         }
-        // console.log("case 5")
         return [];
     },
 
