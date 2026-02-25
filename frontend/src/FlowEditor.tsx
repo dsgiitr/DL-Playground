@@ -109,7 +109,8 @@ function FlowContent() {
         reader.onload = ev => {
             try {
                 const parsed = JSON.parse(String(ev.target?.result));
-
+                setNodes(parsed.nodes);
+                setEdges(parsed.edges);
             } catch (err) {
                 console.error("Failed to import graph", err);
                 alert("Failed to import graph JSON.");
