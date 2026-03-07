@@ -105,7 +105,7 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
 
     // Apply calculated shapes to nodes
     useEffect(() => {
-        if (!verificationResult.shapes) return;
+        if (!shapeResult?.shapes) return;
         setNodes(currentNodes => {
             const deepEqual = (a: any, b: any): boolean => {
                 if (a === b) return true;
@@ -122,7 +122,7 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
             };
             let hasChanges = false;
             const nextNodes = currentNodes.map(n => {
-                const shapeEntry = verificationResult.shapes[n.id];
+                const shapeEntry = shapeResult.shapes[n.id];
                 const newShapeArray = shapeEntry ? shapeEntry.defaultShape : undefined;
                 const currentShapeArray =
                     n.data && typeof n.data === "object" ? (n.data as { __shape?: number[] }).__shape : undefined;
