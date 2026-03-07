@@ -16,7 +16,9 @@ else
     echo "Image already exists. Skipping build."
 fi
 
-echo "Starting Docker Compose..."
+echo "Stopping active containers..."
+docker compose down
+echo "Starting docker compose..."
 docker compose up -d --build
 
 echo "Setup complete!"
