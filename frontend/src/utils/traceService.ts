@@ -4,7 +4,7 @@ import type { TraceRequest, TraceResponse } from "../types/trace";
  * Call backend TorchLens endpoint (POST /api/torchlens returning TraceResponse).
  * On failure, surface the backend error so the user can fix shapes/code and retry.
  */
-const BASE_URL = "http://backend:8000";
+const BASE_URL = "https://dlplayground.dsgiitr.in";
 
 export async function runTorchLensTrace(body: TraceRequest): Promise<TraceResponse> {
     try {
