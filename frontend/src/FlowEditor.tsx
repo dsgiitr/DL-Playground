@@ -80,16 +80,41 @@ function FlowContent() {
 
     const highlightedEdgesList = useMemo(() => {
         if (!highlightEdges.size) return decoratedEdges;
-        return decoratedEdges.map(e => {
-            if (!highlightEdges.has(e.id)) return e;
-            const existingData = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
-            return { ...e, data: { ...existingData, highlight: true } };
+        let hasChanges = false;
+        const newEdges = decoratedEdges.map(e => {
+            const isHighlighted = highlightEdges.has(e.id);
+            const data = (e.data && typeof e.data === "object") ? e.data as Record<string, unknown> : {};
+            const currentlyHighlighted = !!data.highlight;
+            if (isHighlighted === currentlyHighlighted) return e;
+            hasChanges = true;
+            return { ...e, data: { ...data, highlight: isHighlighted ? true : undefined } };
         });
+        return hasChanges ? newEdges : decoratedEdges;
     }, [decoratedEdges, highlightEdges]);
 
     const nodesForFlow = useMemo(() => {
-        if (!highlightNodes.size) return nodes;
-        return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
+        if (!highlightNodes.size) {
+            // Check if any node currently has __highlight and remove it
+            let hasChanges = false;
+            const newNodes = nodes.map(n => {
+                if (n.data && n.data.__highlight) {
+                    hasChanges = true;
+                    return { ...n, data: { ...n.data, __highlight: undefined } };
+                }
+                return n;
+            });
+            return hasChanges ? newNodes : nodes;
+        }
+        
+        let hasChanges = false;
+        const newNodes = nodes.map(n => {
+            const isHighlighted = highlightNodes.has(n.id);
+            const currentlyHighlighted = !!(n.data && n.data.__highlight);
+            if (isHighlighted === currentlyHighlighted) return n;
+            hasChanges = true;
+            return { ...n, data: { ...(n.data || {}), __highlight: isHighlighted ? true : undefined } };
+        });
+        return hasChanges ? newNodes : nodes;
     }, [nodes, highlightNodes]);
 
     const computeSummary = useMemo(() => {
