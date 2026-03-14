@@ -1,5 +1,5 @@
 import { type Edge, type Node, useReactFlow } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildGraphIR } from "../../../utils/graphIR";
 import { runTorchLensTrace } from "../../../utils/traceService";
 import { buildShapeComparisons, compareTraceShapes } from "../../../utils/traceAnalysis";
@@ -104,8 +104,12 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
     }, [nodes, edges, shapeResult]);
 
     // Apply calculated shapes to nodes
+    const shapeResultRef = useRef<string>("");
     useEffect(() => {
         if (!shapeResult?.shapes) return;
+        const currentShapesStr = JSON.stringify(shapeResult.shapes);
+        if (shapeResultRef.current === currentShapesStr) return;
+        
         setNodes(currentNodes => {
             const deepEqual = (a: any, b: any): boolean => {
                 if (a === b) return true;
@@ -134,9 +138,13 @@ export function useTraceSystem({ nodes, edges, setNodes, generatedCode }: UseTra
                     data: { ...n.data, __shape: newShapeArray }
                 };
             });
-            return hasChanges ? nextNodes : currentNodes;
+            if (hasChanges) {
+                shapeResultRef.current = currentShapesStr;
+                return nextNodes;
+            }
+            return currentNodes;
         });
-    }, [verificationResult, setNodes]);
+    }, [shapeResult, setNodes]);
 
     // Trace Logic
     const handleTrace = useCallback(async () => {

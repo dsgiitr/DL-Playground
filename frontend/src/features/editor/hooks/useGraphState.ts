@@ -6,7 +6,7 @@ import {
     type OnEdgesChange,
     type OnNodesChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphIR } from "../../../types/graph";
 import { applyGraphIR, buildGraphIR } from "../../../utils/graphIR";
 import { syncIdFromNodes } from "../utils/idUtils";
@@ -77,13 +77,15 @@ export function useGraphState() {
 
     // Attach helper callbacks to edges so custom edge UI can remove them cleanly.
     // NOTE: This might cause re-renders if not handled carefully, but it copies original logic.
-    const edgesWithHandlers = edges.map(e => ({
-        ...e,
-        data: {
-            ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
-            onDelete: deleteEdgeById,
-        },
-    }));
+    const edgesWithHandlers = useMemo(() => {
+        return edges.map(e => ({
+            ...e,
+            data: {
+                ...(typeof e.data === "object" && e.data !== null ? e.data : {}),
+                onDelete: deleteEdgeById,
+            },
+        }));
+    }, [edges, deleteEdgeById]);
 
     // -------------------------------------------------------------------------
     // 3. History (Undo/Redo)
@@ -171,8 +173,12 @@ export function useGraphState() {
     // Drop orphaned edges
     useEffect(() => {
         const nodeIds = new Set(nodes.map(n => n.id));
-        setEdges(eds => eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)));
-    }, [nodes, setEdges]); // Added setEdges to dependency array
+        setEdges(eds => {
+            const nextEds = eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+            if (nextEds.length === eds.length) return eds;
+            return nextEds;
+        });
+    }, [nodes, setEdges]);
 
     return {
         nodes,

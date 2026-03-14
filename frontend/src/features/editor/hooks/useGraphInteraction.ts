@@ -261,36 +261,16 @@ export function useGraphInteraction({
         (params: { nodes: Node[]; edges: Edge[] }) => {
             const selectedNodeIdsFromParam = new Set(params.nodes.map(n => n.id));
             const selectedEdgeIdsFromParam = new Set(params.edges.map(e => e.id));
-
-            setNodes(nds => {
-                return nds.map(n => {
-                    const isSelected = selectedNodeIdsFromParam.has(n.id);
-                    return {
-                        ...n,
-                        selected: isSelected,
-                        data: { ...(n.data || {}), __highlight: isSelected ? true : undefined },
-                    };
-                });
-            });
-
-            setEdges(eds => {
-                return eds.map(e => {
-                    return {
-                        ...e,
-                        selected: selectedEdgeIdsFromParam.has(e.id),
-                    };
-                });
-            });
+            setHighlightNodes(selectedNodeIdsFromParam);
+            setHighlightEdges(selectedEdgeIdsFromParam);
         },
-        [setNodes, setEdges],
+        [setHighlightNodes, setHighlightEdges],
     );
 
     const clearSelection = useCallback(() => {
         setHighlightNodes(new Set());
         setHighlightEdges(new Set());
-        setNodes(nds => nds.map(n => ({ ...n, selected: false, data: { ...(n.data || {}), __highlight: undefined } })));
-        setEdges(eds => eds.map(e => ({ ...e, selected: false })));
-    }, [setNodes, setEdges]);
+    }, [setHighlightNodes, setHighlightEdges]);
 
     // Derived selections
     const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
