@@ -35,7 +35,7 @@ export function EditorCanvas({
     setMainFlowRef
 }: EditorCanvasProps) {
     return (
-        <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", inset: "0 0 0 0" }}>
                 <ReactFlow
                     nodes={nodesForFlow}

@@ -47,6 +47,7 @@ export function CodePanel({
             <div
                 style={{
                     width: codePanelWidth,
+                    minWidth: 260,
                     flexShrink: 0,
                     height: "100%",
                     background: "#0f1115",
@@ -99,7 +100,6 @@ export function CodePanel({
                         flex: 1,
                         margin: 0,
                         padding: 4,
-                        overflow: "hidden",
                         background: "#0b0d10",
                         color: "#d4d4d4",
                         fontSize: 11,

@@ -34,8 +34,11 @@ export function useGraphLayout() {
     useEffect(() => {
         if (!dragCodePanel) return;
         const onMove = (ev: MouseEvent) => {
-            const maxWidth = Math.max(260, window.innerWidth - 240);
-            const newWidth = Math.min(maxWidth, Math.max(260, window.innerWidth - ev.clientX));
+            const viewportWidth = document.documentElement.clientWidth;
+            const activeSidebarWidth = sidebarCollapsed ? 48 : sidebarWidth;
+            const minCanvasWidth = 320;
+            const maxWidth = Math.max(260, viewportWidth - activeSidebarWidth - minCanvasWidth);
+            const newWidth = Math.min(maxWidth, Math.max(260, viewportWidth - ev.clientX));
             setCodePanelWidth(newWidth);
         };
         const onUp = () => setDragCodePanel(false);
@@ -45,7 +48,7 @@ export function useGraphLayout() {
             window.removeEventListener("mousemove", onMove);
             window.removeEventListener("mouseup", onUp);
         };
-    }, [dragCodePanel]);
+    }, [dragCodePanel, sidebarCollapsed, sidebarWidth]);
 
     return {
         sidebarCollapsed, setSidebarCollapsed,
