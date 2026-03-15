@@ -23,6 +23,7 @@ import { useGraphInteraction } from "./features/editor/hooks/useGraphInteraction
 import { useGraphLayout } from "./features/editor/hooks/useGraphLayout";
 import { useTraceSystem } from "./features/editor/hooks/useTraceSystem";
 import { useCodeGeneration } from "./features/editor/hooks/useCodeGeneration";
+import { useExportSystem } from "./features/editor/hooks/useExportSystem";
 import { LAYER_REGISTRY } from "./types/nodeTypes";
 import { estimateGraphCost } from "./utils/computeEstimator";
 
@@ -86,7 +87,10 @@ function FlowContent() {
             return { ...e, data: { ...existingData, highlight: true } };
         });
     }, [decoratedEdges, highlightEdges]);
-
+    const { exportJson, exportPng, exportSvg, isExporting } = useExportSystem({ 
+        nodes, 
+        edges 
+    });
     const nodesForFlow = useMemo(() => {
         if (!highlightNodes.size) return nodes;
         return nodes.map(n => (highlightNodes.has(n.id) ? { ...n, data: { ...(n.data || {}), __highlight: true } } : n));
@@ -169,11 +173,11 @@ function FlowContent() {
                     onImportJson={triggerUpload}
                     onDiagramView={() => layout.setShowDiagram(true)}
                     onExportToggle={() => layout.setExportMenuOpen(open => !open)}
-                    onExportSvg={() => { /* Implement export in hook if needed */ }}
-                    onExportPng={() => { /* Implement export in hook if needed */ }}
-                    onExportJson={() => { /* Implement export in hook if needed */ }}
+                    onExportSvg={() => { exportSvg()}}
+                    onExportPng={() => { exportPng()}}
+                    onExportJson={() => {exportJson()}}
                     exportMenuOpen={layout.exportMenuOpen}
-                    exporting={false} // Todo
+                    exporting={isExporting} 
                     showDiagnostics={layout.showDiagnostics}
                     showComputePanel={layout.showComputePanel}
                     failureCount={trace.shapeResult?.failures?.length ?? 0}
