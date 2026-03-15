@@ -120,12 +120,17 @@ export default function CodeViewer({
                     minimap: { enabled: false },
                     lineNumbers: "on",
                     scrollBeyondLastLine: false,
-                    wordWrap: "on",
+                    wordWrap: "off",
                     renderLineHighlight: "all",
                     contextmenu: false,
                     fontFamily: "JetBrains Mono, Fira Code, monospace",
                     fontSize: 14,
                     fixedOverflowWidgets: true,
+                    scrollbar: {
+                        horizontal: "auto",
+                        vertical: "auto",
+                        alwaysConsumeMouseWheel: false
+                    },
                     quickSuggestions: true,
                     suggest: {
                         preview: true,

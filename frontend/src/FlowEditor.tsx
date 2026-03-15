@@ -146,7 +146,7 @@ function FlowContent() {
     };
 
     return (
-        <div style={{ display: "flex", height: "100vh" }}>
+        <div style={{ display: "flex", height: "100vh", width: "100%", overflow: "hidden" }}>
             <input
                 ref={uploadInputRef}
                 type="file"
@@ -167,7 +167,7 @@ function FlowContent() {
                 handleDeleteModule={modSys.handleDeleteModule}
             />
 
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
                 <EditorToolbar
                     canUndo={canUndo}
                     canRedo={canRedo}
