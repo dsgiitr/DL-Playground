@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useReactFlow, getNodesBounds, getViewportForBounds, type Node, type Edge } from "@xyflow/react";
 import { toPng, toSvg } from "html-to-image";
-import { buildGraphIR } from "../../../utils/graphIR";
 import type { SavedModule } from "../../../utils/moduleRegistry";
 
 interface UseExportSystemProps {
