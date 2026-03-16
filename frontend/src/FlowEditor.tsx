@@ -94,7 +94,8 @@ function FlowContent() {
     }, [decoratedEdges, highlightEdges]);
     const { exportJson, exportPng, exportSvg, isExporting } = useExportSystem({ 
         nodes, 
-        edges 
+        edges,
+        modules: modSys.modules
     });
     const nodesForFlow = useMemo(() => {
         if (!highlightNodes.size) {
@@ -138,8 +139,15 @@ function FlowContent() {
         reader.onload = ev => {
             try {
                 const parsed = JSON.parse(String(ev.target?.result));
-                setNodes(parsed.nodes);
-                setEdges(parsed.edges);
+                if (parsed.modules && Array.isArray(parsed.modules)) {
+                    modSys.mergeModules(parsed.modules);
+                }
+                setEdges([]);
+                if (parsed.nodes && parsed.edges) {
+                    
+                    setNodes(parsed.nodes);
+                    setEdges(parsed.edges);
+                }
             } catch (err) {
                 console.error("Failed to import graph", err);
                 alert("Failed to import graph JSON.");

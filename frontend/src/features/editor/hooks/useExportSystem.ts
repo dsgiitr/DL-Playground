@@ -2,13 +2,15 @@ import { useState, useCallback } from "react";
 import { useReactFlow, getNodesBounds, getViewportForBounds, type Node, type Edge } from "@xyflow/react";
 import { toPng, toSvg } from "html-to-image";
 import { buildGraphIR } from "../../../utils/graphIR";
+import type { SavedModule } from "../../../utils/moduleRegistry";
 
 interface UseExportSystemProps {
     nodes: Node[];
     edges: Edge[];
+    modules: SavedModule[];
 }
 
-export function useExportSystem({ nodes, edges }: UseExportSystemProps) {
+export function useExportSystem({ nodes, edges, modules }: UseExportSystemProps) {
     const { getNodes } = useReactFlow();
     const [isExporting, setIsExporting] = useState(false);
 
@@ -41,8 +43,13 @@ export function useExportSystem({ nodes, edges }: UseExportSystemProps) {
         try {
             setIsExporting(true);
             // Assuming buildGraphIR returns the format you want to save
-            const graphData = buildGraphIR(nodes, edges);
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(graphData, null, 2));
+            ;
+            const exportData = {
+                nodes: nodes,
+                edges: edges,
+                modules: modules
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
             downloadFile(dataStr, "dl-playground-model.json");
         } catch (error) {
             console.error("Failed to export JSON:", error);
