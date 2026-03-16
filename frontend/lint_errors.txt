@@ -1,0 +1,366 @@
+
+> dlplayground@0.0.0 lintfix
+> eslint . --fix
+
+
+/home/kartik/Desktop/DL-Playground/frontend/src/FlowEditor.tsx
+   77:36  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `trace`, but the source dependencies were [edgesWithHandlers, trace.getDecoratedEdges]. Inferred less specific property than source.
+
+/home/kartik/Desktop/DL-Playground/frontend/src/FlowEditor.tsx:77:36
+  75 |
+  76 |     // Derived States for Visualization
+> 77 |     const decoratedEdges = useMemo(() => {
+     |                                    ^^^^^^^
+> 78 |         return trace.getDecoratedEdges(edgesWithHandlers);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 79 |     }, [edgesWithHandlers, trace.getDecoratedEdges]);
+     | ^^^^^^ Could not preserve existing manual memoization
+  80 |
+  81 |     const highlightedEdgesList = useMemo(() => {
+  82 |         if (!highlightEdges.size) return decoratedEdges;  react-hooks/preserve-manual-memoization
+   79:8   warning  React Hook useMemo has a missing dependency: 'trace'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+  305:37  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+  306:37  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+  307:46  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+  307:67  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/components/CodeViewer.tsx
+  26:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/kartik/Desktop/DL-Playground/frontend/src/components/CodeViewer.tsx:26:13
+  24 |     useEffect(() => {
+  25 |         if (!isDirty) {
+> 26 |             setLocalCode(code);
+     |             ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  27 |         }
+  28 |     }, [code, isDirty]);
+  29 |  react-hooks/set-state-in-effect
+
+/home/kartik/Desktop/DL-Playground/frontend/src/components/TraceView.tsx
+  80:11  warning  The 'entries' logical expression could make the dependencies of useMemo Hook (at line 150) change on every render. Move it inside the useMemo callback. Alternatively, wrap the initialization of 'entries' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/components/CodePanel.tsx
+  11:16  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/components/EditorCanvas.tsx
+  14:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  15:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  18:24  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/components/ModuleEditorOverlay.tsx
+  41:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  42:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/components/SaveModuleModal.tsx
+  12:91  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  16:87  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphInteraction.ts
+   23:84  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @typescript-eslint/no-explicit-any
+   24:39  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            @typescript-eslint/no-explicit-any
+  108:9   error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `assignParent`, but the source dependencies were [setModuleStack]. Inferred different dependency than source.
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphInteraction.ts:108:9
+  106 |
+  107 |     const onModuleNodeDragStop = useCallback(
+> 108 |         (_event: React.MouseEvent, node: Node) => {
+      |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 109 |             setModuleStack(stack =>
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 110 |                 updateActiveModule(stack, currentModule => {
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 143 |             );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 144 |         },
+      | ^^^^^^^^^^ Could not preserve existing manual memoization
+  145 |         [setModuleStack],
+  146 |     );
+  147 |     useEffect(() => {                                                                                                                                                                                                                                                        react-hooks/preserve-manual-memoization
+  145:9   warning  React Hook useCallback has a missing dependency: 'assignParent'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/exhaustive-deps
+  225:9   error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `assignParent`, but the source dependencies were [setNodes, getNodes]. Inferred different dependency than source.
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphInteraction.ts:225:9
+  223 |
+  224 |     const onMainDrop = useCallback(
+> 225 |         (event: React.DragEvent) => {
+      |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 226 |             event.preventDefault();
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 227 |             const newNode = createNodeFromEvent(event, mainFlowRef.current);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 228 |             if (!newNode) return;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 229 |
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 230 |             const finalNode = assignParent(newNode, getNodes());
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 231 |             setNodes(nds => [...nds, finalNode]);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 232 |         },
+      | ^^^^^^^^^^ Could not preserve existing manual memoization
+  233 |         [setNodes, getNodes],
+  234 |     );
+  235 |  react-hooks/preserve-manual-memoization
+  233:9   warning  React Hook useCallback has a missing dependency: 'assignParent'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/exhaustive-deps
+  237:9   error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `assignParent`, but the source dependencies were [setModuleStack]. Inferred different dependency than source.
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphInteraction.ts:237:9
+  235 |
+  236 |     const onModuleDrop = useCallback(
+> 237 |         (event: React.DragEvent) => {
+      |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 238 |             event.preventDefault();
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 239 |             event.stopPropagation();
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 252 |             );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 253 |         },
+      | ^^^^^^^^^^ Could not preserve existing manual memoization
+  254 |         [setModuleStack],
+  255 |     );
+  256 |                                                                                                                                                                                                                                                                                                                                          react-hooks/preserve-manual-memoization
+  254:9   warning  React Hook useCallback has a missing dependency: 'assignParent'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/exhaustive-deps
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphState.ts
+  142:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphState.ts:142:13
+  140 |             historyIndexRef.current = 0;
+  141 |             syncIdFromNodes(nodes);
+> 142 |             setCanUndo(false);
+      |             ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  143 |             setCanRedo(false);
+  144 |         }
+  145 |     }, []); // eslint-disable-line react-hooks/exhaustive-deps                                                                  react-hooks/set-state-in-effect
+  176:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useGraphState.ts:176:9
+  174 |     useEffect(() => {
+  175 |         const nodeIds = new Set(nodes.map(n => n.id));
+> 176 |         setEdges(eds => {
+      |         ^^^^^^^^ Avoid calling setState() directly within an effect
+  177 |             const nextEds = eds.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+  178 |             if (nextEds.length === eds.length) return eds;
+  179 |             return nextEds;  react-hooks/set-state-in-effect
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useModuleSystem.ts
+   98:32   error    '_unused' is assigned a value but never used                                                                                                                                                                                             @typescript-eslint/no-unused-vars
+  154:8    warning  React Hook useMemo has a missing dependency: 'getNodeSchema'. Either include it or remove the dependency array. If 'getNodeSchema' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+  155:109  error    Unexpected any. Specify a different type                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/features/editor/hooks/useTraceSystem.ts
+   49:41  error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+   63:87  error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+   88:48  error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  114:35  error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  114:43  error    Unexpected any. Specify a different type                                                                                  @typescript-eslint/no-explicit-any
+  172:8   warning  React Hook useCallback has a missing dependency: 'getTraceInputShapes'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/home/kartik/Desktop/DL-Playground/frontend/src/node_gen/BaseClass.tsx
+   11:20  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   14:40  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   33:89  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   36:53  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   38:40  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+   50:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   72:12  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  177:82  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  190:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  224:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  228:26  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+  234:32  error  Unexpected any. Specify a different type                                                                                        @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/node_gen/CreateNodeComponent.tsx
+   29:57  error    Unexpected any. Specify a different type                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+   33:46  error    Unexpected any. Specify a different type                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+   41:12  warning  React Hook useMemo has an unnecessary dependency: 'options.resolveSchema'. Either exclude it or remove the dependency array. Outer scope values like 'options.resolveSchema' aren't valid dependencies because mutating them doesn't re-render the component  react-hooks/exhaustive-deps
+   51:27  error    Unexpected any. Specify a different type                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+   60:36  error    '_old' is assigned a value but never used                                                                                                                                                                                                                     @typescript-eslint/no-unused-vars
+   84:44  error    Unexpected any. Specify a different type                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+  130:45  error    Unexpected any. Specify a different type                                                                                                                                                                                                                      @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/ModuleRefNode.tsx
+   18:20   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   29:105  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  148:93   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  165:92   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  214:35   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/control_flow/ModuleList.tsx
+   41:84  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  102:99  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  166:98  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  277:5   error  '_paramSchema' is defined but never used  @typescript-eslint/no-unused-vars
+  282:41  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  297:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/control_flow/RepeatLayer.tsx
+   32:100  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  130:135  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  176:47   error  '_name' is defined but never used         @typescript-eslint/no-unused-vars
+  245:41   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  271:27   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  278:31   error  '_e' is defined but never used            @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/inputs/InputNode.tsx
+  60:87  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/losses/BCELossNode.tsx
+  20:25  error  '_data' is defined but never used         @typescript-eslint/no-unused-vars
+  20:42  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/losses/CrossEntropyLossNode.tsx
+  22:25  error  '_data' is defined but never used         @typescript-eslint/no-unused-vars
+  22:42  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/losses/MSELossNode.tsx
+  20:25  error  '_data' is defined but never used         @typescript-eslint/no-unused-vars
+  20:42  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/metrics/AccuracyNode.tsx
+  20:25  error  '_data' is defined but never used         @typescript-eslint/no-unused-vars
+  20:44  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/AddNode.tsx
+  42:25  error  '_data' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/ConcatNode.tsx
+  58:25  error  '_data' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/Identity.tsx
+  22:25  error  '_data' is defined but never used         @typescript-eslint/no-unused-vars
+  22:42  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+  22:68  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/NormNodes.tsx
+   37:41  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+   37:67  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+   97:41  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+   97:67  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+  134:41  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+  134:67  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+  159:41  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+  159:67  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/RegNodes.tsx
+   15:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   28:85   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   37:45   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   55:96   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   58:45   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   69:95   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   72:45   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   84:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   97:101  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  106:45   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/pytorch_core/TransposeNode.tsx
+  61:25  error  '_data' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/registry.ts
+   76:27  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  239:53  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/sequence/EmbeddingNode.tsx
+  36:46  error  '_inputShapes' is defined but never used  @typescript-eslint/no-unused-vars
+  36:72  error  '_outputShape' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/vision/conv/DepthwiseConv2dNode.tsx
+  71:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/vision/conv/PointwiseConv2dNode.tsx
+  50:66  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/nodes/vision/pooling/MaxPool2dNode.tsx
+  58:25  error  '_data' is defined but never used  @typescript-eslint/no-unused-vars
+
+/home/kartik/Desktop/DL-Playground/frontend/src/types/nodeTypes.ts
+  10:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/codeCompile.ts
+   92:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  183:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  239:88  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  286:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  296:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  296:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  303:90  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/computeEstimator.ts
+  30:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/containerLogic.ts
+   61:21  error    'internalNodes' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+   61:36  error    'internalEdges' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @typescript-eslint/no-unused-vars
+   61:51  error    '__highlight' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        @typescript-eslint/no-unused-vars
+  221:9   error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `config`, but the source dependencies were [getNodes, setNodes]. Inferred different dependency than source.
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/containerLogic.ts:221:9
+  219 |     // 2. DRAG STOP
+  220 |     const onNodeDragStop = useCallback(
+> 221 |         (_event: React.MouseEvent, node: Node) => {
+      |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 222 |             const currentNodes = getNodes(); // Helper from ReactFlow to get latest state
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 223 |
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 244 |             dragStartRef.current = null;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 245 |         },
+      | ^^^^^^^^^^ Could not preserve existing manual memoization
+  246 |         [getNodes, setNodes],
+  247 |     );
+  248 |  react-hooks/preserve-manual-memoization
+  246:9   warning  React Hook useCallback has a missing dependency: 'config'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/exhaustive-deps
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/layerRegistry.ts
+  6:61  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  9:65  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/shape_verifier.ts
+   23:85  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   88:62  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  102:62  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  102:93  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/home/kartik/Desktop/DL-Playground/frontend/src/utils/traceAnalysis.ts
+    9:18  error  Unnecessary escape character: \[          no-useless-escape
+    9:20  error  Unnecessary escape character: \(          no-useless-escape
+    9:29  error  Unnecessary escape character: \)          no-useless-escape
+   48:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  129:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 136 problems (127 errors, 9 warnings)
+

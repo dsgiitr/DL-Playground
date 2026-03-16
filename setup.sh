@@ -4,9 +4,6 @@ set -e
 
 IMAGE_NAME="torchlens-worker:latest"
 
-echo "Pulling latest changes from main..."
-git pull origin main
-
 echo "Checking if Docker image '$IMAGE_NAME' exists..."
 
 if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
