@@ -379,10 +379,31 @@ export function useModuleSystem({ nodes, edges, setNodes, getNodeSchema }: UseMo
         },
         [setNodes],
     );
+    const mergeModules = useCallback((importedModules: SavedModule[]) => {
+        if (!importedModules || !Array.isArray(importedModules)) return;
 
+        let hasChanges = false;
+
+        importedModules.forEach(importedMod => {
+            if (importedMod && importedMod.name && importedMod.graph) {
+                // Destructure to remove createdAt and updatedAt to satisfy the saveModule TypeScript signature
+                const { createdAt, updatedAt, ...modToSave } = importedMod;
+                
+                // saveModule handles ID matching, overriding, and saving to localStorage automatically
+                saveModule(modToSave);
+                hasChanges = true;
+            }
+        });
+
+        // Sync the React state with the newly updated localStorage list
+        if (hasChanges) {
+            setModules(listModules());
+        }
+    }, []);
     return {
         modules,
         setModules,
+        mergeModules,
         moduleStack,
         setModuleStack,
         openModule,
