@@ -87,8 +87,11 @@ The frontend will be available at `http://localhost:7000`. Open this URL in your
 
 ---
 
-## Contributing
-
-This project is a combined effort from the DSG Club and SDSLabs at IIT Roorkee.
+## Contributing and License
+This project is licensed under the MIT License. Please see the [LICENSE](LICENSE) file for details.
+If you use DL-Playground in academic work, competitions, or third-party tools, please credit the project:
+- **Project:** DL-Playground
+- **Organization:** DSG & SDSLabs, IIT Roorkee
+- **Repository:** https://github.com/dsgiitr/DL-Playground
 
 Contributions are welcome! If you have ideas for new features, bug fixes, or improvements, please feel free to open an issue or submit a pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md) for more details.
